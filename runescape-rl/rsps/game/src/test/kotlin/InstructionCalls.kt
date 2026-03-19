@@ -1,0 +1,210 @@
+import content.entity.effect.transform
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions
+import world.gregs.voidps.cache.definition.data.InterfaceDefinition
+import world.gregs.voidps.engine.client.instruction.InstructionHandlers
+import world.gregs.voidps.engine.client.instruction.handle.ObjectOptionHandler
+import world.gregs.voidps.engine.client.instruction.handle.interactItemOn
+import world.gregs.voidps.engine.client.ui.InterfaceApi
+import world.gregs.voidps.engine.client.ui.dialogue
+import world.gregs.voidps.engine.client.ui.dialogue.Dialogues
+import world.gregs.voidps.engine.client.ui.hasOpen
+import world.gregs.voidps.engine.data.definition.*
+import world.gregs.voidps.engine.entity.character.npc.NPC
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.engine.entity.item.Item
+import world.gregs.voidps.engine.entity.item.floor.FloorItem
+import world.gregs.voidps.engine.entity.obj.GameObject
+import world.gregs.voidps.engine.get
+import world.gregs.voidps.engine.inv.Inventory
+import world.gregs.voidps.engine.inv.inventory
+import world.gregs.voidps.engine.suspend.IntSuspension
+import world.gregs.voidps.engine.suspend.StringSuspension
+import world.gregs.voidps.network.client.instruction.*
+import world.gregs.voidps.type.Tile
+
+/**
+ * Helper functions to make fake instruction calls in [WorldTest] tests
+ */
+
+fun Player.itemOption(
+    option: String,
+    item: String = "",
+    id: String = "inventory",
+    component: String = "inventory",
+    optionIndex: Int = getOptionIndex(id, component, option) ?: getItemOptionIndex(item, option) ?: -1,
+    inventory: String = "inventory",
+    slot: Int = inventories.inventory(inventory).indexOf(item),
+) {
+    Assertions.assertTrue(hasOpen(id)) { "Player $this doesn't have interface $id open" }
+    val item = inventories.inventory(inventory).getOrNull(slot) ?: Item(item)
+    val definition = InterfaceDefinitions.getComponent(id, component) ?: throw Exception("Component $component not found in Interface $id")
+    get<InstructionHandlers>().interactInterface.validate(this, InteractInterface(InterfaceDefinition.id(definition.id), InterfaceDefinition.componentId(definition.id), item.def.id, slot, optionIndex))
+}
+
+fun Player.interfaceOption(
+    id: String,
+    component: String,
+    option: String = "",
+    optionIndex: Int = getOptionIndex(id, component, option) ?: -1,
+    item: Item = Item("", -1),
+    slot: Int = -1,
+) {
+    Assertions.assertTrue(hasOpen(id)) { "Player $this doesn't have interface $id open" }
+    val definition = InterfaceDefinitions.getComponent(id, component) ?: throw Exception("Component $component not found in Interface $id")
+    get<InstructionHandlers>().interactInterface.validate(this, InteractInterface(InterfaceDefinition.id(definition.id), InterfaceDefinition.componentId(definition.id), item.def.id, slot, optionIndex))
+}
+
+fun Player.skillCreation(
+    item: String,
+    amount: Int = 1,
+) {
+    Assertions.assertTrue(hasOpen("dialogue_skill_creation")) { "Player $this doesn't have interface dialogue_skill_creation open" }
+    set("skill_creation_amount", amount)
+    var index = -1
+    for (i in 0 until 10) {
+        val name = get<String>("skill_creation_name_$i") ?: continue
+        if (item == name) {
+            index = i
+        }
+    }
+    get<InstructionHandlers>().enterInt.invoke(EnterInt(index), this)
+}
+
+fun Player.interfaceUse(
+    id: String,
+    fromItem: Item = Item("", -1),
+    toItem: Item = Item("", -1),
+    fromSlot: Int = -1,
+    toSlot: Int = -1,
+) {
+    Assertions.assertTrue(hasOpen(id)) { "Player $this doesn't have interface $id open" }
+    InterfaceApi.itemOnItem(this, fromItem, toItem, fromSlot, toSlot)
+}
+
+fun Player.interfaceSwitch(
+    id: String,
+    component: String,
+    fromSlot: Int = -1,
+    toSlot: Int = -1,
+) {
+    Assertions.assertTrue(hasOpen(id)) { "Player $this doesn't have interface $id open" }
+    InterfaceApi.swap(this, "$id:$component", "$id:$component", fromSlot, toSlot)
+}
+
+fun Player.equipItem(
+    item: String,
+    slot: Int = inventory.indexOf(item),
+    option: String = "Wield",
+) {
+    interfaceOption("inventory", "inventory", option, item = Item(item, 1), slot = slot, optionIndex = Item(item).def.options.indexOf(option))
+}
+
+fun Player.dialogueOption(
+    component: String,
+    option: Int = -1,
+    id: String = dialogue!!,
+) {
+    Dialogues.continueDialogue(this, "$id:$component")
+}
+
+private fun isContinuableDialogue(id: String) = id.startsWith("dialogue_chat") || id.startsWith("dialogue_npc_chat") || id.startsWith("dialogue_message") || id.startsWith("dialogue_obj") || id.startsWith("dialogue_double_obj")
+
+fun Player.dialogueContinue(repeat: Int = 1) {
+    repeat(repeat) {
+        require(dialogue != null) { "No dialogue found for $this. step $it/$repeat" }
+        dialogueOption("continue")
+    }
+}
+
+fun Player.dialogueContinues() {
+    while (dialogue != null && isContinuableDialogue(dialogue!!)) {
+        dialogueOption("continue")
+    }
+}
+
+private fun getItemOptionIndex(item: String, option: String): Int? {
+    val definition = ItemDefinitions.getOrNull(item) ?: return null
+    return definition.options.indexOf(option)
+}
+
+private fun getOptionIndex(id: String, componentId: String, option: String): Int? {
+    val component = InterfaceDefinitions.getComponent(id, componentId) ?: return null
+    var options: Array<String?>? = component.options
+    if (options != null) {
+        val indexOf = options.indexOf(option)
+        if (indexOf != -1) {
+            return indexOf
+        }
+    }
+    options = component.getOrNull("options") ?: return null
+    val indexOf = options.indexOf(option)
+    if (indexOf == -1) {
+        return null
+    }
+    return indexOf
+}
+
+fun Player.playerOption(player: Player, option: String) = runTest {
+    instructions.send(InteractPlayer(player.index, options.indexOf(option)))
+}
+
+fun Player.walk(toTile: Tile) = runTest {
+    instructions.send(Walk(toTile.x, toTile.y))
+}
+
+fun Player.itemOnObject(obj: GameObject, itemSlot: Int, inventory: String = "inventory") {
+    val item = inventories.inventory(inventory)[itemSlot]
+    interactItemOn(obj, inventory, inventory, item, itemSlot)
+}
+
+fun Player.itemOnNpc(npc: NPC, itemSlot: Int, inventory: String = "inventory") {
+    val item = inventories.inventory(inventory)[itemSlot]
+    interactItemOn(npc, inventory, inventory, item, itemSlot)
+}
+
+fun Player.itemOnItem(
+    firstSlot: Int,
+    secondSlot: Int,
+) {
+    val inv = inventories.inventory("inventory")
+    InterfaceApi.itemOnItem(this, inv[firstSlot], inv[secondSlot], firstSlot, secondSlot)
+}
+
+fun Player.npcOption(npc: NPC, option: String) {
+    val definitions = NPCDefinitions
+    val def = if (npc.transform.isNotBlank()) {
+        definitions.get(npc.transform)
+    } else {
+        ObjectOptionHandler.getDefinition(this, definitions, npc.def, npc.def)
+    }
+    npcOption(npc, def.options.indexOf(option))
+}
+
+fun Player.npcOption(npc: NPC, option: Int) = runTest {
+    instructions.send(InteractNPC(npc.index, option + 1))
+}
+
+fun Player.objectOption(gameObject: GameObject, option: String = "", optionIndex: Int? = null) = runTest {
+    val def = gameObject.def(this@objectOption)
+    instructions.send(InteractObject(gameObject.intId, gameObject.tile.x, gameObject.tile.y, (optionIndex ?: def.optionsIndex(option)) + 1))
+}
+
+fun Player.floorItemOption(floorItem: FloorItem, option: String) = runTest {
+    instructions.send(InteractFloorItem(floorItem.def.id, floorItem.tile.x, floorItem.tile.y, floorItem.def.floorOptions.indexOf(option)))
+}
+
+fun Inventory.set(index: Int, id: String, amount: Int = 1) = transaction { set(index, Item(id, amount)) }
+
+fun Player.intEntry(int: Int) {
+    (dialogueSuspension as? IntSuspension)?.resume(int)
+}
+
+fun Player.stringEntry(string: String) {
+    (dialogueSuspension as? StringSuspension)?.resume(string)
+}
+
+fun Player.containsMessage(message: String) = messages.any { it.contains(message) }
+
+val Player.messages: List<String>
+    get() = get("messages", emptyList())

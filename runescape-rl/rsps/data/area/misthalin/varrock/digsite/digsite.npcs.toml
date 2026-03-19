@@ -1,0 +1,38 @@
+[elissa_digsite]
+id = 1912
+examine = "An old archaeologist."
+
+[assassin_digsite]
+id = 9043
+
+[desert_digsite_workman]
+id = 9049
+examine = "This person is working on the site."
+
+[digsite_student_blue]
+id = 615
+
+[digsite_student_orange]
+id = 616
+
+[digsite_student_purple]
+id = 617
+
+[assassin_digsite_2]
+id = 9044
+
+[digsite_workman_dirty]
+id = 613
+examine = "This person is working on the site."
+
+[digsite_workman_apron]
+id = 4564
+clone = "digsite_workman_dirty"
+
+[digsite_workman_long_hair]
+id = 4565
+clone = "digsite_workman_dirty"
+
+[digsite_workman_dirty_2]
+id = 5958
+clone = "digsite_workman_dirty"

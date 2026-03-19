@@ -1,0 +1,52 @@
+[king_bolren_tree_gnome_village]
+id = 469
+examine = "It's a gnome. He looks important."
+
+[bolkoy_tree_gnome_village]
+id = 471
+examine = "It's a tree gnome."
+
+[remsai_tree_gnome_village]
+id = 472
+examine = "It's a tree gnome."
+
+[elkoy_tree_gnome_village]
+id = 473
+
+[elkoy_tree_gnome_village_2]
+id = 474
+
+[local_gnome_tree_gnome_village]
+id = 485
+examine = "It's a young tree gnome."
+
+[kalron_tree_gnome_village]
+id = 486
+examine = "He looks lost."
+
+[evil_creature_tree_gnome_village]
+id = 6333
+
+[elkoy_tree_gnome_village_3]
+id = 5179
+
+[elkoy_tree_gnome_village_4]
+id = 5182
+
+[evil_creature]
+id = 4615
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+examine = "What is that thing!"
+
+[evil_creature_tree_gnome_village_2]
+id = 6311
+
+[evil_creature_tree_gnome_village_3]
+id = 6312
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+examine = "What is that thing!"
+
