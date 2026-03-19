@@ -1,0 +1,70 @@
+[outlaw_drop_table]
+type = "all"
+drops = [
+    { id = "bones" },
+    { id = "rats_paper" },
+    { table = "outlaw_secondary" },
+]
+
+[outlaw_secondary]
+roll = 128
+drops = [
+    { id = "bronze_med_helm", chance = 2 },
+    { id = "mind_rune", amount = 9, chance = 2 },
+    { id = "water_rune", amount = 6, chance = 2 },
+    { id = "earth_rune", amount = 5, chance = 2 },
+    { table = "herb_drop_table", chance = 32 },
+    { id = "coins", amount = 10, chance = 32 },
+    { id = "coins", amount = 5, chance = 12 },
+    { id = "coins", amount = 15, chance = 4 },
+    { id = "coins", amount = 25 },
+    { id = "rope", chance = 46 },
+    { id = "fishing_bait", chance = 15 },
+    { id = "copper_ore", chance = 2 },
+    { id = "cabbage", chance = 6 },
+    { id = "knife" },
+]
+
+[ram_drop_table]
+type = "all"
+drops = [
+    { id = "bones" },
+    { id = "ram_skull", variable = "rag_and_bone_man_wish_list", equals = "started", default = "unstarted" },
+]
+
+[edgeville_guard_drop_table]
+type = "all"
+drops = [
+    { id = "bones" },
+    { table = "edgeville_guard_secondary" },
+    { table = "medium_clue_scroll", roll = 128 },
+]
+
+[edgeville_guard_secondary]
+roll = 128
+drops = [
+    { id = "iron_dagger", chance = 6 },
+    { id = "steel_arrow", chance = 4 },
+    { id = "steel_arrow", amount = 5 },
+    { id = "bronze_arrow", chance = 3 },
+    { id = "bronze_arrow", amount = 2, chance = 2 },
+    { id = "air_rune", amount = 6, chance = 2 },
+    { id = "earth_rune", amount = 3, chance = 2 },
+    { id = "fire_rune", amount = 2, chance = 2 },
+    { id = "nature_rune" },
+    { id = "chaos_rune", min = 1, max = 2 },
+    { id = "blood_rune", min = 1, max = 4, members = true },
+    { id = "coins", chance = 19 },
+    { id = "coins", amount = 4, chance = 8 },
+    { id = "coins", amount = 12, chance = 9 },
+    { id = "coins", amount = 17, chance = 4 },
+    { id = "coins", amount = 25, chance = 4 },
+    { id = "coins", amount = 30 },
+    { id = "law_talisman", members = true },
+    { id = "body_talisman", chance = 3 },
+    { id = "iron_ore" },
+    { id = "grapes", amount = 3, chance = 16 },
+    { id = "grain" },
+    { id = "nothing", amount = 0, chance = 4 },
+    { table = "allotment_seed_drop_table", chance = 18 },
+]

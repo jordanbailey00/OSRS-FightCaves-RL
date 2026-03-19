@@ -1,0 +1,14 @@
+[vampyre_god_wars]
+id = 6214
+hitpoints = 600
+att = 65
+str = 66
+def = 81
+combat_def = "vampyre_god_wars"
+hunt_mode = "zamorak_aggressive"
+slayer_xp = 60.0
+respawn_delay = 25
+drop_table = "vampyre"
+categories = ["vampyre"]
+god = "zamorak"
+examine = "It looks really hungry."

@@ -1,0 +1,45 @@
+[al_kharid_bank]
+x = [3265, 3272]
+y = [3161, 3173]
+tags = ["bank"]
+
+[zekes_scimitar_shop]
+x = [3285, 3290]
+y = [3187, 3192]
+
+[al_kharid_kebab_shop]
+x = [3271, 3275]
+y = [3179, 3183]
+
+[al_kharid_multi_area]
+x = [3264, 3327]
+y = [3136, 3199]
+level = 0
+tags = ["multi_combat"]
+
+[al_kharid_teleport]
+x = [3292, 3295]
+y = [3162, 3163]
+tags = ["teleport"]
+
+[al_kharid_prison]
+x = [3297, 3299]
+y = [3121, 3125]
+
+[al_kharid_mine]
+x = [3291, 3308]
+y = [3281, 3320]
+
+[al_kharid_mine_north]
+x = [3291, 3308]
+y = [3309, 3320]
+
+[greater_al_kharid]
+x = [3264,3264,3391,3391,3423,3423,3455,3455]
+y = [3136,3327,3327,3263,3263,3182,3182,3136]
+tags = ["penguin_area"]
+hint = "around the Al Kharid region, north of Shantay Pass."
+
+[al_kharid_fishing_spot]
+x = [3255, 3281]
+y = [3135, 3166]

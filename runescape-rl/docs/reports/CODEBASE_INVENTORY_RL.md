@@ -1,0 +1,341 @@
+# CODEBASE INVENTORY
+
+## Scope
+- This inventory covers the `RL/` module only.
+- This is a factual-only structural inventory with no recommendations.
+- Generated artifacts, virtual environments, git internals, pytest caches, and Python `__pycache__` directories were excluded from the inspected surface.
+
+## Method
+This inventory is based on static inspection of:
+- current workspace files under `RL/`
+- directories
+- file names and extensions
+- package and module layout
+- config surfaces
+- script entrypoints
+- documentation and test surfaces where relevant
+
+Also state:
+- Confirmed means directly supported by repository evidence.
+- Inferred means reasonable but not directly proven.
+- Unknown means purpose could not be confidently determined.
+
+## Top-Level Repository Map
+
+| Path | Type | Category | Purpose | Confidence |
+|------|------|----------|---------|------------|
+| RL/.env.example | File | config | Example environment-variable configuration for local setup. | Confirmed |
+| RL/.github | Directory | tooling | GitHub workflow and repository metadata for RL automation. | Confirmed |
+| RL/.gitignore | File | config | Git ignore rules for the RL repository. | Confirmed |
+| RL/README.md | File | docs | Project overview and setup guide for the RL module. | Confirmed |
+| RL/RLplan.md | File | docs | Historical RL planning document retained in the workspace. | Confirmed |
+| RL/RLspec.md | File | docs | Primary RL module specification and current contract reference. | Confirmed |
+| RL/changelog.md | File | docs | Change log and implementation history for the RL module. | Confirmed |
+| RL/configs | Directory | config | Configuration tree for training, reward, benchmark, eval, logging, and curriculum presets. | Confirmed |
+| RL/docs | Directory | docs | Active RL design, contract, benchmark, and integration reference documentation. | Confirmed |
+| RL/fight_caves_rl | Directory | training | Primary RL Python package for Fight Caves training, bridge, environment, and evaluation logic. | Confirmed |
+| RL/history | Directory | docs | Historical notes retained for prior RL workspace decisions. | Confirmed |
+| RL/pyproject.toml | File | config | Python project metadata, dependency, and tool configuration. | Confirmed |
+| RL/resources | Directory | artifacts | Repository resource directory reserved for tracked auxiliary assets. | Confirmed |
+| RL/scripts | Directory | tooling | Operational entrypoints for training, benchmarking, replay, parity, and packet refresh flows. | Confirmed |
+| RL/uv.lock | File | config | Locked dependency resolution for the RL Python environment. | Confirmed |
+
+## Key Execution Surfaces
+
+- `RL/fight_caves_rl/`: primary Python package for bridge-backed and fast-backend environment logic, policies, trainer integration, replay, rewards, and tests.
+- `RL/configs/`: preset configurations for training, benchmarking, evaluation, rewards, logging, and curriculum.
+- `RL/scripts/`: operational entrypoints for train, eval, replay, smoke, benchmark, parity, and packet-refresh flows.
+- `RL/docs/`: active architecture, benchmark, contract, replay, and runtime reference docs.
+- `RL/fight_caves_rl/tests/`: unit, smoke, integration, determinism, and performance validation surface.
+- `RL/history/`: retained historical notes distinct from the active pivot docs.
+
+## Full Path Inventory
+
+| Path | Type | Category | Purpose | Confidence |
+|------|------|----------|---------|------------|
+| RL/.env.example | File | config | Example environment-variable configuration for local setup. | Confirmed |
+| RL/.github | Directory | tooling | GitHub workflow and repository metadata for RL automation. | Confirmed |
+| RL/.github/workflows | Directory | tooling | GitHub Actions workflow definitions for packet generation, benchmark gates, and checks. | Confirmed |
+| RL/.github/workflows/acceptance.yml | File | tooling | GitHub Actions workflow definition for RL checks or packet generation. | Confirmed |
+| RL/.github/workflows/benchmarks.yml | File | tooling | GitHub Actions workflow definition for RL checks or packet generation. | Confirmed |
+| RL/.github/workflows/ci.yml | File | tooling | GitHub Actions workflow definition for RL checks or packet generation. | Confirmed |
+| RL/.github/workflows/phase0_native_linux.yml | File | tooling | GitHub Actions workflow definition for RL checks or packet generation. | Confirmed |
+| RL/.gitignore | File | config | Git ignore rules for the RL repository. | Confirmed |
+| RL/README.md | File | docs | Project overview and setup guide for the RL module. | Confirmed |
+| RL/RLplan.md | File | docs | Historical RL planning document retained in the workspace. | Confirmed |
+| RL/RLspec.md | File | docs | Primary RL module specification and current contract reference. | Confirmed |
+| RL/changelog.md | File | docs | Change log and implementation history for the RL module. | Confirmed |
+| RL/configs | Directory | config | Configuration tree for training, reward, benchmark, eval, logging, and curriculum presets. | Confirmed |
+| RL/configs/benchmark | Directory | config | Benchmark configuration presets for env, bridge, subprocess, and training measurement. | Confirmed |
+| RL/configs/benchmark/bridge_1env_v0.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/bridge_64env_v0.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/fast_env_v2.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/fast_train_v2.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/official_profile_v0.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/train_1024env_v0.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/benchmark/vecenv_256env_v0.yaml | File | config | Benchmark preset configuration consumed by RL benchmark entrypoints. | Confirmed |
+| RL/configs/curriculum | Directory | config | Curriculum configuration presets for staged training progression. | Confirmed |
+| RL/configs/curriculum/curriculum_disabled_v0.yaml | File | config | Curriculum preset configuration for staged training. | Confirmed |
+| RL/configs/curriculum/curriculum_wave_progression_v0.yaml | File | config | Curriculum preset configuration for staged training. | Confirmed |
+| RL/configs/curriculum/curriculum_wave_progression_v2.yaml | File | config | Curriculum preset configuration for staged training. | Confirmed |
+| RL/configs/eval | Directory | config | Evaluation and parity configuration presets. | Confirmed |
+| RL/configs/eval/eval_seedpack_v0.yaml | File | config | Evaluation or parity preset configuration. | Confirmed |
+| RL/configs/eval/parity_canary_v0.yaml | File | config | Evaluation or parity preset configuration. | Confirmed |
+| RL/configs/eval/parity_fast_v2.yaml | File | config | Evaluation or parity preset configuration. | Confirmed |
+| RL/configs/eval/replay_eval_v0.yaml | File | config | Evaluation or parity preset configuration. | Confirmed |
+| RL/configs/logging | Directory | config | Logging configuration presets for RL runs and reports. | Confirmed |
+| RL/configs/logging/headless_quiet_logback.xml | File | config | Logging preset configuration for RL runs. | Confirmed |
+| RL/configs/reward | Directory | config | Reward-weight configuration presets for sparse and shaped training. | Confirmed |
+| RL/configs/reward/reward_shaped_v0.yaml | File | config | Reward preset configuration for sparse or shaped training. | Confirmed |
+| RL/configs/reward/reward_shaped_v2.yaml | File | config | Reward preset configuration for sparse or shaped training. | Confirmed |
+| RL/configs/reward/reward_sparse_v0.yaml | File | config | Reward preset configuration for sparse or shaped training. | Confirmed |
+| RL/configs/reward/reward_sparse_v2.yaml | File | config | Reward preset configuration for sparse or shaped training. | Confirmed |
+| RL/configs/sweep | Directory | config | Sweep or experiment-grid configuration presets. | Confirmed |
+| RL/configs/train | Directory | config | Training run configuration presets, including smoke and fast-backend profiles. | Confirmed |
+| RL/configs/train/smoke_fast_v2.yaml | File | config | Training preset configuration for RL runs. | Confirmed |
+| RL/configs/train/smoke_ppo_v0.yaml | File | config | Training preset configuration for RL runs. | Confirmed |
+| RL/configs/train/train_baseline_v0.yaml | File | config | Training preset configuration for RL runs. | Confirmed |
+| RL/configs/train/train_fast_v2.yaml | File | config | Training preset configuration for RL runs. | Confirmed |
+| RL/docs | Directory | docs | Active RL design, contract, benchmark, and integration reference documentation. | Confirmed |
+| RL/docs/action_mapping.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/archive | Directory | docs | Archived RL documentation retained for historical reference. | Confirmed |
+| RL/docs/archive/performance_plan.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/archive/phase1_decision_gate.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/archive/phase2_transport_gate.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/benchmark_matrix.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/bridge_contract.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/eval_and_replay.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/flat_observation_ingestion.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/hotpath_map.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/logging_overhead_report.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/mvp_acceptance.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/observation_action_cost_report.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/observation_mapping.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/parity_canaries.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/parity_safe_optimization_rules.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/performance_decomposition_report.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/phase2_blocker_diagnosis.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/production_fast_trainer_benchmark.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/production_trainer_prototype_scope.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/python_profiler_report.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/reward_configs.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/rl_integration_contract.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/run_manifest.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/runtime_topology.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/transport_and_copy_ledger.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/docs/wandb_logging_contract.md | File | docs | RL reference or planning document. | Confirmed |
+| RL/fight_caves_rl | Directory | training | Primary RL Python package for Fight Caves training, bridge, environment, and evaluation logic. | Confirmed |
+| RL/fight_caves_rl/__init__.py | File | training | RL package file. | Confirmed |
+| RL/fight_caves_rl/benchmarks | Directory | benchmarks | Benchmark harnesses, packet helpers, and measurement utilities. | Confirmed |
+| RL/fight_caves_rl/benchmarks/__init__.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/bridge_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/common.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/env_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/instrumentation.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/phase0_packet.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/phase1_packet.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/phase2_packet.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/phase2_prototype_packet.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/subprocess_transport_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/train_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/train_ceiling_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/benchmarks/vector_env_bench.py | File | benchmarks | Benchmark implementation file for packets, measurement, or attribution. | Confirmed |
+| RL/fight_caves_rl/bridge | Directory | bridge | Python bridge client, protocol, buffers, and launcher code for simulator or oracle communication. | Confirmed |
+| RL/fight_caves_rl/bridge/__init__.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/batch_client.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/buffers.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/contracts.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/debug_client.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/errors.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/launcher.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/bridge/protocol.py | File | bridge | Bridge implementation file for client protocol, buffers, launcher, or tracing. | Confirmed |
+| RL/fight_caves_rl/contracts | Directory | contracts | Frozen RL-facing mechanics, terminal, reward, and parity contracts. | Confirmed |
+| RL/fight_caves_rl/contracts/__init__.py | File | contracts | Contract definition file freezing RL-facing mechanics surfaces. | Confirmed |
+| RL/fight_caves_rl/contracts/mechanics_contract.py | File | contracts | Contract definition file freezing RL-facing mechanics surfaces. | Confirmed |
+| RL/fight_caves_rl/contracts/parity_trace_schema.py | File | contracts | Contract definition file freezing RL-facing mechanics surfaces. | Confirmed |
+| RL/fight_caves_rl/contracts/reward_feature_schema.py | File | contracts | Contract definition file freezing RL-facing mechanics surfaces. | Confirmed |
+| RL/fight_caves_rl/contracts/terminal_codes.py | File | contracts | Contract definition file freezing RL-facing mechanics surfaces. | Confirmed |
+| RL/fight_caves_rl/curriculum | Directory | curriculum | Curriculum definitions and loaders for staged Fight Caves training. | Confirmed |
+| RL/fight_caves_rl/curriculum/__init__.py | File | curriculum | Curriculum implementation file for staged training progression. | Confirmed |
+| RL/fight_caves_rl/curriculum/curriculum_disabled_v0.py | File | curriculum | Curriculum implementation file for staged training progression. | Confirmed |
+| RL/fight_caves_rl/curriculum/curriculum_wave_progression_v0.py | File | curriculum | Curriculum implementation file for staged training progression. | Confirmed |
+| RL/fight_caves_rl/curriculum/registry.py | File | curriculum | Curriculum implementation file for staged training progression. | Confirmed |
+| RL/fight_caves_rl/envs | Directory | environment | V1 bridge-backed environment implementations and observation and action schema logic. | Confirmed |
+| RL/fight_caves_rl/envs/__init__.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/action_mapping.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/correctness_env.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/observation_mapping.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/observation_views.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/puffer_encoding.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/schema.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/shared_memory_transport.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/subprocess_vector_env.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs/vector_env.py | File | environment | Bridge-backed environment implementation file for v1_bridge semantics. | Confirmed |
+| RL/fight_caves_rl/envs_fast | Directory | environment | V2 fast-backend environment wrappers, encodings, and adapters. | Confirmed |
+| RL/fight_caves_rl/envs_fast/__init__.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/envs_fast/fast_policy_encoding.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/envs_fast/fast_reward_adapter.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/envs_fast/fast_spaces.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/envs_fast/fast_trace_adapter.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/envs_fast/fast_vector_env.py | File | environment | Fast-backend environment implementation file for v2_fast. | Confirmed |
+| RL/fight_caves_rl/logging | Directory | logging | RL-side logging helpers and structured run and report utilities. | Confirmed |
+| RL/fight_caves_rl/logging/__init__.py | File | logging | Logging helper or structured output implementation file. | Confirmed |
+| RL/fight_caves_rl/logging/artifact_naming.py | File | logging | Logging helper or structured output implementation file. | Confirmed |
+| RL/fight_caves_rl/logging/metrics.py | File | logging | Logging helper or structured output implementation file. | Confirmed |
+| RL/fight_caves_rl/logging/wandb_client.py | File | logging | Logging helper or structured output implementation file. | Confirmed |
+| RL/fight_caves_rl/manifests | Directory | config | Manifest and metadata helpers used across replay, runs, and evaluation. | Confirmed |
+| RL/fight_caves_rl/manifests/__init__.py | File | config | Manifest or metadata implementation file for runs, replay, or evaluation. | Confirmed |
+| RL/fight_caves_rl/manifests/run_manifest.py | File | config | Manifest or metadata implementation file for runs, replay, or evaluation. | Confirmed |
+| RL/fight_caves_rl/manifests/versions.py | File | config | Manifest or metadata implementation file for runs, replay, or evaluation. | Confirmed |
+| RL/fight_caves_rl/policies | Directory | policy | Policy definitions, recurrent models, registry helpers, and checkpointing. | Confirmed |
+| RL/fight_caves_rl/policies/__init__.py | File | policy | Policy model, registry, or checkpoint implementation file. | Confirmed |
+| RL/fight_caves_rl/policies/checkpointing.py | File | policy | Policy model, registry, or checkpoint implementation file. | Confirmed |
+| RL/fight_caves_rl/policies/lstm.py | File | policy | Policy model, registry, or checkpoint implementation file. | Confirmed |
+| RL/fight_caves_rl/policies/mlp.py | File | policy | Policy model, registry, or checkpoint implementation file. | Confirmed |
+| RL/fight_caves_rl/policies/registry.py | File | policy | Policy model, registry, or checkpoint implementation file. | Confirmed |
+| RL/fight_caves_rl/puffer | Directory | training | PufferLib and PuffeRL integration, trainer assembly, and environment factory wiring. | Confirmed |
+| RL/fight_caves_rl/puffer/__init__.py | File | training | PufferLib or PuffeRL trainer or factory integration file. | Confirmed |
+| RL/fight_caves_rl/puffer/callbacks.py | File | training | PufferLib or PuffeRL trainer or factory integration file. | Confirmed |
+| RL/fight_caves_rl/puffer/factory.py | File | training | PufferLib or PuffeRL trainer or factory integration file. | Confirmed |
+| RL/fight_caves_rl/puffer/production_trainer.py | File | training | PufferLib or PuffeRL trainer or factory integration file. | Confirmed |
+| RL/fight_caves_rl/puffer/trainer.py | File | training | PufferLib or PuffeRL trainer or factory integration file. | Confirmed |
+| RL/fight_caves_rl/replay | Directory | replay | Replay, parity, and evaluation pipeline helpers. | Confirmed |
+| RL/fight_caves_rl/replay/__init__.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/eval_runner.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/mechanics_parity.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/parity_canaries.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/replay_export.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/replay_index.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/seed_packs.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/replay/trace_packs.py | File | replay | Replay, parity, or evaluation implementation file. | Confirmed |
+| RL/fight_caves_rl/rewards | Directory | rewards | Reward registry and reward-function definitions. | Confirmed |
+| RL/fight_caves_rl/rewards/__init__.py | File | rewards | Reward implementation or registry file. | Confirmed |
+| RL/fight_caves_rl/rewards/registry.py | File | rewards | Reward implementation or registry file. | Confirmed |
+| RL/fight_caves_rl/rewards/reward_shaped_v0.py | File | rewards | Reward implementation or registry file. | Confirmed |
+| RL/fight_caves_rl/rewards/reward_sparse_v0.py | File | rewards | Reward implementation or registry file. | Confirmed |
+| RL/fight_caves_rl/tests | Directory | tests | Unit, smoke, integration, determinism, and performance test suites. | Confirmed |
+| RL/fight_caves_rl/tests/conftest.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/determinism | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/determinism/test_deterministic_eval_same_checkpoint_same_seed_pack.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/determinism/test_fixed_seed_reset_reproducibility.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/determinism/test_replay_eval_equivalence.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/determinism/test_v2_fast_mechanics_trace_determinism.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/determinism/test_wrapper_vs_raw_sim_trajectory_agreement.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_bridge_batch_step_parity.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_bridge_schema_fail_fast.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_flat_observation_matches_raw_projection.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_replay_generation_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_replay_manifest_integrity.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_v2_fast_matches_oracle_mechanics_trace.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_wandb_offline_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_wandb_run_manifest_completeness.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_wrapper_reset_matches_sim_contract.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/integration/test_wrapper_step_matches_sim_trace.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/parity | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/parity/test_parity_canary_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/parity/test_replay_to_trace_equivalence_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_bridge_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_env_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_fast_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_subprocess_transport_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_train_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_train_ceiling_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/performance/test_vecenv_benchmark_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/_helpers.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_checkpoint_save_load_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_eval_loop_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_fast_eval_loop_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_fast_train_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_fast_vecenv_reset_step_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_long_run_vector_stability.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_mechanics_parity_trace_collection_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_multi_worker_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_puffer_smoke_train_loop.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_scripted_baseline_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_shared_memory_transport_train_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_train_reset_boundary_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/smoke/test_vecenv_reset_step_smoke.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/train | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/train/test_trainer_dashboard_control.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit | Directory | tests | Test subdirectory for RL validation coverage. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_action_schema_version_compatibility.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_artifact_naming_versioning.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_batch_client_batch_api.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_benchmark_common.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_benchmark_context.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_bridge_buffers.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_bridge_launcher_preflight.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_config_loader.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_contract_version_registry.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_curriculum_config_loading.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_episode_start_contract_registry.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_fast_policy_encoding.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_fast_reward_adapter.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_fast_trace_adapter.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_java_runtime.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_mechanics_parity_compare.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_observation_flattening_determinism.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_observation_views.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_official_benchmark_profile_registry.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_parity_trace_schema.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_phase0_packet_gate.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_phase1_packet_gate.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_phase2_packet_gate.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_phase2_prototype_packet_gate.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_policy_observation_encoding.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_policy_registry.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_production_trainer.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_required_docs_exist.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_reward_no_future_leakage.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_reward_reproducibility.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_run_manifest_basics.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_shared_memory_transport.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_subprocess_transport_minimal_info.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_train_ceiling_bench.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_train_vecenv_defaults.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/tests/unit/test_versions.py | File | tests | Automated RL test file covering unit, smoke, integration, determinism, or performance behavior. | Confirmed |
+| RL/fight_caves_rl/utils | Directory | utility | Shared utility helpers for runtime, subprocess, and filesystem support. | Confirmed |
+| RL/fight_caves_rl/utils/__init__.py | File | utility | Shared RL utility implementation file. | Confirmed |
+| RL/fight_caves_rl/utils/config.py | File | utility | Shared RL utility implementation file. | Confirmed |
+| RL/fight_caves_rl/utils/java_runtime.py | File | utility | Shared RL utility implementation file. | Confirmed |
+| RL/fight_caves_rl/utils/paths.py | File | utility | Shared RL utility implementation file. | Confirmed |
+| RL/fight_caves_rl/utils/seeding.py | File | utility | Shared RL utility implementation file. | Confirmed |
+| RL/history | Directory | docs | Historical notes retained for prior RL workspace decisions. | Confirmed |
+| RL/history/workspace_refactor_audit.md | File | docs | Historical RL note or audit document. | Confirmed |
+| RL/pyproject.toml | File | config | Python project metadata, dependency, and tool configuration. | Confirmed |
+| RL/resources | Directory | artifacts | Repository resource directory reserved for tracked auxiliary assets. | Confirmed |
+| RL/resources/.gitkeep | File | artifacts | Tracked auxiliary resource file. | Confirmed |
+| RL/scripts | Directory | tooling | Operational entrypoints for training, benchmarking, replay, parity, and packet refresh flows. | Confirmed |
+| RL/scripts/benchmark_bridge.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/benchmark_env.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/benchmark_subprocess_transport.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/benchmark_train.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/benchmark_train_ceiling.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/bootstrap_wsl_toolchain.sh | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_batch_trace.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_mechanics_parity_trace.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_reset_repro.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_seedpack_eval.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_step_trace.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/collect_trajectory_trace.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/eval.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/refresh_phase0_packet.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/refresh_phase1_packet.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/refresh_phase2_packet.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/refresh_phase2_prototype_packet.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/replay_eval.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/run_acceptance_gate.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/run_parity_canary.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/run_vecenv_smoke.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/smoke_random.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/smoke_scripted.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/scripts/train.py | File | tooling | Executable RL workflow script for training, evaluation, replay, smoke, or benchmarking. | Confirmed |
+| RL/uv.lock | File | config | Locked dependency resolution for the RL Python environment. | Confirmed |
+
+## Notes
+
+- The companion CSV at `codebase_inventory_rl.csv` contains the same explicit path-level inventory in machine-readable form.
+- `RL/artifacts/` was intentionally excluded because it is a generated-output surface rather than source-of-truth code, config, or docs.

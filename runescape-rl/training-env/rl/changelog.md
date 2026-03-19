@@ -1,0 +1,584 @@
+## 2026-03-10
+
+- Completed the hosted native-Linux Phase 2 prototype packet after validating the packaging contract locally first:
+  - reproduced the hosted artifact bug locally with a repo-owned contract harness under workflow-style env vars
+  - traced the root cause to unsanitized `GITHUB_REF_NAME` in `fight-caves-RL/buildSrc/src/main/kotlin/shared.gradle.kts`
+  - fixed the shared Gradle version sanitization and switched the workflow to the repo-owned contract harness
+  - hosted source-of-truth production rows:
+    - `16 env`: `469.92` production SPS
+    - `64 env`: `341.43` production SPS
+    - scaling: `0.7266x`
+  - hosted source-of-truth learner-ceiling rows:
+    - `16 env`: `81.64` env-steps/s
+    - `64 env`: `73.39` env-steps/s
+    - scaling: `0.8989x`
+  - recorded the source-of-truth decision:
+    - continue trainer redesign
+    - do not revisit transport promotion yet
+    - do not activate topology work yet
+- Attempted the hosted native-Linux Phase 2 prototype rerun sequence:
+  - hardened the workflow to bootstrap cache assets from a checked-out branch instead of raw GitHub downloads
+  - made result publishing skip cleanly when the packet is absent
+  - added a post-build headless-distribution resolver to prove whether `fight-caves-headless*.zip` exists after `:game:headlessDistZip`
+  - intermediate hosted outcome:
+    - cache-bootstrap timeout is fixed
+    - the packet is still blocked because `ubuntu-latest` reports `:game:headlessDistZip` success without producing any `fight-caves-headless*.zip`
+  - current next step:
+    - fix the hosted headless distribution output/discovery discrepancy, then rerun the native-Linux prototype packet
+- Landed the `PR Batch G` follow-on trainer-core slice locally:
+  - replaced the padded multi-discrete prototype sampling/logprob path with a project-owned direct per-head implementation
+  - latest local WSL corrected production rows:
+    - `16 env`: `417.36` production SPS
+    - `64 env`: `398.80` production SPS
+    - scaling: `0.9555x`
+  - local interpretation:
+    - the prototype now clears the old local `250` SPS bar
+    - the next step is a native-Linux rerun of the corrected prototype packet
+- Completed the local `WC-P2-14` prototype gate and unblocked live subprocess benchmark execution on this host:
+  - added repo-owned Linux JVM resolution for the embedded worker path and benchmark Java metadata path
+  - local WSL `prototype_sync_v1` corrected production rows:
+    - `16 env`: `95.74` production SPS
+    - `64 env`: `93.06` production SPS
+    - scaling: `0.9720x`
+  - local WSL learner-ceiling companions:
+    - `16 env`: `145.70` env-steps/s
+    - `64 env`: `144.79` env-steps/s
+    - scaling: `0.9937x`
+  - recorded the decision:
+    - continue deeper trainer redesign inside the prototype path
+    - do not revisit transport promotion yet
+    - do not escalate to topology work yet
+- Started the Phase 2 production trainer prototype batch locally:
+  - added the project-owned synchronous prototype trainer in:
+    - `fight_caves_rl/puffer/production_trainer.py`
+  - wired the train benchmark to a new runner mode:
+    - `prototype_sync_v1`
+  - kept the current production observation path, subprocess vecenv interface, policy family, and PPO/config surface
+  - omitted final evaluate from the prototype production metric path
+  - added focused verification:
+    - `fight_caves_rl/tests/unit/test_production_trainer.py`
+    - `fight_caves_rl/tests/unit/test_benchmark_common.py`
+    - `fight_caves_rl/tests/performance/test_train_benchmark_smoke.py`
+  - hardened test/runtime detection so live benchmark smoke skips cleanly when the JVM shared library is unavailable
+- Completed `WC-P2-13` locally:
+  - approved the first Phase 2 production trainer prototype as a project-owned synchronous trainer path
+  - kept the current production observation path, subprocess vecenv interface, policy family, and PPO/config surface in scope
+  - allowed the prototype to bypass the current `PuffeRL` evaluate/train/mean-and-log/close hot-path structure
+  - deferred transport promotion and actor/learner split until after the first prototype is benchmarked
+  - recorded the approved prototype boundary in:
+    - `/home/jordan/code/RL/docs/production_trainer_prototype_scope.md`
+- Completed `WC-P2-11` locally:
+  - added the canonical production fast-trainer benchmark definition doc
+  - froze the canonical Phase 2 target rows as native-Linux `16 env` and `64 env`, disabled logging
+  - froze learner-ceiling rows as diagnostic companions only
+  - explicitly separated certification-only responsibilities from the benchmark hot path
+- Completed `WC-P2-10` trainer-path instrumentation locally:
+  - added benchmark-safe trainer bucket instrumentation in `fight_caves_rl/puffer/trainer.py`
+  - wired those buckets into the production train benchmark and learner-ceiling diagnostic reports
+  - current local dominant buckets are:
+    - `eval_policy_forward`
+    - `eval_env_recv`
+    - `train_backward`
+    - `train_policy_forward`
+- Completed `WC-P2-09` benchmark-validity correction:
+  - train benchmark now publishes `train_benchmark_production_v1`
+  - production train throughput now excludes `final_evaluate_seconds`
+  - learner-ceiling benchmark now publishes `train_ceiling_diagnostic_v1`
+  - Phase 2 packet/gate now prefers the explicit production throughput field
+  - existing pre-`WC-P2-09` Phase 2 disabled-train rows are now treated as legacy pre-correction evidence
+- Added root historical optimization log:
+  - `/home/jordan/code/optimization_history.md`
+- Pruned RL doc/config clutter:
+  - moved `docs/workspace_refactor_audit.md` to `history/workspace_refactor_audit.md`
+  - retired the placeholder sweep config `configs/sweep/ppo_sweep_v0.yaml`
+- Updated RL references to the new archived fight-caves performance artifacts:
+  - historical Step 11 sim report now points at `fight-caves-RL/history/performance_report_step11.md`
+
+- Continued Phase 2 troubleshooting after the first native-Linux transport-promotion rerun still failed.
+- Re-ran the hosted native-Linux Phase 2 gate after Production Training Mode info-payload minimization:
+  - latest run `22883118379`
+  - latest native-Linux result:
+    - transport `64 env`: pipe `10868.61`, `shared_memory_v1` `8340.91` env/s (`0.7674x`)
+    - disabled train `16 env`: pipe `74.05`, `shared_memory_v1` `75.01` SPS
+    - disabled train `64 env`: pipe `75.03`, `shared_memory_v1` `74.85` SPS (`0.9977x`)
+    - shared-train scaling `64 vs 16`: `0.9979x`
+    - blockers:
+      - `transport_signal_too_weak`
+      - `train_signal_too_weak`
+      - `shared_train_scaling_too_weak`
+- Added a repo-owned learner-ceiling benchmark to explain why the transport win disappears in training:
+  - `fight_caves_rl/benchmarks/train_ceiling_bench.py`
+  - `scripts/benchmark_train_ceiling.py`
+  - `fight_caves_rl/tests/unit/test_train_ceiling_bench.py`
+  - `fight_caves_rl/tests/performance/test_train_ceiling_benchmark_smoke.py`
+- Recorded the first learner-ceiling result on the current WSL host:
+  - fake-env train ceiling `4 env`: `154.45` env-steps/s
+  - fake-env train ceiling `16 env`: `156.20` env-steps/s
+  - fake-env train ceiling `64 env`: `144.43` env-steps/s
+  - `64 env` stage breakdown:
+    - evaluate: `15.83s`
+    - train: `24.87s`
+    - final evaluate: `16.02s`
+- Recorded the new Phase 2 implication:
+  - after Phase 1, the train loop itself is now a dominant wall-clock bottleneck
+  - transport-only improvements are currently too small to move the end-to-end training gate materially
+  - `WC-P2-03` remains blocked, but the blocker is now clearly trainer-bound rather than purely transport-bound
+
+- Started Phase 2 implementation locally after the clean Phase 1 gate pass.
+- Completed `WC-P2-01` and `WC-P2-02` in local review state:
+  - transport decision: keep the existing subprocess topology, keep `Pipe` as the control plane, and prototype a lower-copy shared data plane first
+  - host-specific implementation detail: the current host rejects POSIX `multiprocessing.shared_memory`, so the first prototype uses file-backed `mmap` as the approved "shared-memory or equivalent low-copy IPC" path
+- Added the first low-copy transport prototype in:
+  - `fight_caves_rl/envs/shared_memory_transport.py`
+  - `fight_caves_rl/envs/subprocess_vector_env.py`
+  - `fight_caves_rl/benchmarks/subprocess_transport_bench.py`
+  - `scripts/benchmark_subprocess_transport.py`
+- Kept the shipped default training path unchanged:
+  - `pipe_pickle_v1` remains the default subprocess transport
+  - the new `shared_memory_v1` path is opt-in through `env.subprocess_transport_mode`
+- Added local validation coverage for the prototype:
+  - unit transport round-trip test
+  - shared-memory train smoke
+  - subprocess transport benchmark smoke
+  - existing default-pipe train smoke revalidation
+- Current local WSL prototype measurements:
+  - subprocess transport benchmark, `16 env / 64 rounds`: pipe `7041.99` env/s vs low-copy `7202.60` env/s (`1.02x`)
+  - subprocess transport benchmark, `64 env / 64 rounds`: pipe `8367.57` env/s vs low-copy `10765.14` env/s (`1.29x`)
+  - end-to-end train probe, `16 env / 128 timesteps / disabled logging`: pipe `22.69` SPS vs low-copy `23.38` SPS (`1.03x`)
+- Recorded the current Phase 2 implication:
+  - the low-copy prototype is real and healthy
+  - the measured local gain is currently too small to justify a production transport swap on its own
+  - `WC-P2-03` remains intentionally blocked pending review of the prototype evidence
+
+## 2026-03-09
+
+- Closed the remaining `WC-P1-05` blocker and approved continuation to Phase 2.
+- The clean native-Linux comparison now uses an immutable pre-Phase-1 baseline published from:
+  - RL commit `3e557474f3c6b4e44842da82a971c8f97d521b10`
+  - fight-caves-RL commit `216c1fd2ac31f450f8c599f9ec9454330a4e6b3a`
+- The final hosted native-Linux Phase 1 gate now reports:
+  - bridge `64 env = 9148.80` env/s
+  - vecenv `64 env = 10961.11` env/s
+  - bridge ratio `= 6.6397`
+  - vecenv ratio `= 8.0101`
+  - `raw_object_conversion_still_dominant = false`
+  - `phase2_unblocked = true`
+- Updated the active decision docs so the codebase no longer carries stale Phase 1 blocker language:
+  - `docs/phase1_decision_gate.md`
+  - `docs/benchmark_matrix.md`
+  - `docs/performance_decomposition_report.md`
+  - `docs/python_profiler_report.md`
+
+- Completed `WC-P1-04` and `WC-P1-05` from the workspace optimization plan.
+- Added the RL-side Phase 1 decision-gate source of truth:
+  - `docs/phase1_decision_gate.md`
+- Froze the post-implementation Phase 1 rerun packet:
+  - required native-Linux bridge rows
+  - required native-Linux vecenv rows
+  - required steady-state Python profile rerun
+  - explicit continue-versus-pivot thresholds
+- Updated parity-safe optimization guidance so the future flat-path implementation must clear the new raw-vs-flat equivalence gate before it is trusted.
+
+- Completed `WC-P1-02` and `WC-P1-03` from the workspace optimization plan.
+- Froze the first flat-path design as a conservative sim-owned schema that intentionally mirrors the current shipped `134`-feature trainer tensor layout.
+- Added the RL-side ingestion design source of truth:
+  - `docs/flat_observation_ingestion.md`
+- Updated RL-side contract docs for the future flat path:
+  - `docs/bridge_contract.md` now documents the planned flat-path handshake additions
+  - `docs/run_manifest.md` now documents the future flat-schema manifest fields
+  - `docs/observation_mapping.md` now explicitly ties the first flat schema to the current trainer tensor layout
+
+- Completed `WC-P1-01` from the workspace optimization plan.
+- Froze the RL-side raw-vs-flat contract consumption rules for the upcoming performance-path redesign:
+  - updated `docs/observation_mapping.md` so the future flat path is explicitly constrained to remain a semantically equivalent projection of the raw sim contract
+  - updated `docs/parity_safe_optimization_rules.md` so decision-critical combat cues already present in the raw contract, including `jad_telegraph_state`, are treated as parity-sensitive optimization inputs
+- Recorded the downstream implication of the Jad telegraph rework for optimization Phase 1:
+  - the Jad cue is now protected raw semantic content that future flat-schema work must preserve exactly
+
+- Integrated the parity-preserving Jad telegraph cue into the RL-side observation contract.
+- Kept the raw sim observation contract on additive `headless_observation_v1` and consumed the new NPC field `jad_telegraph_state` as an additive raw feature.
+- Version-bumped the RL-local trainer tensor layout from `puffer_policy_observation_v0` to `puffer_policy_observation_v1` because the policy input schema now includes the Jad telegraph feature.
+- Updated RL-side observation encoding/tests so the policy can learn from the real Jad windup cue without any prayer oracle.
+
+- Pruned stale active Phase 0 blocker wording from live RL performance docs after the native-Linux gate passed:
+  - `docs/benchmark_matrix.md` now distinguishes local WSL packet status from the approved native-Linux source-of-truth gate
+  - active docs now consistently treat Phase 1 as the next pickup point instead of repeating pre-gate blocker language
+
+- Hosted native-Linux Phase 0 gate passed via the `fight-caves-RL` fallback workflow:
+  - published results branch now contains a native-Linux source-of-truth packet for run `22842056526`
+  - gate summary reports:
+    - `benchmark_host_class = linux_native`
+    - `phase1_unblocked = true`
+    - `per_worker_sim_env_steps_per_second = 404635.41`
+    - `workers_needed_for_100k = 1`
+- Updated RL Phase 0 status docs to reflect that the optimization program is no longer blocked on native-Linux confirmation:
+  - `docs/performance_plan.md`
+  - `docs/performance_decomposition_report.md`
+  - `docs/benchmark_matrix.md`
+
+- Hardened the self-hosted native-Linux Phase 0 workflow so it no longer relies on a stale prebuilt headless artifact:
+  - `.github/workflows/phase0_native_linux.yml` now builds the canonical `:game:headlessDistZip` artifact before `scripts/refresh_phase0_packet.py`
+  - this aligns the self-hosted gate with the canonical headless artifact contract used by the RL bridge and benchmark path
+- Decision recorded:
+  - Phase 0 packet generation must treat the packaged headless distribution as an explicit prerequisite, not an implicit leftover from prior local builds
+
+- Added a repo-owned native-Linux Phase 0 workflow in `RL`:
+  - `.github/workflows/phase0_native_linux.yml`
+  - the correct target topology is `self-hosted, linux` against the existing `/home/jordan/code` workspace so the run sees the local sibling repos and the already-restored game cache
+- Verified the first `RL` native-Linux workflow push created a queued run rather than a completed packet:
+  - run `22841124553`
+  - status: `queued`
+  - implication: the self-hosted Linux runner path exists in config but is not currently available to execute the Phase 0 gate
+- Recorded the resulting Phase 0 status:
+  - Phase 1 remains blocked
+  - the remaining blocker is native-Linux host availability, not WSL measurement coverage
+
+- Started Phase 0 optimization implementation work from the approved workspace-level optimization plan.
+- Added repo-owned Phase 0 packet tooling in RL:
+  - `scripts/refresh_phase0_packet.py`
+  - `fight_caves_rl/benchmarks/phase0_packet.py`
+- Hardened benchmark metadata for comparability:
+  - benchmark hardware profiles now record `host_class`, `is_wsl`, `performance_source_of_truth`, `java_runtime_version`, and `java_vm_name`
+  - bridge benchmark CLI now supports `--env-count` overrides so the Phase 0 packet can standardize `1 / 16 / 64` rows
+- Added RL unit coverage for the new Phase 0 metadata/gate logic:
+  - `fight_caves_rl/tests/unit/test_benchmark_context.py`
+  - `fight_caves_rl/tests/unit/test_phase0_packet_gate.py`
+- Executed the current-host WSL Phase 0 packet via:
+  - `uv run python scripts/refresh_phase0_packet.py --output-dir /tmp/fc_phase0_packet_clean`
+- Recorded the refreshed WSL packet outcome:
+  - bridge rows complete: `1 / 16 / 64`
+  - vecenv rows complete: `1 / 16 / 64`
+  - train rows complete: `4 / 16 / 64`
+  - current train plateau remains about `91-97` SPS with disabled logging
+  - Phase 0 gate still blocks Phase 1 because `native_linux_source_of_truth_missing`
+- Updated RL performance docs to reflect the new Phase 0 packet and the current gate state:
+  - `docs/performance_decomposition_report.md`
+  - `docs/benchmark_matrix.md`
+  - `docs/runtime_topology.md`
+  - `docs/performance_plan.md`
+  - `docs/hotpath_map.md`
+
+- Added a measurement-first performance audit packet in RL:
+  - `docs/performance_decomposition_report.md`
+  - `docs/hotpath_map.md`
+  - `docs/benchmark_matrix.md`
+  - `docs/python_profiler_report.md`
+  - `docs/transport_and_copy_ledger.md`
+  - `docs/observation_action_cost_report.md`
+  - `docs/runtime_topology.md`
+  - `docs/logging_overhead_report.md`
+  - `docs/parity_safe_optimization_rules.md`
+- Added the matching sim-side profiler report in:
+  - `../fight-caves-RL/docs/sim_profiler_report.md`
+- Expanded the audit packet after the first draft so the docs now capture:
+  - exact repo SHAs on the packet docs
+  - reset-path transport and payload measurements in addition to step-path measurements
+  - worker-count / env-per-worker details in the benchmark matrix
+  - the current-host 2026-03-09 baseline as the active summary in `docs/performance_plan.md`
+- Collected current-host benchmark evidence on the shipped stack:
+  - bridge:
+    - `1 env` batch trace about `23.8k` env steps/s
+    - `64 env` lockstep batch about `1.48k` env steps/s total
+  - embedded vecenv:
+    - `4 env` about `906.6` env steps/s
+    - `16 env` about `1232.6` env steps/s
+    - `64 env` about `1492.1` env steps/s
+  - end-to-end train:
+    - `4 env` about `36.4` SPS disabled
+    - `16 env` about `82.8` SPS disabled
+    - `64 env` about `87.9` SPS disabled
+  - online W&B wall-clock probe:
+    - `4 env` about `11.9` wall SPS
+- Collected steady-state Python profiles showing the dominant embedded-path hot spot is observation pythonization:
+  - `pythonize_observation` / `_pythonize` dominate worker-side cumulative time
+  - raw `observe_jvm`, `tick`, and `apply_action_jvm` are much smaller
+  - action decode, reward bookkeeping, and policy flattening are not the main current bottlenecks
+- Collected subprocess payload-size measurements for the current transport:
+  - `1 env` step payload about `1261` pickled bytes
+  - `4 env` step payload about `3047` pickled bytes
+  - `16 env` step payload about `10187` pickled bytes
+  - conclusion: bytes alone are not the main problem; repeated object construction and copying are
+- Verified one important scaling result:
+  - embedded vecenv throughput closely tracks embedded bridge throughput at `64 envs`
+  - current training throughput plateaus by `16-64 envs`
+  - this points to the bridge/observation/transport architecture as the main current limiter, not PufferLib vectorization alone
+- Attempted direct JVM profiling on the current host:
+  - embedded-JVM JFR dumponexit failed to dump cleanly from the Python-launched benchmark
+  - Gradle/JUnit JFR capture succeeded but was dominated by Gradle / JUnit / JaCoCo harness noise and did not yield clean headless-symbol CPU samples
+  - `jcmd -l` did not expose the embedded JPype JVM as an attachable target
+  - the sim profiler report records this limitation explicitly instead of overclaiming function-level JVM hotspots
+
+# changelog.md
+
+## 2026-03-08
+
+- Investigated the reported reset-boundary training crash and reproduced it locally.
+- Confirmed the failure scope with targeted isolation runs:
+  - raw `HeadlessBatchClient` reset/step loops are stable across repeated `max_tick_cap` resets
+  - direct embedded vecenv reset/step loops are stable across repeated `max_tick_cap` resets
+  - `PuffeRL.evaluate()` without `train()` is stable
+  - the crash appears only after `PuffeRL.train()` has shared a process with the embedded JPype/JVM runtime and the next reset crosses back into `resetFightCaveEpisode(...)`
+- Verified that the crash is not specific to:
+  - W&B online logging
+  - the current PufferLib advantage kernel alone
+  - PyTorch CPU thread count alone
+- Shipped a stability-first remediation:
+  - added `fight_caves_rl/envs/subprocess_vector_env.py`
+  - `scripts/train.py` now uses a subprocess-isolated vecenv worker by default through `fight_caves_rl.puffer.factory.make_vecenv(..., backend="subprocess")`
+  - direct embedded vecenv remains the path for correctness tooling and vecenv microbenchmarks through `backend="embedded"`
+- Added regression coverage:
+  - `fight_caves_rl/tests/smoke/test_train_reset_boundary_smoke.py`
+  - the new smoke run forces a low `tick_cap` so training crosses an episode reset boundary without crashing
+- Updated run-manifest accuracy:
+  - train manifests now record `bridge_mode = subprocess_isolated_jvm`
+- Verified the fixed training path locally:
+  - `WANDB_MODE=disabled uv run python scripts/train.py --config configs/train/train_baseline_v0.yaml --total-timesteps 512 --output /tmp/fc_train_postfix.json`
+  - `WANDB_MODE=online uv run python scripts/train.py --config configs/train/train_baseline_v0.yaml --total-timesteps 512 --output /tmp/fc_train_postfix_online.json`
+  - both complete successfully across reset boundaries
+- Verified targeted RL validation after the remediation:
+  - `uv run pytest fight_caves_rl/tests/unit fight_caves_rl/tests/train fight_caves_rl/tests/smoke/test_train_reset_boundary_smoke.py fight_caves_rl/tests/smoke/test_multi_worker_smoke.py -q`
+  - `uv run pytest fight_caves_rl/tests/unit fight_caves_rl/tests/train fight_caves_rl/tests/integration fight_caves_rl/tests/determinism fight_caves_rl/tests/parity -q`
+  - `uv run pytest fight_caves_rl/tests/smoke fight_caves_rl/tests/performance -q`
+- Recorded the current measured local performance gap:
+  - existing `fight-caves-RL` sim report: about `8.9k` ticks/sec
+  - RL bridge benchmark on this host:
+    - `bridge_1env_v0` batch trace: about `18.3k` env steps/sec
+    - `bridge_64env_v0` lockstep batch: about `1.33k` env steps/sec total
+  - RL embedded vecenv no-train loop (`4 envs`, constant wait action, no reset pressure): about `742` env steps/sec total
+  - RL stable subprocess-backed training baseline (`train_baseline_v0`, `4 envs`, `512` timesteps):
+    - W&B disabled: about `39.5` train SPS
+    - W&B online: about `13.1` train SPS
+- Documented the main implication for future work:
+  - the workspace is now stable for end-to-end training runs again
+  - the current stack is still far from the long-term `100,000-1,000,000+` SPS goal
+  - the next required performance work is a lower-copy subprocess/shared-memory transport plus substantial sim-side batching/runtime optimization
+
+- Fixed one real W&B online bootstrap bug in RL:
+  - `fight_caves_rl/utils/config.py` previously passed `WANDB_ENTITY` through verbatim
+  - when users supplied a full `wandb.ai/<entity>/<project>` URL, RL forwarded that URL directly into `wandb.init(entity=...)`
+  - W&B rejected that with `invalid parameters: 64 limit exceeded for EntityName`
+- RL now normalizes W&B target inputs during bootstrap:
+  - bare entity slugs still work unchanged
+  - full `https://wandb.ai/<entity>/<project>` URLs now normalize to the correct `entity` slug
+  - if `WANDB_PROJECT` is still at the repo default, RL also derives the project name from the URL
+- Added regression coverage for URL-style W&B inputs in:
+  - `fight_caves_rl/tests/unit/test_config_loader.py`
+- Updated the W&B user-facing contract docs in:
+  - `.env.example`
+  - `README.md`
+  - `docs/wandb_logging_contract.md`
+- Added a repo-owned post-PR13 workspace refactor audit in:
+  - `docs/workspace_refactor_audit.md`
+- Recorded current cross-repo maintainability findings without changing runtime behavior:
+  - stale RL benchmark wording in `docs/run_manifest.md`
+  - duplicated RL compatibility/CLI entrypoint patterns
+  - stale active-doc wording in `fight-caves-RL`
+  - `RSPS` README still presenting only inherited upstream Void identity despite the new oracle/reference module docs
+  - duplicated inherited release workflows in `fight-caves-RL` and `RSPS`
+- Started and completed PR 13 MVP acceptance work in RL.
+- Added the repo-owned acceptance surfaces:
+  - `scripts/run_acceptance_gate.py`
+  - `.github/workflows/acceptance.yml`
+  - `docs/mvp_acceptance.md`
+- Standardized the PR13 acceptance gate to run:
+  - the full RL suite split
+  - a real train run through `scripts/train.py`
+  - deterministic replay-eval on the produced checkpoint through `scripts/replay_eval.py`
+  - the PR12 parity matrix through `scripts/run_parity_canary.py`
+  - the PR11 bridge/env/train benchmark entrypoints
+- Found and fixed one real PR13 acceptance-runner bug:
+  - the first version leaked acceptance-specific W&B env vars into the dev-only unit suite
+  - `scripts/run_acceptance_gate.py` now runs pytest with the normal environment and reserves offline W&B overrides for the runtime/benchmark commands only
+- Verified the passing PR13 acceptance gate:
+  - `uv run python scripts/run_acceptance_gate.py --output-dir /tmp/rl-pr13-acceptance-rerun`
+  - `acceptance_report.json` recorded `all_passed = true`
+- Started and completed PR 12 parity/oracle validation work in RL.
+- Added the config-driven PR12 parity runner:
+  - `fight_caves_rl/replay/parity_canaries.py`
+  - `scripts/run_parity_canary.py`
+- Expanded the parity config surface:
+  - `configs/eval/parity_canary_v0.yaml` now defines the current three-scenario parity matrix over `parity_reference_v0`
+- Locked the additional sim-backed trace expectations in:
+  - `fight_caves_rl/replay/trace_packs.py`
+    - `parity_jad_healer_v0`
+    - `parity_tzkek_split_v0`
+- Expanded the PR12 parity suite:
+  - `fight_caves_rl/tests/parity/test_parity_canary_smoke.py`
+  - `fight_caves_rl/tests/parity/test_replay_to_trace_equivalence_smoke.py`
+- Standardized the PR12 parity comparison path:
+  - wrapper trace via `collect_trajectory_trace.py --mode wrapper`
+  - raw sim trace via `collect_trajectory_trace.py --mode raw`
+  - trace-pack-driven scripted replay path via `smoke_scripted.py`
+- Kept checkpoint replay-eval determinism on the existing PR10 contract; PR12 replay-to-trace equivalence refers specifically to the scripted trace-pack path.
+- Re-verified the PR12 acceptance set:
+  - `uv run python scripts/run_parity_canary.py --config configs/eval/parity_canary_v0.yaml --output /tmp/parity_canary_report.json`
+  - `uv run pytest fight_caves_rl/tests/parity -q` -> passed
+- Started and completed PR 11 performance hardening in RL.
+- Added the shared benchmark-context metadata surface:
+  - `fight_caves_rl/benchmarks/common.py`
+- Expanded the repo-owned benchmark package:
+  - `fight_caves_rl/benchmarks/env_bench.py`
+  - `fight_caves_rl/benchmarks/train_bench.py`
+- Added the PR11 benchmark entrypoint and config surfaces:
+  - `scripts/benchmark_train.py`
+  - `configs/benchmark/train_1024env_v0.yaml`
+  - `.github/workflows/benchmarks.yml`
+- Extended the existing bridge and logging surfaces for PR11 benchmarking:
+  - `fight_caves_rl/benchmarks/bridge_bench.py`
+  - `fight_caves_rl/logging/wandb_client.py`
+  - `scripts/benchmark_env.py`
+- Added PR11 performance smoke coverage:
+## 2026-03-09
+
+- Started Phase 2 transport redesign implementation.
+- Completed `WC-P2-01` and `WC-P2-02`:
+  - approved the low-copy direction as `Pipe` control plane plus file-backed `mmap` data plane
+  - kept the shipped default subprocess transport as `pipe_pickle_v1`
+  - added the opt-in low-copy prototype `shared_memory_v1`
+- Added the Phase 2 prototype and promotion-gate surfaces:
+  - `fight_caves_rl/envs/shared_memory_transport.py`
+  - `fight_caves_rl/benchmarks/subprocess_transport_bench.py`
+  - `fight_caves_rl/benchmarks/phase2_packet.py`
+  - `scripts/benchmark_subprocess_transport.py`
+  - `scripts/refresh_phase2_packet.py`
+  - `docs/phase2_transport_gate.md`
+- Added focused Phase 2 validation:
+  - `fight_caves_rl/tests/unit/test_shared_memory_transport.py`
+  - `fight_caves_rl/tests/unit/test_phase2_packet_gate.py`
+  - `fight_caves_rl/tests/smoke/test_shared_memory_transport_train_smoke.py`
+  - `fight_caves_rl/tests/performance/test_subprocess_transport_benchmark_smoke.py`
+- Recorded the current local WSL Phase 2 prototype result:
+  - transport `64 env`: about `1.29x` speedup for `shared_memory_v1` over `pipe_pickle_v1`
+  - disabled train `16 env`: about `1.03x` speedup
+  - local WSL gate remains blocked, which is expected because native Linux is the source-of-truth promotion path
+- Added the hosted native-Linux Phase 2 packet/gate workflow contract in the docs; `WC-P2-03` remains blocked until that hosted gate clears.
+- Executed the hosted native-Linux Phase 2 pre-swap gate successfully through packet publication:
+  - transport `64 env`: pipe `7793.12`, `shared_memory_v1` `10906.45` env/s (`1.3995x`)
+  - disabled train `64 env`: pipe `48.15`, `shared_memory_v1` `48.38` SPS (`1.0048x`)
+  - shared-train scaling `64 vs 16`: `0.9534x`
+- Final Phase 2 pre-swap gate decision:
+  - `WC-P2-03` remains blocked
+  - blockers:
+    - `train_signal_too_weak`
+    - `shared_train_scaling_too_weak`
+  - interpretation:
+    - the low-copy transport helps the transport boundary itself
+    - the benefit does not currently survive end-to-end training
+- Advanced the planned Phase 2 info-payload minimization work early as a troubleshooting iteration:
+  - added `env.info_payload_mode`
+  - Production Training Mode can now use `minimal` per-step infos while Certification/full-info paths keep the existing richer metadata
+  - subprocess transport now omits empty info payloads from the control plane instead of pickling lists of empty dicts
+- Updated production benchmark/train configs to use minimal infos:
+  - `configs/train/train_baseline_v0.yaml`
+  - `configs/benchmark/train_1024env_v0.yaml`
+- Added focused regression coverage:
+  - `fight_caves_rl/tests/unit/test_subprocess_transport_minimal_info.py`
+  - expanded `fight_caves_rl/tests/unit/test_shared_memory_transport.py`
+- Local WSL Phase 2 rerun after the info-trim iteration still failed the gate:
+  - transport `64 env`: `0.9896x`
+  - disabled train `64 env`: `1.0077x`
+  - shared-train scaling `64 vs 16`: `0.8847x`
+- Current interpretation:
+  - the Production Training Mode metadata trim is correct and parity-safe
+  - it is not sufficient to unblock `WC-P2-03`
+
+- Started the Phase 1 flat-observation implementation batch and replaced the Production Training Mode hot path with the sim-owned flat schema:
+  - added direct flat observation accessors and flat-row helpers in `fight_caves_rl/envs/observation_views.py`
+  - extended the bridge/runtime contract to `fight_caves_bridge_v2`
+  - added flat observation handshake/manifests fields:
+    - `observation_path_mode`
+    - `flat_observation_schema_id`
+    - `flat_observation_schema_version`
+    - `flat_observation_dtype`
+    - `flat_observation_feature_count`
+    - `flat_observation_max_visible_npcs`
+- Shifted Production Training Mode batch stepping onto the flat path while keeping Certification/reference paths on the raw path:
+  - `HeadlessBatchClient.step_batch(...)` now consumes sim-emitted flat observations when future leakage is disabled
+  - `HeadlessBatchClient.step_reference(...)` remains raw-path for certification/reference parity
+- Added the first RL-side raw-vs-flat certification coverage:
+  - `fight_caves_rl/tests/unit/test_observation_views.py`
+  - `fight_caves_rl/tests/integration/test_flat_observation_matches_raw_projection.py`
+- Re-ran the Phase 1 local WSL packet:
+  - bridge `64 env`: about `11.94k` env/s
+  - vecenv `64 env`: about `7.34k` env/s
+  - steady-state raw object conversion is no longer the dominant Python cost center
+- Refreshed the stale parity-canary semantic digest baselines for the Jad-healer and Tz-Kek scenarios after the protected observation cue set expanded.
+- Executed the hosted native-Linux Phase 1 packet successfully through bridge, vecenv, and steady-state profiling:
+  - bridge `64 env`: about `10.08k` env/s
+  - vecenv `64 env`: about `12.31k` env/s
+  - raw object conversion remains non-dominant on native Linux
+- Found one real hosted-only packet bug in `scripts/refresh_phase1_packet.py`:
+  - `_run_python_profile` loaded `configs/benchmark/vecenv_256env_v0.yaml` with a cwd-relative path
+  - that crashed on hosted native Linux because the workflow invokes the script from the sim repo root, not the RL repo root
+  - fixed by resolving the config path from `repo_root()`
+- Found one real Phase 1 gate invalidation issue:
+  - `phase0-results/latest` had been republished with post-Phase-1 commits while fixing baseline-file publication
+  - the current native-Linux ratio comparison is therefore contaminated and not a valid pre-vs-post Phase 1 decision
+- Remaining pre-Phase-2 work is now explicit:
+  - publish an immutable pre-Phase-1 native-Linux baseline
+  - rerun the hosted Phase 1 gate against that frozen baseline
+
+## 2026-03-10
+
+- Added a repo-owned learner-ceiling diagnostic in RL:
+  - `fight_caves_rl/benchmarks/train_ceiling_bench.py`
+  - `scripts/benchmark_train_ceiling.py`
+- Added focused validation for that diagnostic:
+  - `fight_caves_rl/tests/unit/test_train_ceiling_bench.py`
+  - `fight_caves_rl/tests/performance/test_train_ceiling_benchmark_smoke.py`
+- Recorded the current local WSL learner-ceiling result:
+  - fake-env ceiling `4 env`: `154.45` env-steps/s
+  - fake-env ceiling `16 env`: `156.20` env-steps/s
+  - fake-env ceiling `64 env`: `144.43` env-steps/s
+  - `64 env` stage split:
+    - evaluate: `15.83s`
+    - train/update: `24.87s`
+    - final evaluate: `16.02s`
+- Phase 2 interpretation changed materially:
+  - the first low-copy transport prototype is still real
+  - the native-Linux transport promotion gate is still blocked
+  - the current end-to-end blocker is now trainer-bound as well as transport-bound
+- Added the hosted native-Linux learner-ceiling workflow in the sim repo as the source-of-truth confirmation path:
+  - `fight-caves-RL/.github/workflows/phase2_native_linux_train_ceiling.yml`
+- Updated the active RL performance docs to make the Phase 2 pivot explicit:
+  - transport promotion remains blocked
+  - the next implementation batch should target trainer/rollout overhead rather than forcing `WC-P2-03`
+- The hosted native-Linux learner-ceiling workflow completed successfully:
+  - [fight-caves-RL/actions/runs/22886069441](https://github.com/jordanbailey00/fight-caves-RL/actions/runs/22886069441)
+  - published summary:
+    - `4 env`: `94.97` env-steps/s
+    - `16 env`: `74.67` env-steps/s
+    - `64 env`: `68.43` env-steps/s
+    - `64 vs 16 = 0.9165x`
+- Current interpretation is now source-of-truth complete:
+  - the Phase 2 pivot is no longer based only on local WSL diagnostics
+  - the native-Linux host confirms trainer/rollout overhead as the current active blocker
+- Started `WC-P2-07` locally without pushing:
+  - added a benchmark-only core train runner in `fight_caves_rl/benchmarks/train_bench.py`
+  - disabled checkpoint writes in benchmark-only trainer paths via `ConfigurablePuffeRL`
+  - redirected `scripts/refresh_phase2_packet.py` to use the benchmark-only core runner for disabled train rows
+  - added focused validation:
+    - `fight_caves_rl/tests/train/test_trainer_dashboard_control.py`
+    - `fight_caves_rl/tests/performance/test_train_benchmark_smoke.py`
+    - `fight_caves_rl/tests/unit/test_train_ceiling_bench.py`
+- Local `WC-P2-07` first-slice benchmark result:
+  - live disabled-train rows improved relative to the older smoke-driven benchmark path
+  - fake-env learner ceiling remained broadly flat:
+    - `4 env`: `119.90`
+    - `16 env`: `146.94`
+    - `64 env`: `144.77`
+- Added a deeper benchmark-only trainer slice locally:
+  - suppresses profile, utilization, and metric-only logging work in the disabled benchmark path
+  - removes one dead `compute_puff_advantage(...)` recomputation from the disabled-logging trainer path only
+- Local `WC-P2-07` deeper-slice benchmark result:
+  - live disabled-train rows:
+    - `16 env`: `58.12`
+    - `64 env`: `57.71`
+  - fake-env learner ceiling:
+    - `4 env`: `123.60`
+    - `16 env`: `149.19`
+    - `64 env`: `142.83`
+- Current local interpretation:
+  - the obvious benchmark/control-plane overhead has been reduced
+  - the trainer ceiling barely moved
+  - the next move should be review-gated before any native-Linux rerun, because deeper trainer-path work is now the more likely need

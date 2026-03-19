@@ -1,0 +1,34 @@
+[dragon_breath]
+id = 393
+height = 43
+curve = 15
+delay = 51
+time_offset = 20
+multiplier = 0
+
+[dragon_breath_toxic]
+id = 394
+height = 43
+curve = 15
+delay = 51
+time_offset = 20
+multiplier = 0
+
+[dragon_breath_ice]
+id = 395
+height = 43
+curve = 15
+delay = 51
+time_offset = 20
+multiplier = 0
+
+[dragon_breath_shock]
+id = 396
+height = 43
+curve = 15
+delay = 51
+time_offset = 20
+multiplier = 0
+
+[dragon_breath_shoot]
+id = 2465

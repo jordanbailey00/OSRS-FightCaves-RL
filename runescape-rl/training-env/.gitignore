@@ -1,0 +1,12 @@
+# training-env source only
+**/artifacts/
+**/.venv/
+**/.pytest_cache/
+**/build/
+**/.gradle/
+**/.kotlin/
+**/.run/
+**/logs/
+**/tmp/
+**/checkpoints/
+*.log

@@ -1,0 +1,61 @@
+[herman_caranos]
+id = 3822
+examine = "Founder and Director of the Piscatoris Fishing Colony."
+
+[franklin_caranos]
+id = 3823
+examine = "Engineer for the Piscatoris Fishing Colony."
+
+[arnold_lydspor]
+id = 3824
+shop = "arnolds_eclectic_supplies"
+collision = "indoors"
+examine = "Secretary and Storemaster for the Piscatoris Fishing Colony."
+
+[devin_mendelberg_piscatoris]
+id = 3825
+examine = "A member of the Piscatoris Fishing Colony."
+
+[george_laxmeister]
+id = 3826
+examine = "A member of the Piscatoris Fishing Colony."
+
+[ramara_du_croissant]
+id = 3827
+examine = "A member of the Piscatoris Fishing Colony."
+
+[wise_old_man_piscatoris]
+id = 3832
+
+[wise_old_man_piscatoris_2]
+id = 3833
+
+[skeleton_mage_piscatoris]
+id = 3851
+hitpoints = 800
+att = 10
+str = 10
+def = 60
+mage = 100
+style = "magic"
+max_hit_melee = 110
+slayer_xp = 80.0
+categories = ["skeletons"]
+respawn_delay = 50
+examine = "Doesn't seem to want to go away."
+
+[brian_twitcher]
+id = 8579
+
+[wise_old_man_piscatoris_3]
+id = 2567
+
+[brian_twitcher_2]
+id = 8555
+
+[brian_twitcher_3]
+id = 8556
+
+[fishing_spot_harpoon_small_net_piscatoris]
+id = 3848
+examine = "I can see fish swimming in the water."

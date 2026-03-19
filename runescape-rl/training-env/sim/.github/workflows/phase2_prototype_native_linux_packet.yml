@@ -1,0 +1,310 @@
+name: Phase 2 Prototype Native Linux Packet
+
+on:
+  workflow_dispatch:
+    inputs:
+      rl_ref:
+        description: RL branch, tag, or SHA to benchmark
+        required: false
+        default: main
+
+env:
+  CACHE_VERSION: 1.4.5
+  CACHE_BOOTSTRAP_BRANCH: codex/cache-bootstrap
+
+jobs:
+  phase2-prototype-native-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout fight-caves-RL
+        uses: actions/checkout@v4
+
+      - name: Checkout RL
+        uses: actions/checkout@v4
+        with:
+          repository: jordanbailey00/RL
+          ref: ${{ github.event.inputs.rl_ref }}
+          path: _workspace/RL
+
+      - name: Checkout RSPS
+        uses: actions/checkout@v4
+        with:
+          repository: jordanbailey00/void-rsps-v2-5-0
+          path: _workspace/RSPS
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Create cache folder
+        run: mkdir -p data/cache/
+
+      - name: Check if secrets exist
+        id: check_secret
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get cache version
+        run: echo "cache_version=$(./gradlew -q printCacheVersion | tail -n1 | xargs)" >> "$GITHUB_ENV"
+
+      - name: Restore game cache files from cache
+        id: cache-files
+        uses: actions/cache@v3
+        with:
+          key: cache-${{ env.cache_version }}-${{ hashFiles('data/cache/main_file_cache.idx255') }}
+          path: data/cache/
+          enableCrossOsArchive: 'true'
+          restore-keys: |
+            cache-${{ env.cache_version }}
+            cache-
+
+      - name: Download game cache files
+        if: steps.check_secret.outputs.exists == 'true' && steps.cache-files.outputs.cache-hit != 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-2
+        run: aws s3 cp --recursive s3://void-rsps/caches/${{ env.CACHE_VERSION }}/ data/cache/
+
+      - name: Check cache files after restore
+        id: check-cache-after-restore
+        run: |
+          if [ -f data/cache/main_file_cache.idx255 ] && [ -f data/cache/main_file_cache.dat2 ]; then
+            echo "cache_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bootstrap cache from artifact branch
+        if: steps.check-cache-after-restore.outputs.cache_exists != 'true'
+        env:
+          CACHE_BOOTSTRAP_BRANCH: ${{ env.CACHE_BOOTSTRAP_BRANCH }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          branch = os.environ["CACHE_BOOTSTRAP_BRANCH"]
+          base = f"https://raw.githubusercontent.com/jordanbailey00/fight-caves-RL/{branch}/.github/cache-bootstrap"
+          target = Path("data/cache")
+          target.mkdir(parents=True, exist_ok=True)
+
+          def fetch_bytes(url: str) -> bytes:
+              req = urllib.request.Request(url, headers={"User-Agent": "codex-phase2-prototype"})
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  return resp.read()
+
+          manifest = json.loads(fetch_bytes(f"{base}/manifest.json").decode("utf-8"))
+          archive_path = Path("/tmp") / manifest["archive_name"]
+          with archive_path.open("wb") as archive:
+              for part in manifest["parts"]:
+                  chunk = fetch_bytes(f"{base}/{part['name']}")
+                  digest = hashlib.sha256(chunk).hexdigest()
+                  if digest != part["sha256"]:
+                      raise RuntimeError(
+                          f"Checksum mismatch for {part['name']}: {digest} != {part['sha256']}"
+                      )
+                  archive.write(chunk)
+
+          archive_bytes = archive_path.read_bytes()
+          digest = hashlib.sha256(archive_bytes).hexdigest()
+          if digest != manifest["archive_sha256"]:
+              raise RuntimeError(
+                  f"Archive checksum mismatch: {digest} != {manifest['archive_sha256']}"
+              )
+
+          with zipfile.ZipFile(archive_path) as zf:
+              zf.extractall(Path("."))
+          PY
+
+      - name: Verify cache files exist
+        run: |
+          test -f data/cache/main_file_cache.idx255
+          test -f data/cache/main_file_cache.dat2
+
+      - name: Sync RL dependencies
+        working-directory: _workspace/RL
+        run: uv sync --group dev --group train --python 3.11
+
+      - name: Build canonical headless distribution
+        run: ./gradlew --no-daemon :game:headlessDistZip
+
+      - name: Refresh native Linux Phase 2 prototype packet
+        env:
+          FIGHT_CAVES_RL_REPO: ${{ github.workspace }}
+          RSPS_REPO: ${{ github.workspace }}/_workspace/RSPS
+        run: |
+          uv run --project _workspace/RL python _workspace/RL/scripts/refresh_phase2_prototype_packet.py \
+            --output-dir "${RUNNER_TEMP}/fc_phase2_prototype_packet_linux"
+
+      - name: Summarize prototype gate
+        env:
+          PACKET_DIR: ${{ runner.temp }}/fc_phase2_prototype_packet_linux
+          SUMMARY_JSON: ${{ runner.temp }}/fc_phase2_prototype_gate_summary.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          packet = json.loads(
+              (Path(os.environ["PACKET_DIR"]) / "phase2_prototype_packet.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          gate = packet["gate_status"]
+          summary = {
+              "benchmark_host_class": gate["benchmark_host_class"],
+              "prototype_16_sps": gate["prototype_16_sps"],
+              "prototype_64_sps": gate["prototype_64_sps"],
+              "prototype_scaling_ratio_64_vs_16": gate["prototype_scaling_ratio_64_vs_16"],
+              "learner_ceiling_16_sps": gate["learner_ceiling_16_sps"],
+              "learner_ceiling_64_sps": gate["learner_ceiling_64_sps"],
+              "learner_ceiling_scaling_ratio_64_vs_16": gate["learner_ceiling_scaling_ratio_64_vs_16"],
+              "next_move": gate["next_move"],
+              "blockers": gate["blockers"],
+          }
+
+          print("PHASE2_PROTOTYPE_GATE_SUMMARY_BEGIN")
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          print("PHASE2_PROTOTYPE_GATE_SUMMARY_END")
+
+          Path(os.environ["SUMMARY_JSON"]).write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as handle:
+                  handle.write("# Phase 2 Prototype Native Linux Packet\n\n")
+                  handle.write("```json\n")
+                  handle.write(json.dumps(summary, indent=2, sort_keys=True))
+                  handle.write("\n```\n")
+          PY
+
+      - name: Publish prototype packet results
+        if: always()
+        env:
+          PACKET_DIR: ${{ runner.temp }}/fc_phase2_prototype_packet_linux
+          SUMMARY_JSON: ${{ runner.temp }}/fc_phase2_prototype_gate_summary.json
+          RESULTS_BRANCH: codex/phase2-results
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          repo = "jordanbailey00/fight-caves-RL"
+          branch = Path("/tmp") / "phase2_prototype_results_repo"
+          latest = branch / "phase2-prototype-native-linux" / "latest"
+
+          if branch.exists():
+              shutil.rmtree(branch)
+
+          subprocess.run(
+              [
+                  "git",
+                  "clone",
+                  "--depth",
+                  "1",
+                  "--branch",
+                  "codex/phase2-results",
+                  f"https://x-access-token:{os.environ['GITHUB_TOKEN']}@github.com/{repo}.git",
+                  str(branch),
+              ],
+              check=True,
+          )
+
+          latest.mkdir(parents=True, exist_ok=True)
+          packet_dir = Path(os.environ["PACKET_DIR"])
+          shutil.copy2(
+              packet_dir / "phase2_prototype_packet.json",
+              latest / "phase2_prototype_packet.json",
+          )
+          shutil.copy2(
+              packet_dir / "prototype_sync_v1_16env_disabled.json",
+              latest / "prototype_sync_v1_16env_disabled.json",
+          )
+          shutil.copy2(
+              packet_dir / "prototype_sync_v1_64env_disabled.json",
+              latest / "prototype_sync_v1_64env_disabled.json",
+          )
+          shutil.copy2(
+              packet_dir / "train_ceiling_16_64.json",
+              latest / "train_ceiling_16_64.json",
+          )
+          shutil.copy2(
+              Path(os.environ["SUMMARY_JSON"]),
+              latest / "phase2_prototype_gate_summary.json",
+          )
+
+          subprocess.run(["git", "-C", str(branch), "config", "user.name", "github-actions[bot]"], check=True)
+          subprocess.run(
+              [
+                  "git",
+                  "-C",
+                  str(branch),
+                  "config",
+                  "user.email",
+                  "41898282+github-actions[bot]@users.noreply.github.com",
+              ],
+              check=True,
+          )
+          subprocess.run(["git", "-C", str(branch), "add", "phase2-prototype-native-linux/latest"], check=True)
+          status = subprocess.run(
+              ["git", "-C", str(branch), "status", "--short"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+          if status.stdout.strip():
+              subprocess.run(
+                  [
+                      "git",
+                      "-C",
+                      str(branch),
+                      "commit",
+                      "-m",
+                      "Publish Phase 2 prototype native Linux results",
+                  ],
+                  check=True,
+              )
+              subprocess.run(
+                  ["git", "-C", str(branch), "push", "origin", "HEAD:codex/phase2-results"],
+                  check=True,
+              )
+          PY
+
+      - name: Upload prototype packet artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-prototype-native-linux
+          path: |
+            ${{ runner.temp }}/fc_phase2_prototype_packet_linux
+            ${{ runner.temp }}/fc_phase2_prototype_gate_summary.json

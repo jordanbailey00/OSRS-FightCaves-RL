@@ -1,0 +1,6 @@
+# Ignore workspace-local runtime and env entrypoint.
+# Requested paths:
+# \\wsl.localhost\Ubuntu\home\jordan\code\runescape-rl-runtime
+# \\wsl.localhost\Ubuntu\home\jordan\code\.workspace-env.sh
+runescape-rl-runtime/
+.workspace-env.sh

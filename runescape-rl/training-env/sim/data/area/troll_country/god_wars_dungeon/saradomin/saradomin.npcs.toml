@@ -1,0 +1,62 @@
+[commander_zilyana]
+id = 6247
+hitpoints = 2550
+att = 280
+str = 196
+def = 300
+mage = 300
+range = 250
+attack_bonus = 195
+xp_bonus = 1.325
+combat_def = "commander_zilyana"
+hunt_mode = "aggressive"
+respawn_delay = 150
+slayer_xp = 350.0
+categories = ["boss"]
+immune_poison = true
+wander_range = 6
+examine = "Commander of Saradomin's forces."
+
+[starlight]
+id = 6248
+hitpoints = 1600
+att = 120
+str = 125
+def = 120
+mage = 125
+attack_bonus = 60
+combat_def = "starlight"
+xp_bonus = 1.05
+hunt_mode = "aggressive"
+wander_range = 6
+drop_table = "saradomin_bodyguard"
+examine = "Bane of darkness."
+
+[growler]
+id = 6250
+hitpoints = 1460
+att = 100
+str = 101
+def = 120
+mage = 150
+attack_bonus = 10
+combat_def = "growler"
+hunt_mode = "aggressive"
+wander_range = 6
+drop_table = "saradomin_bodyguard"
+examine = "Defender of the faithful."
+
+[bree]
+id = 6252
+hitpoints = 1620
+att = 110
+str = 80
+def = 130
+mage = 80
+range = 150
+attack_bonus = 10
+combat_def = "bree"
+hunt_mode = "aggressive"
+wander_range = 6
+drop_table = "saradomin_bodyguard"
+examine = "Champion of truth."

@@ -1,0 +1,1583 @@
+# pivot_implementation_plan.md
+
+## Pivot Summary
+The pivot does not replace the current stack. It reassigns roles: the existing simulator-backed headed/headless path stays as the V1 oracle/reference/debug system; `fight-caves-demo-lite` is frozen as fallback/reference; a new RSPS-backed headed demo path built from `RSPS` plus stock `void-client` becomes the primary headed demo program; and a new Kotlin/JVM V2 fast kernel plus RL-side `v2_fast` wrapper remains the training path. Success requires four things at once: Fire Cape-capable V2 training, a trustworthy RSPS-backed headed demo path, mechanics parity across oracle/headed/V2 at the trace and contract boundary, and measured performance gates of at least 1,000,000 env-only SPS and 500,000 end-to-end training SPS. The contracts for actions, observations, terminal codes, reward features, and reset semantics must stay portable to a future native/C kernel.
+
+## Overall Execution Status
+- Status: `completed`
+- Completion boundary:
+  - Phase 0 through Phase 8 are complete
+  - PR 0.1 through PR 8.2 are complete
+  - the pivot is now in post-pivot operations/follow-on territory rather than active pivot implementation
+- Final defaults:
+  - RL training default: `v2_fast`
+  - headed demo/replay default: trusted RSPS-backed headed path
+- Preserved fallbacks:
+  - `fight-caves-demo-lite`
+  - V1 oracle/reference/debug replay path
+  - explicit V1 config-based training and benchmark fallbacks
+
+## Execution Environment Assumption
+
+All implementation planning and execution in this plan assumes the Codex agent operates inside WSL/Linux.
+
+Rules:
+- use Linux/WSL paths and shell commands
+- do not assume Windows-native paths or PowerShell
+- keep Python virtual environments, Gradle/JDK tooling, benchmark scripts, and runtime commands runnable from WSL
+- prefer Linux filesystem locations for repos, build outputs, caches, and virtual environments
+
+## Phase 0 — Decision Freeze and Contract Freeze
+- Execution status: `completed`
+- Phase objective: freeze the mechanics contract and the V2 interface before implementation starts.
+- Why it exists: every later PR depends on stable action, terminal, reward-feature, parity-trace, and reset definitions.
+- High-level execution details: codify the pivot in repo docs, add the V2 contract surfaces in RL, and wire tests that fail on contract drift.
+- Dependency/order rationale: this phase must land first so Phase 1 measurement, Phase 2 trimming, Phase 3 kernel work, and the later RSPS-backed headed demo work all build against the same frozen contract.
+
+### PR 0.1 — Freeze V2 Mechanics And Shared Contracts
+- Status: `completed`
+- Completed work:
+  - [x] Wrote the V1/V1.5/V2 role split and mechanics-parity definition into the active RL docs.
+  - [x] Added `mechanics_contract.py`, `terminal_codes.py`, `reward_feature_schema.py`, and `parity_trace_schema.py`.
+  - [x] Froze the V2 action schema and reset/terminal contract surfaces in RL.
+  - [x] Added drift-detection tests for contract ids, enum values, and feature ordering.
+  - [x] Documented WSL/Linux as the canonical agent execution environment in the active architecture docs.
+- [x] Resolved the V2 contract-versioning policy now that runtime-surface work has started: keep RL-facing action/reset/terminal/reward/parity contracts shared, and version V2 runtime/kernel-specific surfaces independently under the `fight_caves_fast_kernel_surface_v1` family.
+- Open work:
+  - None.
+- Objective: turn the pivot into explicit repo-level contracts without changing runtime behavior.
+- Why it belongs in this phase/order: this is the narrowest, lowest-risk starting PR and unblocks every later phase.
+- Exact files/directories/modules likely touched (All file paths and script examples should use WSL/Linux semantics consistently.):
+  - `RL/docs/*`
+  - `RL/fight_caves_rl/envs/schema.py`
+  - `RL/fight_caves_rl/contracts/*` (new)
+  - `RL/fight_caves_rl/tests/unit/*contract*`
+- Low-level execution plan:
+  - Write the V1/V1.5/V2 role split and mechanics-parity definition into the existing RL docs.
+  - Add `mechanics_contract.py`, `terminal_codes.py`, `reward_feature_schema.py`, and `parity_trace_schema.py`.
+  - Freeze the V2 action schema as append-only.
+  - Define the reset contract and terminal enum.
+  - Add tests that pin ids, shapes, enum values, and portability guarantees.
+- Work items:
+  - Add a shared mechanics contract module that defines tick cadence, action meanings, rejection semantics, telegraph semantics, terminal semantics, and reset semantics.
+  - Add a terminal-code schema module with `NONE`, `PLAYER_DEATH`, `CAVE_COMPLETE`, `TICK_CAP`, `INVALID_STATE`, and `ORACLE_ABORT`.
+  - Add a reward-feature schema module with the exact feature set named in the pivot.
+  - Add a parity-trace schema module with the required trace fields named in the pivot.
+  - Update existing schema/contract tests to assert the frozen V2 contract ids, enum values, and feature ordering.
+  - Update RL docs so the pivot is documented as the active architecture.
+- Deliverables:
+  - Frozen contract modules.
+  - Updated architecture docs.
+  - Drift-detection unit tests.
+  - Document WSL/Linux as the canonical agent execution environment in the active architecture docs and contracts-facing implementation docs.
+- Acceptance criteria:
+  - Docs state the pivot exactly.
+  - Tests fail on schema drift.
+  - No runtime path changes are introduced.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Current contract definitions already live in `RL/fight_caves_rl/envs/schema.py`, so contract ownership boundaries must be kept clean.
+  - Existing V1 names could be reused too loosely unless V2 contracts are explicitly separated.
+- Open questions or unknowns that may require validation during implementation:
+  - Which existing contract constants remain canonical in `envs/schema.py` versus move into `contracts/*`.
+- Dependencies on prior PRs:
+  - None.
+
+## Phase 1 — Baseline Measurement
+- Execution status: `completed`
+- Formal evidence packet: `/home/jordan/code/RL/artifacts/benchmarks/phase0_wsl_pre_phase1_immutable_20260309`
+- Phase objective: establish the exact V1 cost profile before trimming or replacing anything.
+- Why it exists: the pivot requires measured gates, not intuition, and Phase 2/3 must prove improvement against a known baseline.
+- High-level execution details: add segmented timing, memory reporting, and benchmark outputs for env-only and training SPS.
+- Dependency/order rationale: follows contract freeze because the benchmark fields and profiling buckets should match the frozen terminology.
+
+### PR 1.1 — Instrument V1 Hot Path And Publish Baseline Reports
+- Status: `completed`
+- Completed work:
+  - [x] Added env benchmark stage buckets, env-only SPS reporting, and memory profiles.
+  - [x] Added train benchmark runner-stage seconds, trainer bucket totals, and memory profiles.
+  - [x] Instrumented the Python/JVM hot path buckets in the bridge and vecenv layers.
+  - [x] Updated benchmark smoke coverage to assert the new metric fields.
+  - [x] Executed the WSL source-of-truth Phase 0 and Phase 1 packet refreshes and recorded the resulting artifact paths in the active docs.
+  - [x] Restored and froze the immutable pre-Phase-1 WSL baseline packet so Phase 1 benchmark deltas can be treated as formal pass/fail evidence.
+- Open work:
+  - None.
+- Performance attribution:
+  - Prior dominant bottleneck: the bridge-first V1 path was opaque, so env-only versus trainer-side costs could not be separated or audited reliably.
+  - Specific implementation change(s) that reduced it: none by design; PR 1.1 added stage-bucket instrumentation, memory capture, and immutable WSL baseline packets rather than targeting throughput directly.
+  - Benchmark row(s) and ratio(s) that moved: no throughput claim was made in PR 1.1; the outcome was a source-of-truth baseline packet for later ratio evidence.
+  - Main residual bottleneck that remains: V1 bridge/vecenv/trainer overhead remained the active bottleneck surface, which Phase 2 then targeted.
+- Objective: quantify the current bridge-first training path end to end.
+- Why it belongs in this phase/order: this is the first no-regret evidence PR and gives the comparison point for every later benchmark.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/benchmarks/env_bench.py`
+  - `RL/fight_caves_rl/benchmarks/train_bench.py`
+  - `RL/fight_caves_rl/bridge/batch_client.py`
+  - `RL/fight_caves_rl/envs/vector_env.py`
+  - `RL/fight_caves_rl/puffer/trainer.py`
+  - `RL/scripts/benchmark_env.py`
+  - `RL/scripts/benchmark_train.py`
+  - `RL/scripts/benchmark_train_ceiling.py`
+  - `RL/fight_caves_rl/tests/performance/*`
+  - `RL/docs/performance_decomposition_report.md`
+  - `RL/docs/benchmark_matrix.md`
+- Low-level execution plan:
+  - Add per-stage timers for Python action decode, JPype apply, runtime tick, flat observe, terminal inference, reward eval, and info assembly.
+  - Expose env-only SPS and train SPS separately.
+  - Add memory-profile capture to benchmark outputs.
+  - Update smoke tests to assert the new metrics exist.
+  - Write the baseline report.
+- Work items:
+  - Extend env benchmark reporting with stage bucket totals and env-only SPS.
+  - Extend train benchmark reporting with runner-stage seconds, trainer bucket totals, and wall-clock SPS separation.
+  - Instrument `HeadlessBatchClient.step_batch` around apply, tick, observe, terminal inference, reward inference, and info construction.
+  - Instrument `HeadlessBatchVecEnv.send` and trainer evaluate/train loops so Python-side overhead is measurable.
+  - Add memory usage capture to benchmark report payloads.
+  - Document the baseline numbers and bottlenecks in RL docs.
+- Deliverables:
+  - Benchmark JSONs with segmented timing.
+  - Baseline report.
+  - Updated performance smoke coverage.
+- Acceptance criteria:
+  - Benchmarks run on the live runtime.
+  - The output includes stable bucketed timings and memory data.
+  - A documented V1 baseline exists for env-only and training SPS.
+  - Ensure benchmark scripts and profiler invocation paths are WSL/Linux-compatible and do not assume Windows-native tooling or path semantics.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Costs cross the Python/JVM boundary, so bucket definitions can become ambiguous.
+  - Some current smoke assertions expect empty instrumentation buckets in certain modes and will need coordinated updates.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether JVM-side profiling should be emitted into the same artifact or linked separately.
+  - Whether the benchmark machine requires a standardized profiler configuration for comparability.
+- Dependencies on prior PRs:
+  - PR 0.1.
+
+## Phase 2 — V1 Trimming
+- Execution status: `completed`
+- Phase objective: remove unnecessary V1 train-path overhead while keeping V1 strictly as oracle/interim infrastructure.
+- Why it exists: the pivot explicitly calls for no-regret stripping before V2 is complete, but without pretending V1 is the final trainer.
+- High-level execution details: force flat-only/minimal-info training, remove structured semantics from the hot path, and add interim batch bridge APIs.
+- Dependency/order rationale: uses the baseline from Phase 1 to prove each trim changes the right cost centers, and it reduces implementation risk for the V2 wrapper.
+
+### PR 2.1 — Force Flat-Only Minimal-Info V1 Training
+- Status: `completed`
+- Completed work:
+  - [x] Moved train/benchmark vecenv defaults to `info_payload_mode: minimal`.
+  - [x] Kept `include_future_leakage = false` as the default training posture and covered the train vecenv defaults with unit tests.
+  - [x] Trimmed the batch client so minimal-info train paths no longer reconstruct rich reset metadata or `visible_targets` lists.
+  - [x] Moved flat-path buffer-required step scalars off the rich `info` dict so minimal train paths can keep `info = {}`.
+  - [x] Updated vecenv smoke coverage to assert minimal-info training behavior explicitly.
+  - [x] Restored and froze the immutable pre-Phase-1 WSL baseline packet at `/home/jordan/code/RL/artifacts/benchmarks/phase0_wsl_pre_phase1_immutable_20260309`.
+  - [x] Re-ran the relevant WSL vecenv/train benchmark rows and recorded the comparison artifact at `/home/jordan/code/RL/artifacts/benchmarks/phase2_pr21_wsl_rerun_20260310/comparison_vs_phase0_wsl_pre_phase1_immutable.json`.
+  - [x] Updated the stale Phase 1 gate helper so current WSL packets above the old upper-band ceiling can be used as pass/fail evidence again.
+  - [x] Added a vecenv-only minimal-info buffer fast path so the train hot path no longer constructs unused reset/step auxiliary arrays in Python.
+  - [x] Added a faster policy-action decode path and trimmed one more minimal-info step-result branch so the vecenv hot path does less Python work per slot.
+  - [x] Produced a serial-only `3x` rerun attribution set at `/home/jordan/code/RL/artifacts/benchmarks/phase2_pr21_wsl_serial_attribution_20260310/serial_attribution_summary.json`.
+- Open work:
+  - None.
+- Disposition note:
+  - The remaining `vecenv 16` and disabled-train `16 env` shortfalls are treated as non-blocking small-batch residuals rather than a PR 2.1 architecture failure. The targeted minimal-info and rich-info hot-path costs were materially reduced, `vecenv 64` shows a clear win, and disabled-train `64 env` is effectively at parity, so forward progress now depends on PR 2.2 batch bridge APIs rather than more PR 2.1 bookkeeping trims.
+- Performance attribution:
+  - Prior dominant bottleneck: the V1 train path still paid Python-side rich-info assembly, unused auxiliary array construction, and slower policy-action decoding even in minimal-info runs.
+  - Specific implementation change(s) that reduced it: forced flat-only/minimal-info defaults, trimmed rich reset/step metadata work, added lean vecenv buffers, and added a faster policy-action decode path.
+  - Benchmark row(s) and ratio(s) that moved: against the frozen pre-Phase-1 WSL baseline, reruns moved `vecenv 16` to `5.56x`, `vecenv 64` to `6.08x`, `train 16 disabled` to `1.10x`, and `train 64 disabled` to `1.05x`; the later serial attribution set showed `vecenv 64` as the clean current-baseline win.
+  - Main residual bottleneck that remains: small-batch `16 env` variability and trainer-bound costs remained, so PR 2.1 was closed with a non-blocking residual rather than held for more Python-path trimming.
+- Objective: stop paying structured-observation and rich-info costs during training.
+- Why it belongs in this phase/order: this is the first concrete V1 trim and directly implements pivot section 15.1.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/envs/vector_env.py`
+  - `RL/fight_caves_rl/envs/correctness_env.py`
+  - `RL/fight_caves_rl/bridge/batch_client.py`
+  - `RL/fight_caves_rl/envs/observation_mapping.py`
+  - `RL/fight_caves_rl/envs/puffer_encoding.py`
+  - `RL/fight_caves_rl/puffer/factory.py`
+  - `RL/configs/train/*.yaml`
+  - `RL/configs/benchmark/*.yaml`
+  - RL integration and smoke tests around flat observations and wrapper semantics
+- Low-level execution plan:
+  - Make flat observations the train-path default.
+  - Make minimal info the benchmark/train default.
+  - Bypass structured validation in train-only codepaths.
+  - Keep leakage checks explicit and disabled by default in training.
+  - Update configs and tests so oracle/debug flows still keep rich paths.
+- Work items:
+  - Add train-path flags or backend defaults that force flat observations.
+  - Default benchmark/train configs to `info_payload_mode: minimal`.
+  - Remove structured observation validation from the training fast path while preserving it for oracle/debug checks.
+  - Ensure `include_future_leakage` remains false in train defaults and covered by tests.
+  - Update integration tests to verify flat-only training still matches the sim contract where required.
+- Deliverables:
+  - Flat-only train mode.
+  - Minimal-info benchmark mode.
+  - Updated configs and tests.
+- Acceptance criteria:
+  - V1 training still runs.
+  - Oracle/debug paths still exist.
+  - Benchmark numbers improve relative to Phase 1.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Shared codepaths may accidentally weaken oracle/debug visibility.
+  - Replay/export code could depend on info fields currently assembled in the training path.
+- Open questions or unknowns that may require validation during implementation:
+  - Which replay/export flows still require full info payloads in shared code.
+  - Whether any current training tests implicitly depend on structured observations.
+- Dependencies on prior PRs:
+  - PR 1.1.
+
+### PR 2.2 — Add Interim Batch Apply/Observe APIs To The Bridge
+- Status: `completed`
+- Completed work:
+  - [x] Added additive batch bridge handshake capabilities for `applyActionsBatch` and `observeFlatBatch` without bumping the bridge contract version.
+  - [x] Extended the Python bridge protocol, debug client, and batch client to use batch action application and batch flat observation when the live runtime advertises those capabilities.
+  - [x] Added contiguous env-major flat batch packing on the Kotlin runtime side and exposed interim batch APIs on the headless/oracle runtimes.
+  - [x] Preserved the legacy per-slot instrumentation buckets while also recording explicit batch-call buckets so Phase 1 and Phase 2 evidence remains comparable.
+  - [x] Added targeted unit coverage for the capability-driven batch path and updated launcher preflight coverage for the new handshake fields.
+  - [x] Rebuilt the WSL headless distribution and re-ran live parity plus bridge/vecenv/train smoke coverage against the rebuilt runtime.
+  - [x] Captured the PR 2.2 WSL benchmark matrix at `/home/jordan/code/RL/artifacts/benchmarks/phase2_pr22_wsl_rerun_20260311/comparison_vs_current_wsl_baselines.json`.
+  - [x] Captured the follow-up serial vecenv replicate set at `/home/jordan/code/RL/artifacts/benchmarks/phase2_pr22_wsl_vecenv_serial_replicates_20260311/serial_replicate_summary.json` to disposition the initial vecenv outlier.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 2.2 meets its objective as an interim bridge-overhead reduction step. The bridge layer shows clear gains, the serial vecenv replicate medians now beat the current WSL Phase 1 env baselines at both `16 env` and `64 env`, and disabled-train throughput remains effectively flat with only a small `64 env` residual (`101.34` SPS vs `102.30` baseline) that does not justify holding Phase 2 open.
+- Performance attribution:
+  - Prior dominant bottleneck: even after PR 2.1, the bridge still paid per-slot JVM apply/observe overhead and repeated Python/JVM call boundaries on the env hot path.
+  - Specific implementation change(s) that reduced it: added capability-driven `applyActionsBatch` and `observeFlatBatch`, contiguous env-major flat packing, and batch-aware Python bridge clients while preserving comparable instrumentation buckets.
+  - Benchmark row(s) and ratio(s) that moved: the PR 2.2 WSL matrix moved bridge rows to `1.3928x` at `16 env` and `1.9043x` at `64 env` versus the current WSL Phase 1 baseline; the serial vecenv follow-up medians closed at `1.1368x` (`16 env`) and `1.0429x` (`64 env`).
+  - Main residual bottleneck that remains: disabled-train throughput stayed effectively flat, so the next dominant bottleneck was no longer bridge overhead but the trainer/runtime architecture targeted by Phase 3.
+- Objective: add `applyActionsBatch(...)` and `observeFlatBatch(...)` as the stepping stone toward V2.
+- Why it belongs in this phase/order: this cuts bridge overhead and shapes the future V2 batch contract.
+- Exact files/directories/modules likely touched:
+  - `fight-caves-RL/game/src/main/kotlin/FightCaveSimulationRuntime.kt`
+  - `fight-caves-RL/game/src/main/kotlin/HeadlessBatchStepping.kt`
+  - `fight-caves-RL/game/src/main/kotlin/HeadlessMain.kt`
+  - `RL/fight_caves_rl/bridge/contracts.py`
+  - `RL/fight_caves_rl/bridge/protocol.py`
+  - `RL/fight_caves_rl/bridge/batch_client.py`
+  - `RL/fight_caves_rl/bridge/buffers.py`
+  - Bridge integration tests and benchmark scripts
+- Low-level execution plan:
+  - Expose batch action application and flat batch observe in Kotlin.
+  - Extend Python protocol/contracts to call them.
+  - Write contiguous buffer packing for returned flat observations.
+  - Verify parity with current per-slot stepping.
+  - Re-run env and train benchmarks.
+- Work items:
+  - Add batch action application APIs on the simulation runtime.
+  - Add flat batch observation retrieval APIs on the simulation runtime.
+  - Extend the bridge protocol and handshake to advertise the new interim batch capabilities.
+  - Update `HeadlessBatchClient` to use batch application/observation where configured.
+  - Add integration coverage that batch stepping matches current step semantics.
+  - Compare benchmark results before and after the new batch APIs.
+- Deliverables:
+  - Interim batch bridge API.
+  - Updated protocol layer.
+  - Revised benchmark outputs.
+- Acceptance criteria:
+  - Batch bridge path matches current V1 semantics.
+  - The new path shows measurable overhead reduction versus the pre-PR baseline.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - An interim API could drift into a bad long-term contract if shaped carelessly.
+  - Buffer ownership and copying behavior on the JVM side may reduce the benefit.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether to return scalar rewards here or keep V1 reward inference fully Python-side until Phase 3.
+  - Whether the existing bridge handshake version needs to bump immediately for interim APIs.
+- Dependencies on prior PRs:
+  - PR 2.1.
+
+## Phase 3 — V2 Fast Kernel MVP
+- Execution status: `completed`
+- Phase objective: build the first batched Kotlin/JVM Fight Caves fast kernel with fixed flat observations, packed actions, direct terminals, and reward features.
+- Why it exists: this is the core architectural pivot from correctness-first bridge integration to throughput-first training simulation.
+- High-level execution details: add a new fast-kernel package, move training-critical mechanics into it, and expose batch-first reset/step APIs.
+- Dependency/order rationale: Phase 2 gave the bridge and benchmarks a shape closer to V2; now the actual replacement kernel can land without blocking oracle or replay flows.
+
+### PR 3.1 — Scaffold The Kotlin Fast Kernel And Shared Mechanics Layer
+- Status: `completed`
+- Completed work:
+  - [x] Added the new `headless.fast` scaffold package with portable kernel-surface, action-schema, player-state, NPC-state, wave-registry, episode-initializer, and Jad-telegraph types.
+  - [x] Added a `FastFightCavesKernel.scaffold(...)` entrypoint that builds a deterministic scaffold kernel descriptor from the loaded Fight Caves wave data without implementing batch reset/step behavior yet.
+  - [x] Extracted a narrow shared mechanics seam for episode-state keys, reset/loadout defaults, remaining-NPC counting, and prayer-potion dose counting.
+  - [x] Reused that seam in the existing episode initializer and observation builders without changing oracle/reference semantics.
+  - [x] Resolved the V2 contract-versioning question by freezing an independent fast-kernel surface contract while keeping the RL-facing action/reset/terminal/reward/parity contracts shared.
+  - [x] Added targeted scaffold and contract-version tests.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 3.1 intentionally stops at scaffolded kernel surfaces and shared mechanics seams. It does not implement batch reset/step, flat-buffer emission, terminal/reward logic, or parity traces; that work remains in PR 3.2.
+- Objective: create the V2 kernel package and extract only the mechanics needed for Fight Caves.
+- Why it belongs in this phase/order: the kernel needs its own state/action/reset model before step/observe APIs are implemented.
+- Exact files/directories/modules likely touched:
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/*` (new)
+  - `fight-caves-RL/game/src/main/kotlin/FightCaveEpisodeInitializer.kt`
+  - `fight-caves-RL/game/src/main/kotlin/FightCaveSimulationRuntime.kt`
+  - `fight-caves-RL/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCave.kt`
+  - `fight-caves-RL/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCaveWaves.kt`
+  - `fight-caves-RL/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzTokJad.kt`
+  - `fight-caves-RL/game/src/main/kotlin/content/area/karamja/tzhaar_city/JadTelegraph.kt`
+  - Any small shared helpers needed from prayer/eating/potions/combat code
+- Low-level execution plan:
+  - Add `FastFightCavesKernel`, `FastEpisodeInitializer`, `FastActionCodec`, `FastActionSchema`, `FastPlayerState`, `FastNpcState`, and `FastWaveLogic`.
+  - Isolate reset/start-wave/player-loadout logic from the general runtime.
+  - Define stable internal state structs that map cleanly to future native ports.
+  - Keep oracle code untouched except for helper extraction where unavoidable.
+- Work items:
+  - Create the new `headless/fast` package and compile targets.
+  - Add fast-kernel player and NPC state containers.
+  - Add a fast episode initializer that mirrors the frozen reset contract.
+  - Extract or duplicate only the mechanics helpers strictly needed for Fight Caves start state, wave logic, combat timing, and Jad telegraph semantics.
+  - Add deterministic seed plumbing that matches the oracle contract.
+  - Add unit or smoke coverage for kernel initialization and reset behavior.
+- Deliverables:
+  - Compileable fast-kernel scaffold.
+  - Shared mechanics seams where needed.
+- Acceptance criteria:
+  - The kernel compiles.
+  - Slots can initialize/reset deterministically.
+  - V1 runtime behavior is not changed.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Current mechanics are spread across general runtime scripts and content modules.
+  - Helper extraction may be broader than expected if combat/prayer state is tightly coupled to existing runtime objects.
+- Open questions or unknowns that may require validation during implementation:
+  - How much Jad/prayer timing logic can be shared cleanly versus reimplemented in the kernel package.
+  - Whether consumable and equipment-stat logic can be reused without pulling in unrelated runtime systems.
+- Dependencies on prior PRs:
+  - PR 2.2.
+
+### PR 3.2 — Implement Fast Batch Reset/Step, Flat Observations, Terminals, And Reward Features
+- Status: `completed`
+- Completed work:
+  - [x] Added the first slot-indexed fast-kernel runtime wrapper with `createKernel`, `resetBatch`, `stepBatch`, `describe`, and `close` while keeping the scaffolded portable `headless.fast` types separate from the default-package runtime seam.
+  - [x] Added packed 4-word fast action decoding and explicit runtime-surface rejection codes for invalid packed actions and bridged action rejections.
+  - [x] Added env-major contiguous flat observation emission into caller-supplied or internally allocated `FloatArray` buffers.
+  - [x] Added in-kernel terminal detection for `PLAYER_DEATH`, `CAVE_COMPLETE`, and `TICK_CAP` using the frozen Phase 0 terminal-code contract.
+  - [x] Added fixed-size reward-feature vector emission for the exact 16-feature Phase 0 contract.
+  - [x] Added first mechanics parity traces from the fast-kernel runtime surface with stable action acceptance, rejection code, visible-target ordering, Jad telegraph, and terminal-code fields.
+  - [x] Added deterministic smoke coverage, terminal contract coverage, batch API coverage, and an env-only fast-kernel benchmark harness.
+  - [x] Ran the WSL env-only benchmark smoke and recorded `fast_kernel_env_sps=4326.367253942573` for the initial `16 env x 32 wait-step` harness.
+  - [x] Ran the decision-quality WSL serial env-only comparison on the real `FastFightCavesKernelRuntime.resetBatch + stepBatch + flat buffer` path with `64` warmup rounds and `3` serial replicates per row.
+  - [x] Established quantitative closure against the accepted trimmed V1 serial baseline: fast-kernel medians were `41940.63` env-steps/s at `16 env` and `66856.26` env-steps/s at `64 env` versus trimmed V1 medians `10145.80` and `12934.54`, for `4.13x` and `5.17x` ratios respectively.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 3.2 is intentionally an MVP kernel surface, not the final Phase 4 RL wrapper or the final native-style high-throughput transport. It proves the batch reset/step contract, direct flat-buffer emission, terminal/reward/parity projection, and a runnable env-only benchmark path without reintroducing Python-side semantic work.
+- Performance attribution:
+  - Prior dominant bottleneck: the accepted trimmed V1 baseline still paid bridge/vecenv transport overhead and Python-side env orchestration that capped env-only throughput.
+  - Specific implementation change(s) that reduced it: moved reset/step/action decode/flat observation write/terminal-reward projection into the fast Kotlin kernel and emitted direct flat buffers from the batch runtime surface.
+  - Benchmark row(s) and ratio(s) that moved: the WSL serial fast-kernel comparison closed at `41940.63` env-steps/s (`4.13x`) for `16 env` and `66856.26` env-steps/s (`5.17x`) for `64 env` versus the accepted trimmed V1 serial baseline.
+  - Main residual bottleneck that remains: within the fast kernel, `observe_flat` and projection now dominate, while packed-action decode and batch apply are already small.
+- Objective: make the fast kernel actually step batched Fight Caves episodes and emit train-ready buffers.
+- Why it belongs in this phase/order: this is the MVP that Phase 4 will wrap with PufferLib.
+- Exact files/directories/modules likely touched:
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastFightCavesKernel.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastBatchApi.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastFlatObsWriter.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastStepMetrics.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastTerminalState.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastParityTrace.kt`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastJadTelegraph.kt`
+  - `fight-caves-RL/game/build.gradle.kts`
+  - Benchmark entrypoints or test harnesses for env-only SPS
+- Low-level execution plan:
+  - Add `createKernel`, `resetBatch`, `stepBatch`, and `close`.
+  - Decode packed integer actions in-kernel.
+  - Write fixed contiguous observations directly into caller-owned buffers.
+  - Emit `terminated`, `truncated`, `terminal_code`, action-status/rejection codes, counters, and reward-feature vectors.
+  - Add env-only benchmark coverage and deterministic smoke tests.
+- Work items:
+  - Implement batch slot reset handling with reset options for seed, start wave, ammo, sharks, prayer potions, and tick cap.
+  - Implement packed action decoding inside the kernel for `intent_opcode`, `target_index`, and aux params.
+  - Implement flat observation writing with the self/combat/Jad/wave/visible-NPC groups defined by the pivot.
+  - Implement direct terminal and truncation detection in-kernel.
+  - Implement reward-feature emission for the exact feature list frozen in Phase 0.
+  - Add an env-only benchmark harness for the fast kernel.
+  - Add deterministic smoke tests and first parity-trace outputs.
+- Deliverables:
+  - Working fast-kernel batch API.
+  - Flat buffer contract.
+  - Env-only benchmark path.
+- Acceptance criteria:
+  - Deterministic smoke passes.
+  - Env-only benchmark runs.
+  - First parity traces are available.
+  - SPS is materially above trimmed V1.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - JVM allocation patterns can erase throughput gains if buffers are not truly reused.
+  - Visible NPC ordering and Jad timing semantics must be preserved exactly enough for later parity work.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether reward features should ship as a fixed vector immediately or temporarily alongside scalar reward during bring-up.
+  - Whether terminal-code emission should include `ORACLE_ABORT` in the MVP or be reserved for later parity tooling.
+- Dependencies on prior PRs:
+  - PR 3.1.
+
+## Phase 4 — PufferLib V2 Wrapper
+- Execution status: `completed`
+- Phase objective: connect the fast kernel to RL as a native-style `v2_fast` vector environment.
+- Why it exists: V2 only matters once PuffeRL can train against it with minimal Python work.
+- High-level execution details: add RL-side fast env modules, a backend switch, and then async/shared-memory execution.
+- Dependency/order rationale: Phase 3 provides the kernel API; Phase 4 makes it usable in serial first, then in async/multi-env form.
+
+### PR 4.1 — Add RL `v2_fast` Vector Wrapper And Backend Switch
+- Status: `completed`
+- Completed work:
+  - [x] Added the new `fight_caves_rl/envs_fast` package with a serial fast-kernel vecenv, explicit fast observation/action spaces, packed-action policy encoding, and reward-feature weighting.
+  - [x] Wired the vecenv directly to `FastFightCavesKernelRuntime` over embedded JPype/JVM bootstrapping while keeping Python step work limited to action packing, flat-buffer reads, and vectorized reward weighting.
+  - [x] Added `env.env_backend = v1_bridge | v2_fast` routing in the Puffer factory, with `v1_bridge` remaining the default and `v2_fast` resolving to the serial fast wrapper even when existing trainer entrypoints still request the old subprocess transport path.
+  - [x] Updated smoke training result/manifest routing so `v2_fast` runs record `transport_mode = v2_fast_serial_embedded_jvm` and `bridge_mode = v2_fast_embedded_jvm`.
+  - [x] Added focused unit coverage for fast action packing, reward-feature weighting, and backend routing plus live smoke coverage for fast vecenv reset/step and short fast training.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 4.1 intentionally stops at serial vecenv/trainer integration. It does not add async/shared-memory worker transport, and it does not add a single-env `build_policy_episode_env` fast wrapper; that path still stays on V1 until a later phase. The current fast reward adapter also only supports coefficients that map directly onto emitted reward features, so `reward_sparse_v0` is supported while richer V2-native reward configs remain Phase 5 work.
+- Objective: let the RL repo instantiate either `v1_bridge` or `v2_fast` without changing trainer entrypoints.
+- Why it belongs in this phase/order: serial wrapper support is the minimum viable integration before async optimization.
+- Guardrail: the RL-side V2 wrapper must not reconstruct structured semantics, per-slot rich action objects, or post-step mechanics interpretation in Python.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/envs_fast/__init__.py` (new)
+  - `RL/fight_caves_rl/envs_fast/fast_vector_env.py`
+  - `RL/fight_caves_rl/envs_fast/fast_spaces.py`
+  - `RL/fight_caves_rl/envs_fast/fast_policy_encoding.py`
+  - `RL/fight_caves_rl/envs_fast/fast_reward_adapter.py`
+  - `RL/fight_caves_rl/puffer/factory.py`
+  - `RL/fight_caves_rl/puffer/trainer.py`
+  - `RL/fight_caves_rl/utils/java_runtime.py`
+  - `RL/scripts/train.py`
+  - `RL/scripts/eval.py`
+- Low-level execution plan:
+  - Implement the fast env wrapper over the Phase 3 batch API.
+  - Define flat `Box` obs and `MultiDiscrete` action spaces for V2.
+  - Add `env_backend = v1_bridge | v2_fast` config routing.
+  - Keep Python step work to action writes, buffer reads, and optional vectorized reward weighting.
+  - Verify reset/step semantics in serial mode.
+- Work items:
+  - Add a V2 env wrapper class that owns kernel lifecycle and in-place buffers.
+  - Add V2 observation/action space builders that match the frozen contracts.
+  - Add backend selection and config parsing in the Puffer factory.
+  - Update trainer setup so it can build V2 without disturbing V1.
+  - Add serial smoke coverage for V2 reset/step semantics.
+  - Ensure manifest/config outputs record which backend is in use.
+- Deliverables:
+  - Usable `v2_fast` backend in RL.
+- Acceptance criteria:
+  - PuffeRL can reset, step, and train against `v2_fast` in serial mode.
+  - Old V1 entrypoints still work.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Wrapper code can accidentally reintroduce object-heavy conversions.
+  - Existing policy encoding helpers are tightly coupled to the V1 action/obs layout.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether V2 should reuse any `puffer_encoding` helpers or stay fully separate.
+  - Whether V2 kernel lifecycle management belongs in `java_runtime.py` or a dedicated fast-runtime launcher.
+- Dependencies on prior PRs:
+  - PR 3.2.
+
+### PR 4.2 — Enable Async `send/recv`, Multi-Env Workers, And Fast Smoke Coverage
+- Status: `completed`
+- Completed work:
+  - [x] Generalized the subprocess vecenv into a worker-slice parent that can launch one or more subprocess workers, partition env slots across them, and aggregate `send`/`recv` transitions back into one joint batch.
+  - [x] Routed `env_backend = v2_fast` through that subprocess path so the trainer now uses worker-local fast-kernel instances instead of the Phase 4.1 serial embedded wrapper when `backend="subprocess"` is requested.
+  - [x] Added shared-memory and pipe support on the multi-worker path, plus worker topology snapshots and per-worker instrumentation aggregation.
+  - [x] Added WSL live smoke coverage for serial fast vecenv, subprocess fast vecenv, subprocess fast training, existing V1 shared-memory training, and the subprocess transport benchmark.
+  - [x] Added V2 benchmark configs and benchmark-output topology fields so env-only and end-to-end fast runs now record backend, transport mode, worker count, and worker env partitioning.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 4.2 intentionally stops at RL-side async/shared-memory worker integration, worker topology reporting, and smoke/benchmark harness coverage. It does not add Phase 5 reward configs, curriculum changes, or recurrent policy work.
+- Objective: align the V2 wrapper with the PufferLib 3.x fast path.
+- Why it belongs in this phase/order: async/shared-memory work should happen only after the serial wrapper is stable.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/envs_fast/fast_vector_env.py`
+  - `RL/fight_caves_rl/envs/subprocess_vector_env.py`
+  - `RL/fight_caves_rl/benchmarks/*`
+  - `RL/configs/benchmark/fast_env_v2.yaml`
+  - `RL/configs/benchmark/fast_train_v2.yaml`
+  - `RL/configs/train/smoke_fast_v2.yaml`
+  - `RL/scripts/run_vecenv_smoke.py`
+  - RL performance and smoke tests
+- Low-level execution plan:
+  - Add async `send/recv` support over shared buffers.
+  - Support multiple env slots per worker.
+  - Add benchmark configs for env-only and training SPS on V2.
+  - Add smoke coverage for reset stability and async stepping.
+  - Document runner topology.
+- Work items:
+  - Implement async stepping for V2 with in-place shared buffers.
+  - Add multiple-env-per-worker support and slot partitioning.
+  - Add V2 benchmark configs and script paths.
+  - Extend vector-env smoke coverage for V2 async and serial modes.
+  - Record worker topology and shared-memory mode in benchmark outputs.
+  - Document the V2 runner/backend topology in RL docs.
+- Deliverables:
+  - Async-capable V2 vector env.
+  - Benchmark configs and smoke coverage.
+- Acceptance criteria:
+  - Serial and async paths both pass smoke.
+  - Benchmark harness can measure V2 env-only and end-to-end throughput.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Cross-process buffer ownership and shutdown semantics may become flaky.
+  - Existing subprocess transport code is oriented around V1 bridge semantics.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether V2 should piggyback on the existing subprocess transport module or introduce a dedicated fast transport path.
+  - Whether worker-local kernel instances or one larger batch kernel per worker gives better throughput.
+- Dependencies on prior PRs:
+  - PR 4.1.
+- Performance attribution:
+  - Prior dominant bottleneck: Phase 4.1 only exposed the fast kernel through a serial embedded wrapper, so the trainer path still lacked the intended async/shared-memory worker topology.
+  - Specific implementation changes that reduced it: the subprocess vecenv was generalized into a multi-worker shard parent, `v2_fast` was routed through worker-local fast kernels, and benchmark/smoke outputs now record the real worker/transport topology.
+  - Benchmark rows/ratios that moved: the new PR 4.2 benchmark harness is now live through `configs/benchmark/fast_env_v2.yaml` and `configs/benchmark/fast_train_v2.yaml`, with passing WSL smoke coverage for serial fast vecenv, subprocess fast vecenv, subprocess fast train, and both fast benchmark entrypoints.
+  - Main residual bottleneck that remains: PR 4.2 establishes the async topology but does not yet settle reward-config completeness, curriculum, or end-to-end V2 throughput deltas; those remain Phase 5+ work.
+
+## Phase 5 — Training And Rewards
+- Execution status: `completed`
+- Phase objective: make V2 trainable with stable rewards, curriculum, and a recurrent baseline policy.
+- Why it exists: throughput alone does not satisfy the pivot; the policy must actually learn Fight Caves and evaluate cleanly.
+- High-level execution details: keep reward weighting/configs in RL, but drive them from kernel-emitted reward features, then add recurrent training configs and evaluation plumbing.
+- Dependency/order rationale: Phase 4 makes the env usable; Phase 5 turns it into the default learning path before parity hardening blocks switchover.
+
+### PR 5.1 — Add V2 Reward Features And Config-Driven Reward Weighting
+- Status: `completed`
+- Completed work:
+  - [x] Added `reward_sparse_v2` and `reward_shaped_v2` config files for the fast-kernel path, with coefficients that map directly onto the frozen V2 reward-feature schema.
+  - [x] Updated the fast reward adapter to support direct feature-name weighting for V2 configs while retaining legacy alias support for older V0 configs.
+  - [x] Explicitly blocked V2 reward configs from resolving through the old V1 observation-based reward-function path so the fast path cannot silently regain Python semantic reconstruction.
+  - [x] Switched the active fast smoke/benchmark configs to `reward_sparse_v2`.
+  - [x] Added focused reproducibility/compatibility tests for V2 reward weighting and kept the V1 reward-function tests intact.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 5.1 stops at reward-feature-native config loading and weighting for `v2_fast`. It does not add curriculum changes, recurrent policy work, or Phase 5.2 training/eval configuration changes.
+- Objective: preserve RL-side reward iteration while moving event extraction into the kernel.
+- Why it belongs in this phase/order: reward extraction must be settled before meaningful training runs.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/envs_fast/fast_reward_adapter.py`
+  - `RL/fight_caves_rl/rewards/registry.py`
+  - `RL/configs/reward/reward_sparse_v2.yaml`
+  - `RL/configs/reward/reward_shaped_v2.yaml`
+  - RL reward tests and manifest/report code that records reward config ids
+- Low-level execution plan:
+  - Map kernel `reward_features` vectors to named coefficients.
+  - Add sparse and shaped V2 configs matching the pivot.
+  - Update registry loading to resolve V2 configs cleanly beside V0.
+  - Pin no-future-leakage and reproducibility tests for the new path.
+  - Keep V1 reward functions intact for oracle/reference use.
+- Work items:
+  - Add a V2 reward adapter that computes scalar reward via vectorized weighting.
+  - Add V2 sparse and shaped reward config files.
+  - Extend reward registry resolution for V2 config ids.
+  - Add tests that reward-feature ordering and coefficients are stable.
+  - Add reproducibility and no-future-leakage tests for the V2 reward path.
+  - Update reporting/manifests to record V2 reward config usage.
+- Deliverables:
+  - V2 reward adapter.
+  - V2 sparse/shaped configs.
+- Acceptance criteria:
+  - V2 reward path is vectorized, deterministic, and configurable.
+  - Python no longer reconstructs reward semantics from structured observations for V2.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Feature naming drift between Kotlin and Python can silently poison training.
+  - Existing reward tests target V0 config semantics and may need parallel coverage.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether movement-progress should start zero-weighted until validated.
+  - Whether terminal bonus/penalty weighting should live entirely in configs or partly in kernel emission.
+- Dependencies on prior PRs:
+  - PR 4.2.
+- Performance attribution:
+  - Prior dominant bottleneck: `v2_fast` still depended on V0 reward ids and legacy observation-derived reward semantics, so the Phase 4 fast path was not yet using reward-feature-native configs.
+  - Specific implementation changes that reduced it: added `reward_sparse_v2` and `reward_shaped_v2`, extended the fast adapter to weight direct emitted feature names, and blocked V2 configs from resolving through the V1 observation-based reward path.
+  - Benchmark rows/ratios that moved: the active fast smoke and benchmark configs now run on `reward_sparse_v2`, with passing WSL fast-train and fast benchmark smokes proving the V2 reward-config path is live end to end.
+  - Main residual bottleneck that remains: PR 5.1 settles reward-feature-native config loading, but the V2 curriculum, recurrent policy baseline, and serious training/eval configuration remain PR 5.2 work.
+
+### PR 5.2 — Add Recurrent Baseline, V2 Curriculum, And Train/Eval Configs
+- Status: `completed`
+- Completed work:
+  - [x] Added a recurrent `lstm_v0` policy baseline and a policy registry so training, benchmarking, checkpoint save/load, and eval can construct the correct policy type from config or checkpoint metadata.
+  - [x] Extended checkpoint metadata to record `policy_hidden_size` and `policy_use_rnn`, and updated the trainer/benchmark flows to persist those fields with V2 checkpoints.
+  - [x] Added `curriculum_wave_progression_v2` plus curriculum-stage support for mixed `start_wave` / `start_waves` scheduling so the V2 curriculum can express the pivot's staged wave progression.
+  - [x] Added the V2 train/eval config surface: `smoke_fast_v2`, `train_fast_v2`, `fast_train_v2`, and `parity_fast_v2`, with shaped training reward, sparse eval reward, and `use_rnn: true`.
+  - [x] Updated the eval/replay runner to load recurrent V2 checkpoints by metadata, keep recurrent eval state across steps, and map V2 reward ids onto the current oracle eval runtime where required.
+  - [x] Added unit coverage for policy registry and V2 curriculum loading, plus live WSL smoke coverage for recurrent fast train, sparse eval, and the fast benchmark path.
+- Open work:
+  - None.
+- Disposition note:
+  - PR 5.2 intentionally stops at the first serious V2 training/eval setup: recurrent baseline, V2 curriculum, shaped train configs, and sparse eval compatibility. It does not start Phase 6 parity hardening or add final end-to-end training performance attribution.
+- Acceptance evidence:
+  - No NaNs: `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/train_summary.json` recorded `48` global steps and `3` train log records with all numeric metric values finite; the summarized evidence packet is `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/acceptance_packet.json`.
+  - Resets are stable: `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/reset_stability.json` passed the long-run subprocess vecenv smoke on `v2_fast`, with `episodes_started = [3, 3, 3, 3]`, stable `[4]` reward shape, and no long-run finite-value or shape failures.
+  - Shaped learning signal is visible: `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/shaped_signal_probe.json` shows the live `reward_shaped_v2` fast path emitting non-zero shaped rewards on all `12` probed steps (`reward_sum_total = -0.023999998345971107`) using the V2 fast backend.
+  - Sparse eval runs with V2 checkpoints: `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/eval_summary.json` successfully evaluated the recurrent V2 checkpoint from `/home/jordan/code/RL/artifacts/acceptance/pr52_wsl_acceptance_20260311/train_run/fc-rl-train-1773247469-b81341f34265.pt` under `parity_fast_v2`, with `reward_sparse_v2`, `2` seeds, and a non-empty summary digest.
+- Objective: provide the first serious learning setup for Fight Caves on V2.
+- Why it belongs in this phase/order: the pivot explicitly calls for recurrent PPO, wave curriculum, shaped training, and sparse eval.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/policies/*`
+  - `RL/fight_caves_rl/puffer/trainer.py`
+  - `RL/fight_caves_rl/puffer/factory.py`
+  - `RL/fight_caves_rl/curriculum/*`
+  - `RL/fight_caves_rl/replay/eval_runner.py`
+  - `RL/configs/train/train_fast_v2.yaml`
+  - `RL/configs/train/smoke_fast_v2.yaml`
+  - `RL/configs/curriculum/curriculum_wave_progression_v2.yaml`
+  - `RL/configs/eval/parity_fast_v2.yaml`
+  - Train/eval scripts and smoke tests
+- Low-level execution plan:
+  - Add a recurrent policy baseline.
+  - Add V2 curriculum stages exactly as specified in the pivot.
+  - Wire V2 train configs to shaped reward and sparse eval.
+  - Update eval/replay entrypoints to understand `v2_fast`.
+  - Add smoke training and sparse-eval checks.
+- Work items:
+  - Add a recurrent policy implementation or extend the policy stack to support recurrence.
+  - Add V2 training configs for smoke and baseline runs.
+  - Add V2 curriculum config with the staged wave progression described in the pivot.
+  - Update trainer construction so recurrent policy settings route correctly.
+  - Update eval/replay runners to load V2 checkpoints and use the V2 backend.
+  - Add smoke tests for no-NaN training, episode completion/reset correctness, and sparse eval execution.
+- Deliverables:
+  - Recurrent training baseline.
+  - V2 curriculum.
+  - V2 train/eval configs.
+- Acceptance criteria:
+  - No NaNs.
+  - Resets are stable.
+  - Shaped learning signal is visible.
+  - Sparse eval runs with V2 checkpoints.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Current policy stack is feedforward-only.
+  - Eval/replay tooling currently assumes the V1 single-env wrapper path.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether to add a new policy module or evolve `mlp.py` into a shared encoder.
+  - Whether replay export should record V2-specific observation metadata.
+- Dependencies on prior PRs:
+  - PR 5.1.
+
+## Phase 6 — Parity Hardening
+- Execution status: `completed`
+- Phase objective: make mechanics parity a blocking gate between oracle, V2, and the later RSPS-backed headed demo path.
+- Why it exists: the pivot defines parity as mechanics-trace equivalence, not implementation similarity.
+- High-level execution details: add a common parity-trace schema, export traces from V2, then extend canaries and equivalence suites.
+- Dependency/order rationale: parity hardening should happen only once V2 can train and step meaningfully, but before default switchover or headed-demo trust signoff.
+
+### PR 6.1 — Add Shared Parity Trace Schema And Oracle/V2 Trace Exporters
+- Status: `completed`
+- Completed work:
+  - [x] Extended the shared parity-trace schema with ordered field-name exports, record coercion, and stable digest helpers so oracle and V2 traces normalize to one frozen RL-side contract.
+  - [x] Added the RL fast-trace adapter and mechanics-parity collection/comparison utilities, including compare-mode artifact writing for first divergence payloads.
+  - [x] Added a new WSL script surface at `scripts/collect_mechanics_parity_trace.py` that can collect `oracle`, `v2_fast`, or `compare` outputs for the same trace pack and seed.
+  - [x] Added oracle-side mechanics trace export in `ParityHarness.kt`, reusing `FastParityTrace` and accepting packed V2 action words so Python can drive the shared oracle export path directly.
+  - [x] Added focused unit coverage for trace schema coercion and fast trace adaptation, plus JVM and live WSL smoke coverage for oracle/V2 comparable trace collection.
+- Open work:
+  - None.
+- Acceptance evidence:
+  - Persistent compare artifact: `/home/jordan/code/RL/artifacts/parity/pr61_mechanics_trace_compare_20260311/compare_wait_only_16_v0.json`
+  - For the `wait_only_16_v0` trace pack on WSL, the new harness collected `17` records from both `oracle` and `v2_fast`, on the shared `fight_caves_mechanics_parity_trace_v1` schema, with matching digest `940793dc190578541a6e150316700777eac13e734c64b156c21cfc166b311431` and `first_mismatch = null`.
+- Disposition note:
+  - PR 6.1 stops at the shared mechanics-trace spine: schema normalization, oracle/V2 export, digest/comparison helpers, and divergence artifact writing. It does not extend the blocking canary matrix or parity acceptance gates; that remains PR 6.2 work.
+- Objective: compare trace-level mechanics across runtimes on one schema.
+- Why it belongs in this phase/order: canaries are only useful after trace shapes are identical.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/contracts/parity_trace_schema.py`
+  - `RL/fight_caves_rl/envs_fast/fast_trace_adapter.py`
+  - `fight-caves-RL/game/src/main/kotlin/headless/fast/FastParityTrace.kt`
+  - `fight-caves-RL/game/src/main/kotlin/ParityHarness.kt`
+  - Replay/trace utilities under `RL/fight_caves_rl/replay/*`
+- Low-level execution plan:
+  - Freeze required parity fields from the pivot.
+  - Add V2 trace export from the fast kernel.
+  - Adapt oracle outputs onto the same schema.
+  - Add digest and exact-field comparators.
+  - Keep the comparison at mechanics boundaries only.
+- Work items:
+  - Add a parity-trace record definition with the exact fields named in the pivot.
+  - Implement V2 trace emission in the fast kernel.
+  - Adapt oracle path outputs to the same schema in RL/Kotlin harnesses.
+  - Add trace comparison utilities for field-by-field and digest-level checks.
+  - Add artifact writing for first divergence outputs.
+  - Add tests that the trace adapters emit stable field ordering and types.
+- Deliverables:
+  - Shared parity-trace schema.
+  - Oracle and V2 trace exporters.
+- Acceptance criteria:
+  - One harness can collect comparable traces from oracle and V2 for the same seed/action sequence.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Visible-target ordering and Jad telegraph semantics must be defined identically.
+  - Existing parity harness logic currently compares oracle and headless paths, not V2.
+- Open questions or unknowns that may require validation during implementation:
+  - Whether the RSPS-backed headed demo path should emit traces directly later or through an adapter layered on top of replay or audit outputs.
+  - Which trace fields require tolerance versus exact match.
+- Dependencies on prior PRs:
+  - PR 5.2.
+
+### PR 6.2 — Extend Parity Canaries And Equivalence Suites For V2
+- Status: `completed`
+- Completed work:
+  - [x] Extended the parity canary report to include oracle-vs-`v2_fast` mechanics digests, first-mismatch payloads, stable scenario-local tick caps, and first-divergence artifact paths.
+  - [x] Extended trace-pack tooling to carry frozen expected mechanics digests and added PR 6.2 scenario packs for action rejection, prayer timing, and tick-cap terminal-code parity.
+  - [x] Expanded the parity canary matrix to cover action acceptance, prayer timing, Jad-era wave-63 parity, wave progression, Tz-Kek split behavior, and terminal-code truncation.
+  - [x] Added unit coverage that fails on `visible_target_order` drift and `rejection_code` drift, plus artifact-writing coverage for mechanics divergence reports.
+  - [x] Added live integration coverage for direct oracle-vs-`v2_fast` mechanics trace agreement and subprocess determinism coverage for repeated `v2_fast` trace collection.
+  - [x] Updated the acceptance-gate parity check details so the report now records mechanics-scenario counts and any oracle-vs-`v2_fast` failures.
+- Open work:
+  - None.
+- Acceptance evidence:
+  - Persistent canary report: `/home/jordan/code/RL/artifacts/parity/pr62_parity_canary_wsl_20260311/parity_canary_report.json`
+  - Live integration and determinism coverage: `pytest /home/jordan/code/RL/fight_caves_rl/tests/integration/test_v2_fast_matches_oracle_mechanics_trace.py /home/jordan/code/RL/fight_caves_rl/tests/determinism/test_v2_fast_mechanics_trace_determinism.py`
+  - Live parity smoke coverage: `pytest /home/jordan/code/RL/fight_caves_rl/tests/parity/test_parity_canary_smoke.py /home/jordan/code/RL/fight_caves_rl/tests/parity/test_replay_to_trace_equivalence_smoke.py`
+- Disposition note:
+  - PR 6.2 closes the parity hardening gate for the current RL/V2 boundary: oracle-vs-`v2_fast` mechanics parity is now part of the repo-owned canary matrix, target-ordering and rejection-code drift produce explicit failures, and backend switchover can depend on this suite instead of ad hoc compare scripts.
+- Objective: turn the parity spine into blocking automated validation.
+- Why it belongs in this phase/order: this is the acceptance gate that protects the switchover.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/replay/parity_canaries.py`
+  - `RL/scripts/run_parity_canary.py`
+  - `RL/configs/eval/parity_fast_v2.yaml`
+  - `RL/fight_caves_rl/tests/parity/*`
+  - `RL/fight_caves_rl/tests/integration/*`
+  - `RL/fight_caves_rl/tests/determinism/*`
+- Low-level execution plan:
+  - Add V1-oracle vs V2 canaries for action acceptance, prayer timing, Jad timing, wave progression, and terminal codes.
+  - Update trace-pack tooling to carry V2 digests.
+  - Add failing tests for target ordering and rejection-code drift.
+  - Require parity scenarios to pass before backend default changes.
+- Work items:
+  - Add V2 scenarios to parity canary config and reporting.
+  - Extend integration tests for wrapper-vs-sim semantics to include V2-vs-oracle mechanics parity.
+  - Add determinism coverage for V2 reset, replay, and seed-pack evaluation.
+  - Add canary scenarios for action acceptance, prayer timing, Jad timing, wave progression, and terminal codes.
+  - Add clear failure artifacts for parity divergence.
+  - Update acceptance-gate scripts to include parity requirements.
+- Deliverables:
+  - Blocking V2 parity suite.
+  - V2 parity config.
+- Acceptance criteria:
+  - Defined parity scenarios pass against oracle and produce stable digests.
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - Existing tests are wrapper-vs-raw only and will need extension rather than duplication.
+  - Some parity differences may come from under-specified ordering rules instead of actual mechanic drift.
+- Open questions or unknowns that may require validation during implementation:
+  - Which scenarios must block switchover versus remain diagnostic-only at first.
+  - Whether parity acceptance requires exact visible NPC tables or limited canonical slices.
+- Dependencies on prior PRs:
+  - PR 6.1.
+
+## Phase 7 — RSPS-backed headed demo program
+- Execution status: `completed`
+- Phase objective: replace the old lite-demo continuation with a conservative RSPS-backed headed demo program.
+- Why it exists: the audit showed that the right headed path is not a custom lightweight frontend; it is the existing RSPS runtime plus stock `void-client`, trimmed to a Fight Caves-only experience.
+- High-level execution details: freeze `fight-caves-demo-lite`, add an RSPS demo-specific bootstrap/profile, enforce the canonical starter state server-side in the Fight Caves runtime path, gate broader world access, bring up stock `void-client`, add observability, resolve the broader Fight Caves mechanics regression that surfaced during headed bring-up, then require a manual trust gate before any later replay/default-switchover work.
+- Contract note: headed starter-state enforcement belongs in the Fight Caves runtime path, specifically the entry/restart seams in `TzhaarFightCave.kt`, not in generic login bootstrap and not in the client.
+- Dependency/order rationale: this phase follows V2 training bring-up and parity hardening, but it intentionally detours the old lite-demo continuation. The new headed path must become trustworthy before it is allowed to absorb later replay/demo responsibilities.
+- Execution tracking rule:
+  - only completed work is checked `[x]`
+  - incomplete work stays unchecked or unlisted from completed sections
+  - anything intentionally deferred but still required must be tagged `MUST REVISIT` in the owning PR entry
+
+### Historical disposition for old lite-demo work
+- Old PR 7.1 work remains preserved as fallback/reference and as a source of prior validation artifacts.
+- Old PR 7.2 replay/live inference continuation is superseded and must not continue as the active Phase 7 path.
+- Old Phase 8 assumptions that `fight-caves-demo-lite` becomes the default visual backend are superseded.
+
+### PR 7A.1 — Freeze `fight-caves-demo-lite` And Record Its Archival Role
+- Status: `completed`
+- Completed work:
+  - [x] Marked `/home/jordan/code/fight-caves-demo-lite` as frozen fallback/reference only in module-local docs.
+  - [x] Recorded that old PR 7.2 replay/live inference continuation is superseded and must not continue as the active Phase 7 path.
+  - [x] Preserved the earlier lite-demo work as historical fallback/reference material instead of deleting it.
+  - [x] Removed leftover wording in the active pivot docs that still implied `fight-caves-demo-lite` was the default headed target.
+- Open work:
+  - None.
+- Objective: formally freeze `fight-caves-demo-lite` as fallback/reference only and remove it from the active headed-demo roadmap.
+- Why it belongs in this phase/order: this stops ambiguity before any RSPS-backed implementation PR starts.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/fight-caves-demo-lite/README.md`
+  - `/home/jordan/code/fight-caves-demo-lite/DEMOspec.md`
+  - top-level pivot docs and any active implementation trackers that still imply lite-demo continuation
+- Work items:
+  - mark `fight-caves-demo-lite` as frozen/fallback/reference
+  - define what maintenance is still allowed there
+  - mark old PR 7.2 replay/live inference work as superseded
+  - preserve references to old PR 7.1 validation artifacts instead of deleting them
+- Deliverables:
+  - explicit freeze note
+  - archival/fallback disposition note
+  - superseded-note for old lite-demo continuation
+- Acceptance criteria:
+  - no active implementation doc still presents `fight-caves-demo-lite` as the primary headed path
+  - old lite-demo work is preserved rather than erased
+  - maintenance scope for the frozen module is explicit
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - stale docs or scripts may still imply lite-demo is current
+- Open questions or unknowns that may require validation during implementation:
+  - whether any CI or local scripts still need a compatibility alias for the frozen module
+- Dependencies on prior PRs:
+  - PR 6.2
+
+### PR 7A.2 — Add RSPS Demo-Specific Bootstrap While Keeping Client Protocol Intact
+- Status: `completed`
+- Completed work:
+  - [x] Added a dedicated RSPS Fight Caves demo profile and alternate entrypoint for demo-mode server startup.
+  - [x] Layered demo-specific properties on top of the default game properties without breaking the stock login or JS5/file-server path.
+  - [x] Isolated demo saves/logs/errors under `./data/fight_caves_demo/`.
+  - [x] Disabled generic character creation in the demo profile.
+  - [x] Set `bots.count=0` and skipped the bot tick in demo mode.
+  - [x] Added a clean post-login server-side seam by marking demo-profile logins with `fight_cave_demo_profile=true` and `fight_cave_demo_entry_pending=true`.
+  - [x] Added focused RSPS settings coverage for the demo profile.
+- Open work:
+  - None.
+- Objective: add an RSPS demo-specific entry/profile/bootstrap that keeps login, JS5/file-server, and the normal client protocol intact while routing players into a constrained Fight Caves-only path.
+- Why it belongs in this phase/order: this is the first real implementation slice for the new headed path and proves that the trim can happen server-side without a client fork.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/Main.kt` or a new demo entrypoint beside it
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/GameModules.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/GameTick.kt`
+  - `/home/jordan/code/RSPS/game/src/main/resources/game.properties` or a demo-specific properties/profile layer
+  - `/home/jordan/code/fight_caves_demo_rsps_spec.md`
+- Work items:
+  - add a demo-specific RSPS startup path
+  - keep login and file-server compatibility for stock `void-client`
+  - load only the runtime/content slices needed for the first Fight Caves-only headed pass, while preserving required generic plumbing
+  - route post-login into the constrained headed-demo path rather than normal broader-world play
+- Deliverables:
+  - bootable RSPS demo-mode server in WSL
+  - intact stock-client-compatible login and protocol path
+  - constrained post-login routing seam
+- Acceptance criteria:
+  - RSPS demo mode starts without breaking login or JS5/file-server
+  - stock `void-client` can connect without first-pass client modification
+  - post-login routing reaches the constrained headed-demo flow instead of the normal world path
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - `GameModules.kt` and `GameTick.kt` currently pull in more systems than the headed demo actually needs
+  - trimming too aggressively may break protocol assumptions the client still requires
+- Open questions or unknowns that may require validation during implementation:
+  - whether the demo-specific bootstrap is best expressed as a separate entrypoint, a profile flag, or both
+- Dependencies on prior PRs:
+  - PR 7A.1
+
+### PR 7A.3 — Add Canonical Fight Caves Episode Initializer In RSPS
+- Status: `completed`
+- Completed work:
+  - [x] Added a dedicated RSPS `FightCaveEpisodeInitializer` that enforces the canonical starter state server-side.
+  - [x] Routed demo-profile cave entry and demo-profile player spawn through the canonical initializer in `TzhaarFightCave.kt`.
+  - [x] Cleared persisted-save drift for skills/resources, prayer state, equipment, inventory, instance state, and Fight Caves wave variables before each episode boot.
+  - [x] Forced seeded wave rotation, fresh instance creation, and immediate wave boot from the server path.
+  - [x] Suppressed intro/Jad warning dialogues only for headless/demo episode paths and added targeted coverage for that scope rule.
+  - [x] Restored the required RSPS cache precondition for `WorldTest` execution by documenting the cache location and mounting the local workspace cache at `/home/jordan/code/RSPS/data/cache`.
+  - [x] Added the `FightCaveEpisodeInitializerTest` behavioral suite and verified the 7A.3 acceptance criteria against the real `WorldTest` bootstrap.
+- Open work:
+  - None for PR 7A.3 scope.
+- Resolved follow-up:
+  - [x] The broader Fight Caves regression that was outside 7A.3 scope was resolved later in dedicated PR 7A.6A.
+  - [x] `TzhaarFightCaveTest > Complete all waves to earn fire cape()` now passes again after constraining Jad telegraph entry to Jad-only NPCs.
+  - [x] The prior non-Jad failure shape remains important historical context:
+    - generic NPC combat had attempted to start Jad telegraph state for non-Jad attacks at `/home/jordan/code/RSPS/game/src/main/kotlin/content/entity/npc/combat/Attack.kt`
+    - that then tripped the Jad-only guard in `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/JadTelegraph.kt`
+    - the same regression also surfaced during a live `./gradlew :game:runFightCavesDemo` smoke boot, where a `spiritual_mage_bandos` attack hit the same path while broader world NPC combat was still active
+- Objective: add a server-side Fight Caves episode initializer that enforces the canonical state from `RLspec.md` and clears persisted save drift.
+- Why it belongs in this phase/order: starter-state ownership is the main parity seam between the headed path and the headless contract, so it must be fixed before broader validation.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCave.kt`
+  - a new helper under `/home/jordan/code/RSPS/game/src/main/kotlin/.../fight_caves/`
+  - `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/`
+  - `/home/jordan/code/fight_caves_demo_rsps_spec.md`
+- Work items:
+  - enforce the canonical starter state on the server side from:
+    - `TzhaarFightCave.objectOperate("Enter", "cave_entrance_fight_cave")`
+    - `TzhaarFightCave.playerSpawn`
+  - clear or overwrite persisted drift for:
+    - equipment
+    - ammo/count
+    - inventory and potion doses
+    - skills/resources
+    - HP/Constitution
+    - prayer
+    - run energy
+    - run toggle
+    - no XP gain
+    - spawn/position
+    - wave/start constants
+  - document exact ownership for each field in the headed-demo spec
+- Deliverables:
+  - shared RSPS episode initializer for the headed demo path
+  - explicit field-ownership documentation
+  - starter-state validation surface
+- Acceptance criteria:
+  - headed starter state matches the canonical episode-start contract in `/home/jordan/code/RL/RLspec.md`
+  - state is enforced server-side on cave entry and restart/reconnect
+  - no client-side substitutions are required
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - persisted saves may leak unrelated state unless the initializer is fully authoritative
+  - no-XP-gain may require a dedicated demo-mode gate rather than only item/stat resets
+- Open questions or unknowns that may require validation during implementation:
+  - whether no-XP is best enforced by blocking all skills, gating XP scripts, or both
+- Dependencies on prior PRs:
+  - PR 7A.2
+
+### PR 7A.4 — Gate The Runtime To Fight Caves-Only Without Deep First-Pass Pruning
+- Status: `completed`
+- Completed work:
+  - [x] Recycled demo-profile exit-object use back into a fresh Fight Caves episode instead of allowing the normal leave-to-world flow.
+  - [x] Recycled demo-profile leave/death/completion paths back into a fresh Fight Caves episode so broader-world traversal is not part of the demo loop.
+  - [x] Added first-pass world-access gating by treating demo-profile exits from `tzhaar_fight_cave_multi_area` as violations that are logged and immediately reset.
+  - [x] Preserved the required generic runtime plumbing rather than attempting aggressive cache/data/interface pruning in this PR.
+  - [x] Added focused `WorldTest` coverage for demo-profile teleport-out, leave, and death gating behavior.
+- Open work:
+  - None for PR 7A.4 scope.
+- Objective: prevent broader world traversal while keeping the server systems the stock client still depends on.
+- Why it belongs in this phase/order: the headed path is only useful if it is constrained enough to behave like a Fight Caves-only demo without breaking UI/protocol/runtime plumbing.
+- Exact files/directories/modules likely touched:
+  - RSPS demo bootstrap/profile files
+  - Fight Caves entry/leave/reset handling in `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCave.kt`
+  - world-gating helpers or scripts under the RSPS game module
+- Work items:
+  - block broader traversal and unrelated content access
+  - preserve required generic systems:
+    - region loading / dynamic zones / instances
+    - player/NPC update pipeline
+    - interfaces, containers, vars
+    - inventory/equipment
+    - prayers
+    - ranged combat/ammo/projectiles
+    - movement/pathing
+    - hitsplats/graphics
+  - prefer gating and selective bootstrap over aggressive cache/data/interface deletion
+  - log world-access violations and gating events
+- Deliverables:
+  - constrained Fight Caves-only runtime gate
+  - explicit must-keep vs gated surface
+  - violation logging
+- Acceptance criteria:
+  - headed runtime does not allow broader world access
+  - required combat/prayer/inventory/gameframe behavior still functions
+  - world-access violation events are visible in logs
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - hidden dependencies may sit behind otherwise unrelated content or data loads
+- Open questions or unknowns that may require validation during implementation:
+  - which non-Fight-Caves interfaces or scripts must remain inert-but-loaded for the stock client to behave
+- Dependencies on prior PRs:
+  - PR 7A.2
+  - PR 7A.3
+
+### PR 7A.5 — Bring Up Stock `void-client` Against The RSPS Demo Path
+- Status: `completed`
+- Completed work:
+  - [x] Documented the first-pass headed runtime topology as WSL/Linux RSPS plus native-Windows stock `void-client`.
+  - [x] Added a dedicated stock-client bring-up runbook at `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_runbook.md`.
+  - [x] Standardized the first-pass client artifact on the stock release `client.jar`, with `/home/jordan/code/RSPS/void-client/` retained as source/reference and IntelliJ artifact-build fallback only.
+  - [x] Recorded the current local build constraint that the checked-out `void-client` source tree does not compile cleanly under the workspace JDK 21 CLI path because it still references older/internal Java APIs.
+  - [x] Verified that the RSPS demo run path remains `./gradlew :game:runFightCavesDemo` on port `43594`, which matches the stock client default boot assumptions.
+  - [x] Ran the stock release `void-client-1.0.1.jar` on native Windows against the WSL-hosted RSPS demo server and captured headed screenshots plus a validation note.
+  - [x] Confirmed that `127.0.0.1` does not work on this machine for the stock client path and fails at JS5/update sync, while the WSL IP fallback reaches the real stock-client headed UI flow.
+  - [x] Confirmed that the stock client renders the update screen, first-run auto-setup prompt, create-account screen, existing-account login screen, and login-submit spinner on the WSL IP path.
+  - [x] Added server-side login tracing and a bounded differential-debugging note at `/home/jordan/code/RSPS/docs/fight_caves_demo_login_differential_debug.md`.
+  - [x] Proved that the disabled-account result reproduces on both the full normal RSPS path and the Fight Caves demo profile path, so the current login blocker is broader than demo-profile logic.
+  - [x] Identified the shared failure shape on both paths:
+    - `SUCCESS(2)` validation
+    - account load / queue / setup
+    - `login_connect_queue_wait`
+    - no `login_connect_queue_ready`
+    - later `ACCOUNT_DISABLED(4)` on re-validation
+  - [x] Confirmed that no account save file is created on disk before the disabled-account result is returned.
+  - [x] Fixed the broader stock-client/RSPS login-completion blocker on the shared server-side path by:
+    - persisting newly created first-login accounts before queue wait
+    - isolating stage exceptions in `GameLoop` so queued login completion still runs
+  - [x] Re-ran native-Windows stock-client validation against the full normal RSPS profile and confirmed:
+    - first-login account persistence
+    - `login_connect_queue_ready`
+    - `login_connect_client_login_sent`
+    - `login_connect_spawn_complete`
+    - logged-in client entry instead of `ACCOUNT_DISABLED(4)`
+  - [x] Re-ran native-Windows stock-client validation against the Fight Caves demo profile and confirmed:
+    - first-login account persistence
+    - `login_connect_queue_ready`
+    - `login_connect_client_login_sent`
+    - `login_connect_spawn_complete`
+    - direct landing in the Fight Caves runtime
+  - [x] Captured post-fix headed evidence in `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_validation.md` and `/home/jordan/code/RSPS/docs/fight_caves_demo_login_differential_debug.md`.
+  - [x] Confirmed that the stock client reaches a real in-game gameframe on the demo profile, with live combat/prayer/spellbook tab interaction captures.
+- Open work:
+  - None for PR 7A.5 scope.
+- Objective: prove the headed path with stock `void-client` first, using native Windows JDK for the client and WSL/Linux for RSPS.
+- Why it belongs in this phase/order: this is the first full headed proof that the near-in-game UI/rendering path works without a client fork.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/README.md` or a headed-demo runbook
+  - `/home/jordan/code/fight_caves_demo_rsps_spec.md`
+  - minimal RSPS server-side login/demo-account or routing glue if needed
+- Work items:
+  - document the first-pass runtime topology:
+    - RSPS in WSL/Linux
+    - stock `void-client` on native Windows JDK
+  - validate login/direct-or-near-direct flow with stock client defaults
+  - validate headed presentation for inventory, prayers, combat tab, hitsplats, projectiles, and scene rendering
+  - avoid client code changes unless a concrete bring-up blocker is proven
+- Deliverables:
+  - documented stock-client bring-up path
+  - first usable headed run on the real client/UI
+- Acceptance criteria:
+  - stock `void-client` can log into the RSPS demo path
+  - the player lands in the intended Fight Caves flow
+  - the real client UI/gameframe is usable for Fight Caves play
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - the local `void-client` repo has no checked-in build wrapper
+  - some quality-of-life expectations may tempt premature client edits
+- Open questions or unknowns that may require validation during implementation:
+  - whether manual login is acceptable for the first pass or whether a thin loader convenience is required immediately
+- Dependencies on prior PRs:
+  - PR 7A.2
+  - PR 7A.3
+  - PR 7A.4
+
+### PR 7A.6 — Add Manifests, Session Logs, And Headed Validation Instrumentation
+- Status: `completed`
+- Completed work:
+  - [x] Added demo-only observability helpers in the RSPS Fight Caves package for structured session logs, starter-state manifests, and per-session validation checklists.
+  - [x] Emitted structured headed session logs for:
+    - session start
+    - demo entry requests
+    - leave/reset requests
+    - world-access violations
+    - starter-state manifest writes
+    - episode resets
+  - [x] Emitted starter-state manifests after canonical Fight Caves demo resets, including equipment, inventory, blocked skills, prayer flags, run state, wave/rotation state, and artifact references.
+  - [x] Emitted per-session headed validation checklist artifacts with auto-observed items plus manual follow-up items.
+  - [x] Hooked observability only into the existing demo seams:
+    - demo-profile login bootstrap
+    - Fight Caves demo entry
+    - Fight Caves demo spawn bootstrap
+    - leave/death/completion recycle paths
+    - area-exit world-access violation path
+    - post-reset starter-state enforcement
+  - [x] Added focused `WorldTest` coverage proving:
+    - session log creation
+    - starter-state manifest emission
+    - checklist emission
+    - leave-request logging
+    - world-access violation logging
+  - [x] Documented explicit artifact locations in:
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_observability.md`
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_runbook.md`
+    - `/home/jordan/code/RSPS/README.md`
+    - `/home/jordan/code/fight_caves_demo_rsps_spec.md`
+- Open work:
+  - None for PR 7A.6 scope.
+- Objective: add the observability needed to debug headed/headless mismatches and prove starter-state correctness.
+- Why it belongs in this phase/order: the headed path must be debuggable before anyone trusts it as a demo target.
+- Exact files/directories/modules likely touched:
+  - RSPS demo logging/manifest helpers under the game module
+  - `/home/jordan/code/RSPS/engine/src/main/kotlin/world/gregs/voidps/engine/event/AuditLog.kt` or adjacent headed-demo logging surfaces
+  - headed-demo docs/spec
+- Work items:
+  - emit starter-state manifests
+  - emit session logs with entry/reset/leave events
+  - emit world-access violation/gating logs
+  - emit manual validation checklist artifacts
+  - ensure logs are sufficient to compare headed behavior against the headless contract
+- Deliverables:
+  - starter-state manifest
+  - structured headed session logs
+  - validation checklist artifact
+  - documented artifact locations
+- Acceptance criteria:
+  - every headed validation run produces enough evidence to debug state mismatches and gating failures
+  - starter-state evidence can be checked directly instead of inferred from the UI
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - logging that is too generic will not help parity debugging
+- Open questions or unknowns that may require validation during implementation:
+  - whether some headed validation fields should later map into the shared parity trace path
+- Dependencies on prior PRs:
+  - PR 7A.3
+  - PR 7A.4
+  - PR 7A.5
+
+### PR 7A.6A — Resolve Broader Fight Caves Mechanics Regression Before Trust Gate
+- Status: `completed`
+- Completed work:
+  - [x] Isolated the exact non-Jad attack path: the shared swing hook was calling `beginJadTelegraphForAttack(attack.id)` for every NPC, so non-Jad NPCs using attack ids like `magic` or `range` could enter Jad telegraph logic.
+  - [x] Constrained Jad telegraph entry to Jad-only NPCs inside `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/JadTelegraph.kt`, preserving the existing Jad-only `require(...)` on the actual telegraph-start path.
+  - [x] Added targeted regression coverage in `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/JadTelegraphRegressionTest.kt` proving:
+    - non-Jad attacks do not start Jad telegraph state
+    - real Jad attacks still start Jad telegraph state
+  - [x] Re-ran the broader Fight Caves regression suite with:
+    - `./gradlew --no-daemon :game:test --tests content.area.karamja.tzhaar_city.JadTelegraphRegressionTest --tests content.area.karamja.tzhaar_city.TzhaarFightCaveTest`
+  - [x] Confirmed the previously failing `TzhaarFightCaveTest > Complete all waves to earn fire cape()` now passes.
+- Open work:
+  - None.
+- Objective: restore broader Fight Caves mechanics correctness before the headed trust gate.
+- Why it belongs in this phase/order: PR 7A.7 is a trust gate, not a place to carry known full-wave mechanics blockers. The headed path should be mechanically clean enough for manual trust validation before that work starts.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/entity/npc/combat/Attack.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/JadTelegraph.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzTokJad.kt`
+  - `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCaveTest.kt`
+  - related Fight Caves regression/support tests under `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/`
+- Work items:
+  - isolate the exact non-Jad attack path that is entering Jad telegraph logic
+  - constrain Jad telegraph state transitions to Jad-only combat paths
+  - verify that the broader Fight Caves runtime still preserves correct Jad telegraph behavior after the fix
+  - re-run the broader Fight Caves regression suite, especially:
+    - `TzhaarFightCaveTest > Complete all waves to earn fire cape()`
+  - record the clean regression result in the implementation notes before PR 7A.7 begins
+- Deliverables:
+  - Jad-only telegraph guard/fix on the broader RSPS Fight Caves path
+  - passing broader Fight Caves regression evidence
+  - updated tracker note that the headed path is mechanically clean enough to enter trust validation
+- Acceptance criteria:
+  - non-Jad attacks no longer trigger Jad telegraph state
+  - `TzhaarFightCaveTest > Complete all waves to earn fire cape()` passes
+  - the broader Fight Caves regression suite is green enough to begin PR 7A.7
+  - the fix does not regress real Jad telegraph behavior
+- Non-goal note:
+  - this PR does not add client convenience work
+  - this PR does not perform the manual headed trust gate itself
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - the failure may sit at a shared combat-engine hook rather than only inside Fight Caves content
+  - a narrow guard fix could accidentally break real Jad telegraph behavior if the scope is not verified carefully
+- Open questions or unknowns that may require validation during implementation:
+  - whether additional live headed smoke validation is needed immediately after the regression suite passes
+- Dependencies on prior PRs:
+  - PR 7A.3
+  - PR 7A.4
+  - PR 7A.5
+  - PR 7A.6
+
+### PR 7A.7 — Manual Validation Trust Gate For The RSPS-Backed Headed Path
+- Status: `completed`
+- Completed work:
+  - [x] Ran a dedicated headed trust-gate session with the stock Windows client against the WSL-hosted RSPS demo server using the machine-specific working transport path `172.25.183.199:43594`.
+  - [x] Confirmed that direct entry converges into the Fight Caves runtime on headed login.
+  - [x] Diagnosed the live prayer-book mismatch as a server-owned book-selection bug rather than a curses-mechanics mismatch.
+  - [x] Matched the headed session against the generated starter-state manifests for initial login, post-death recycle, exit-object recycle, and area-exit recycle, confirming canonical equipment, inventory, skills, prayer state, run state, and wave-1 restart ownership.
+  - [x] Captured live headed UI evidence for inventory, equipment, prayer, and combat tabs, and observed real inventory consumption in combat (`shark` eat plus `prayer_potion_4` drink) during the same session.
+  - [x] Observed live wave progression through wave 6 and a headed death-driven recycle back into a fresh wave-1 Fight Caves instance, with a second starter-state manifest and reset event emitted.
+  - [x] Manually exercised headed no-broader-world-access validation on live client state through both:
+    - exit-object recycle
+    - area-exit violation recycle
+  - [x] Recorded the trust-gate decision that live manual completion recycle is not required for PR 7A.7 because the broader Fight Caves full-wave automated suite is green again, including `TzhaarFightCaveTest > Complete all waves to earn fire cape()`.
+  - [x] Wrote the headed trust-gate note in `/home/jordan/code/RSPS/docs/fight_caves_demo_headed_trust_gate.md`.
+  - [x] Landed the blocker-fix pass for the reopened prayer and recycle issues:
+    - demo prayer UI now forces the normal prayer book for Fight Caves demo accounts and clears hidden curses/drain state
+    - reset boot now reissues wave aggression after the recycle so the fresh wave stays attackable/aggressive after leave/death/world-access resets
+    - targeted regression coverage is green again for:
+      - `FightCaveEpisodeInitializerTest > demo prayer interface forces the normal prayer book()`
+      - `FightCaveEpisodeInitializerTest > demo profile leave recycles into a fresh fight cave episode()`
+      - `FightCaveEpisodeInitializerTest > demo profile death stays in the fight cave loop()`
+      - `FightCaveEpisodeInitializerTest > demo profile teleporting out of the cave resets the episode and blocks world access()`
+      - `TzhaarFightCaveTest > Complete all waves to earn fire cape()`
+  - [x] Produced a fresh post-fix headed trust-gate artifact set and reran the live stock-client session using account `jordantest01`.
+  - [x] Re-verified in headed/manual play that:
+    - the prayer tab now shows the normal prayer book rather than curses
+    - no hidden prayer drain was observed with no prayers active
+    - death recycle respawns a fresh active wave
+    - combat still works after recycle
+    - wave progression continues as expected in live play
+  - [x] Carried forward the existing live world-gating evidence from `trust77c1`, which already validated both exit-object recycle and area-exit violation recycle.
+  - [x] Updated the trust-gate report and latest checklist/session references to reflect the successful live rerun and closure decision.
+- Open work:
+  - None.
+- Objective: require explicit manual validation before the RSPS-backed headed path is allowed to absorb later replay/default responsibilities.
+- Why it belongs in this phase/order: the new headed path should become trustworthy before it becomes convenient.
+- Work items:
+  - validate direct entry into Fight Caves
+  - validate canonical starter state
+  - validate no broader world access
+  - validate playable combat/prayer/inventory loop
+  - validate wave progression
+  - validate restart/death/completion handling
+  - validate headed trustworthiness and observability
+- Deliverables:
+  - headed validation report
+  - explicit trust-gate decision
+  - blocker list if trust gate fails
+- Acceptance criteria:
+  - direct entry works reliably
+  - starter-state parity is proven
+  - broader world access is blocked
+  - combat/prayer/inventory loop is reasonably playable
+  - wave progression and cave reset paths behave correctly
+  - logs/manifests are sufficient for debugging mismatches
+- Result:
+  - Phase 7A trust gate passed.
+- Non-goal note:
+  - this trust gate does not require replay/live checkpoint inference yet
+  - this trust gate does not require proving every future UI-polish improvement
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - some issues will only appear during true headed manual play
+- Open questions or unknowns that may require validation during implementation:
+  - which manual scenarios become permanent acceptance checks versus one-time bring-up checks
+- Dependencies on prior PRs:
+  - PR 7A.6A
+
+### PR 7B.1 — Optional Client Convenience Work After The Server Path Is Proven
+- Status: `completed`
+- Objective: add client-side convenience only if the stock-client bring-up proves insufficient.
+- Why it belongs in this phase/order: client polish must not front-run server/runtime correctness.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/void-client/client/src/Loader.java`
+  - `/home/jordan/code/RSPS/void-client/client/src/FightCavesDemoAutoLogin.java`
+  - `/home/jordan/code/RSPS/scripts/build_fight_caves_demo_client.sh`
+  - `/home/jordan/code/RSPS/scripts/build_fight_caves_demo_client.ps1`
+  - `/home/jordan/code/RSPS/scripts/run_fight_caves_demo_client.sh`
+  - `/home/jordan/code/RSPS/scripts/launch_fight_caves_demo_client.ps1`
+  - `/home/jordan/code/RSPS/scripts/close_fight_caves_demo_client.sh`
+  - `/home/jordan/code/RSPS/scripts/close_fight_caves_demo_client.ps1`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_runbook.md`
+  - `/home/jordan/code/RSPS/README.md`
+- Completed work:
+  - [x] Chose the lowest-risk convenience shape: repo-owned launch tooling around the stock client jar instead of a client fork or mechanics-affecting UI changes.
+  - [x] Added a WSL-first launcher that resolves the current WSL IP automatically and starts the Windows client against the Fight Caves demo server.
+  - [x] Added a local convenience build path for `void-client-fight-caves-demo.jar` using Windows JDK 8 plus `clientlibs.jar`, while keeping the stock release jar as fallback.
+  - [x] Added launcher-side RSPS cache sync into the Windows client cache so repeated headed bring-up no longer waits on the earlier multi-minute update path.
+  - [x] Added launcher-side Windows preferences seeding so the blocking `Auto setup` prompt does not require manual interaction on the convenience path.
+  - [x] Replaced the earlier login-screen-only `SendKeys` dependency with a convenience-jar auto-login path that accepts `--username` and `--password` directly; retained `SendKeys` only as the stock-jar fallback.
+  - [x] Added a matching close-client helper for repeated local demo sessions.
+  - [x] Updated the stock-client runbook and RSPS README so the convenience path is documented without changing the Linux-canonical server/runtime guidance.
+  - [x] Smoke-validated the repo-owned launch path end to end:
+    - `./scripts/run_fight_caves_demo_client.sh` opened a real Windows `Client` window against `172.25.183.199:43594`
+    - `./scripts/close_fight_caves_demo_client.sh` closed that client window afterward
+  - [x] Cold-validated the zero-touch path after clearing the Windows client cache and preferences:
+    - no manual `Auto setup`
+    - no manual credential entry
+    - real in-game Fight Caves entry confirmed from the convenience launcher
+- Open work:
+  - None.
+- Deliverables:
+  - convenience-built `void-client-fight-caves-demo.jar`
+  - headed demo launcher with cache/prefs seeding
+  - direct client auto-login helper
+  - repo-owned run/close scripts for repeated headed demo sessions
+- Acceptance criteria:
+  - convenience work improves repeated headed bring-up materially
+  - stock release jar remains available as fallback
+  - client convenience work does not change mechanics or server-side ownership
+- Result:
+  - repeated headed demo bring-up now has a repo-owned launcher path that keeps the current WSL IP topology intact, removes manual `Auto setup` and manual login actions, and materially reduces bring-up time on this machine
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - the convenience jar still relies on the legacy client bootstrap and renderer path, so end-to-end cold bring-up on this machine is still in the low-teens seconds rather than only a few seconds total
+- Open questions or unknowns that may require validation during implementation:
+  - whether deeper client bootstrap/render work is justified later to push the headed boot path from low-teens seconds down to only a few seconds total
+- Dependencies on prior PRs:
+  - PR 7A.7
+
+### PR 7B.2 — Direct Headed Bootstrap And Death-Recycle Session Continuity
+- Status: `completed`
+- Completed work:
+  - [x] Added a dedicated `PR 7B.2` tracker entry instead of hiding the follow-up work under `PR 7B.1`.
+  - [x] Made the convenience-path login decision explicit: the RSPS/client protocol still requires a real login handshake, but the user-facing login/setup screens are not strictly required on the Fight Caves demo convenience path.
+  - [x] Extended the convenience client bootstrap so the default headed path can auto-enter the demo without manual setup/login actions while still showing a dedicated loading window with a moving bar during bootstrap and keeping the login screen hidden.
+  - [x] Switched the zero-arg convenience launcher to a stable disposable demo account (`fcdemo01` / `pass123`) rather than relying on a fresh per-run account, because starter-state ownership is server-side and persisted drift is overwritten on entry.
+  - [x] Verified the updated zero-touch convenience path against the current machine-specific topology:
+    - WSL IP `172.25.183.199:43594` works
+    - `127.0.0.1:43594` still does not for the stock-client path on this machine
+    - no manual `Auto setup`
+    - no manual username/password entry
+    - hidden bootstrap reveal now occurs on the first post-login ready state rather than only on the previous timeout path
+  - [x] Captured a concrete startup breakdown for the convenience path and wrote it down in:
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_bootstrap_debug.md`
+  - [x] Diagnosed the death/recycle disconnect as a reset-timing race with the stock death queue rather than a deliberate logout/session teardown.
+  - [x] Replaced the earlier fixed demo death-reset delay with a wait-until-death-queue-clears reset path, and added a dedicated `death_reset_ready` observability event before the recycle occurs.
+  - [x] Revalidated the bounded server/runtime side with targeted Fight Caves suites:
+    - `FightCaveEpisodeInitializerTest`
+    - `TzhaarFightCaveTest`
+  - [x] Wrote the continuity note in:
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_session_continuity_validation.md`
+- Open work:
+  - None.
+- Objective: remove avoidable headed convenience-path bootstrap friction and preserve in-session continuity across demo death/recycle.
+- Why it belongs before Phase 8: the RSPS-backed headed path cannot be treated as a stable replay/demo backend while it still shows avoidable login/bootstrap friction and can drop back to the login screen on demo death.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/void-client/client/src/Loader.java`
+  - `/home/jordan/code/RSPS/void-client/client/src/FightCavesDemoAutoLogin.java`
+  - `/home/jordan/code/RSPS/scripts/run_fight_caves_demo_client.sh`
+  - `/home/jordan/code/RSPS/scripts/launch_fight_caves_demo_client.ps1`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/TzhaarFightCave.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/FightCaveDemoObservability.kt`
+  - `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/FightCaveEpisodeInitializerTest.kt`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_runbook.md`
+  - `/home/jordan/code/RSPS/README.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_validation.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_bootstrap_debug.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_session_continuity_validation.md`
+- Work items:
+  - determine whether visible login is strictly required on the convenience path versus merely current launcher/client baggage
+  - implement the lightest safe direct-entry/bootstrap path for disposable Fight Caves demo accounts
+  - measure the remaining startup path and break it down into cache sync, client bootstrap, login/direct-entry, and in-game ready timing
+  - diagnose why some demo deaths drop the headed client to `connection lost` and the login screen
+  - implement the smallest safe server/client fix that keeps death recycle in-session
+  - revalidate focused headed gameplay after convenience/session changes
+- Deliverables:
+  - explicit convenience-path decision for headed login/bootstrap
+  - improved headed bring-up path with no manual interaction and reduced visible friction
+  - death-recycle continuity fix with artifact-backed validation
+  - updated runbook and validation notes
+- Acceptance criteria:
+  - a clear documented decision exists on whether visible login is required, bypassed, or minimized on the convenience path
+  - headed bring-up requires no manual interaction and no unnecessary visible setup/login friction
+  - remaining startup cost is explained concretely and honestly
+  - death no longer produces `connection lost` or a return to login on the demo path
+  - convenience-path changes do not regress combat, prayer behavior, inventory/consumables, wave progression, or world gating
+- Current result:
+  - the convenience-path decision is now made and documented: visible login/setup is convenience-path baggage, not a strict requirement, so the default local bring-up now hides those steps behind real protocol login
+  - measured warm-path cache sync is sub-100ms, while the remaining delay is dominated by legacy client bootstrap and post-submit world init; current measured zero-touch bring-up on this machine is about 29 seconds rather than only a few seconds total
+  - the death/recycle disconnect has a bounded server-side fix plus passing targeted Fight Caves coverage, and the later live headed reruns confirmed that continuity now stays in-session with direct Fight Caves recycle
+  - the final convenience path now shows a dedicated loading window with a moving bar during bootstrap, keeps the login screen hidden, and still lands directly in Fight Caves without manual interaction
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - the legacy client bootstrap may require some hidden internal login state progression even if the user-facing login screen can be bypassed or hidden
+  - death recycle may still be sensitive to timing between the stock death queue, teleports, instance rebuild, and client region refresh
+  - stock release jar fallback must remain usable even if the convenience jar path gains more automation
+- Open questions or unknowns that may require validation during implementation:
+  - whether the cleanest safe convenience path is full visible-login bypass, hidden-login auto-entry, or just a minimized near-direct path
+  - whether death continuity requires only a server-side recycle timing fix or also some bounded client bootstrap/session handling change
+- Dependencies on prior PRs:
+  - PR 7B.1
+
+## Phase 8 — headed backend selection, replay/demo integration, and default-switchover
+- Execution status: `completed`
+- Phase objective: only after the RSPS-backed headed path is trusted, decide whether and how it becomes the default demo/replay backend.
+- Why it exists: the pivot is not complete until the headed path is not just bootable, but trustworthy enough to carry demo responsibilities.
+- High-level execution details: use the Phase 7 trust gate first, then if justified add any replay/live checkpoint integration needed for the RSPS-backed path, and only after that consider default-switchover.
+- Dependency/order rationale: this phase must follow the RSPS headed trust gate. It does not assume that the old lite-demo default path remains valid.
+- Execution tracking rule:
+  - only completed work is checked `[x]`
+  - incomplete work stays unchecked or unlisted from completed sections
+  - anything intentionally deferred but still required must be tagged `MUST REVISIT` in the owning PR entry
+
+### PR 8.1 — Add RSPS-Backed Replay/Demo Integration Only After Headed Trust Gate
+- Status: `completed`
+- Objective: add whatever replay or live checkpoint integration the RSPS-backed path actually needs, but only after the headed runtime is already trusted.
+- Why it belongs in this phase/order: demo/inference integration should land on a proven headed runtime, not on an unstable bring-up target.
+- Exact files/directories/modules likely touched:
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/FightCaveBackendActionAdapter.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/FightCaveDemoBackendControl.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/FightCaveDemoObservability.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/content/area/karamja/tzhaar_city/FightCaveHeadedObservationBuilder.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/GameModules.kt`
+  - `/home/jordan/code/RSPS/game/src/main/kotlin/GameTick.kt`
+  - `/home/jordan/code/RSPS/game/src/main/resources/fight-caves-demo.properties`
+  - `/home/jordan/code/RSPS/game/src/test/kotlin/content/area/karamja/tzhaar_city/FightCaveBackendActionAdapterTest.kt`
+  - `/home/jordan/code/RL/scripts/run_headed_backend_smoke.py`
+  - `/home/jordan/code/RL/scripts/run_headed_trace_replay.py`
+  - `/home/jordan/code/RL/scripts/run_headed_checkpoint_inference.py`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_backend_control_smoke.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_headed_replay_validation.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_live_checkpoint_validation.md`
+  - RL replay/eval/demo entrypoints that will be selected later inside this PR after the smoke path is proven
+- Work items:
+  - run a backend-control smoke pass before replay/live integration claims:
+    - issue backend-driven `move` actions
+    - issue backend-driven `attack` actions
+    - issue backend-driven `eat shark` actions
+    - issue backend-driven `drink prayer potion` actions
+    - issue backend-driven prayer-toggle actions
+  - prove the headed RSPS-backed path can be controlled by backend-issued actions without relying on UI clicking
+  - document the visible-target mapping in headed mode:
+    - how visible targets are collected
+    - how headed target indices map to the shared action schema
+    - how visible-target ordering is stabilized or validated for trained-policy action mapping
+    - how attack target-selection semantics remain aligned with the shared contract
+  - validate headed action timing and cadence:
+    - backend-issued actions land on the expected tick cadence in headed mode
+    - deferred or rejected actions are surfaced consistently
+    - travel/pathing, prayer toggles, and consumable use occur on timing boundaries compatible with the shared action contract
+    - headed logs are sufficient to explain timing mismatches
+  - make the execution sequence explicit:
+    - backend-control smoke
+    - replay of recorded/shared action traces
+    - live checkpoint inference
+    - only after that, any default/switchover consideration
+  - decide the lightest integration path for trained-policy demos
+  - keep action mapping aligned to the shared action schema
+  - avoid reviving the old lite-demo PR 7.2 design by default
+- Completed work:
+  - [x] Closed PR 7B.2 and entered Phase 8 only after the headed trust gate had passed and the headed convenience/reliability blockers were already handled.
+  - [x] Added a demo-only headed backend action adapter in RSPS that mirrors the shared headless action ids, prayer ids, visible-target ordering, and rejection categories for:
+    - `wait`
+    - `walk_to_tile`
+    - `attack_visible_npc`
+    - `toggle_protection_prayer`
+    - `eat_shark`
+    - `drink_prayer_potion`
+    - `toggle_run`
+  - [x] Added a demo-only RSPS backend-control stage that polls a file-backed inbox, applies one backend-issued action per tick to the live headed demo player, and writes per-request result artifacts.
+  - [x] Added headed backend-control observability:
+    - per-action result JSON artifacts under `/home/jordan/code/RSPS/data/fight_caves_demo/backend_control/results/`
+    - `backend_action_processed` events in the existing demo session log
+    - visible-target snapshots before/after each backend-issued action
+    - processed-tick evidence for cadence review
+  - [x] Added focused RSPS coverage for the new headed backend-control path in:
+    - `FightCaveBackendActionAdapterTest`
+  - [x] Added an RL-owned backend smoke driver in:
+    - `/home/jordan/code/RL/scripts/run_headed_backend_smoke.py`
+    - it uses the shared `headless_action_v1` normalization surface rather than inventing a headed-only action schema
+  - [x] Documented the first backend-control smoke path in:
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_backend_control_smoke.md`
+  - [x] Ran the first live headed backend-control smoke against the trusted RSPS-backed demo account and captured:
+    - `/home/jordan/code/RL/artifacts/headed_backend_smoke/fcdemo01-20260312T195724064404.json`
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_backend_control_validation.md`
+    - `/home/jordan/code/RSPS/data/fight_caves_demo/artifacts/session_logs/fcdemo01-2026-03-12T19-57-06.416.jsonl`
+  - [x] Added an RL-owned headed replay driver in:
+    - `/home/jordan/code/RL/scripts/run_headed_trace_replay.py`
+    - it accepts either:
+      - built-in trace-pack ids
+      - explicit JSON traces
+      - or a session-valid materialized trace for the first headed replay validation pass
+    - it preserves the shared `headless_action_v1` action boundary rather than inventing a replay-only headed schema
+  - [x] Extended headed backend-control request/result handling so replay requests carry request context through to:
+    - per-request JSON result artifacts
+    - `backend_action_processed` session-log events
+  - [x] Ran the first live replay-first validation on the trusted headed path and captured:
+    - `/home/jordan/code/RL/artifacts/headed_replay/fcdemo01-20260312T202236944935.json`
+    - `/home/jordan/code/RL/artifacts/headed_replay/fcdemo01-20260312T202236944935-input-trace.json`
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_headed_replay_validation.md`
+    - `/home/jordan/code/RSPS/data/fight_caves_demo/artifacts/session_logs/fcdemo01-2026-03-12T20-21-02.168.jsonl`
+  - [x] Verified in the first replay artifact that:
+    - replay drove the headed client without UI clicking
+    - visible-target collection and attack target-resolution remained explicit
+    - the selected replayed target index resolved to the expected headed NPC
+    - processed ticks advanced coherently one replay step at a time (`340` through `348`)
+    - no replay step was rejected in the first validation run
+  - [x] Added a headed observation export on the RSPS backend-control path so live policy inference can consume:
+    - `observation_before`
+    - `observation_after`
+    - shared `headless_observation_v1` payloads derived from the trusted headed runtime
+  - [x] Added an RL-owned live checkpoint driver in:
+    - `/home/jordan/code/RL/scripts/run_headed_checkpoint_inference.py`
+    - it loads a real trained checkpoint, decodes policy outputs through the shared action schema, and sends them through the same headed backend-control inbox/results boundary already proven by smoke and replay
+  - [x] Ran live checkpoint inference on the trusted headed path and captured:
+    - `/home/jordan/code/RL/artifacts/headed_live_inference/fcdemo01-20260312T204803310840.json`
+    - `/home/jordan/code/RL/artifacts/headed_live_inference/fcdemo01-20260312T204858268296.json`
+    - `/home/jordan/code/RSPS/docs/fight_caves_demo_live_checkpoint_validation.md`
+    - `/home/jordan/code/RSPS/data/fight_caves_demo/artifacts/session_logs/fcdemo01-2026-03-12T20-47-37.612.jsonl`
+  - [x] Verified in the live checkpoint artifacts that:
+    - a real trained checkpoint drove the headed client without UI clicking
+    - the shared `headless_action_v1` schema remained the control boundary
+    - live headed target ordering remained explicit enough to validate a bounded two-visible-target case
+    - invalid target indices and consumption lockouts were surfaced coherently as rejected live policy steps
+    - processed ticks advanced coherently on forward headed ticks during both greedy and sampled validation passes
+- Open work:
+  - None.
+- Deliverables:
+  - RSPS-backed replay/demo integration design and implementation slice
+  - backend-control smoke artifact/log set
+  - replay artifact/log set
+  - live checkpoint demo artifact/log set
+  - headed action log showing backend-issued actions and their results
+  - screenshots or checklist references where they materially help explain headed behavior
+- Acceptance criteria:
+  - backend-control smoke passes before replay/live checkpoint work is treated as valid
+  - the headed path responds correctly to backend-issued `move`, `attack`, `eat shark`, `drink prayer potion`, and prayer-toggle actions
+  - visible-target mapping, target-index resolution, and headed target ordering are explicit and stable enough for the shared action contract
+  - attack target-selection semantics remain aligned with the shared contract
+  - headed action timing/cadence is validated well enough to reason about deferred, rejected, and successfully applied actions
+  - replay of recorded/shared action traces works on the trusted headed path before live checkpoint inference is claimed complete
+  - trained policies can be demonstrated on the trusted RSPS-backed headed path
+  - headed behavior remains aligned to the shared mechanics contract
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - policy-to-headed transport may need a different boundary than the old lite-demo plan assumed
+  - visible-target ordering in headed mode may be less obviously stable than the headless contract unless it is validated and logged explicitly
+  - headed timing differences may surface action deferrals or pathing cadence mismatches that replay-first validation needs to expose before live inference
+- Open questions or unknowns that may require validation during implementation:
+  - whether replay-first support is sufficient to expose all target-ordering or timing issues before live checkpoint inference begins
+  - what minimum headed action-log format is enough to explain backend-issued action timing and resolution decisions
+- Current result:
+  - the first Phase 8 slice is now real in code: the trusted headed RSPS Fight Caves demo can accept shared-schema backend-issued actions at the server/runtime layer without any UI clicking
+  - the first live headed backend-control smoke is now proven with artifact-backed evidence:
+    - backend-issued `move`, `attack`, `eat shark`, `drink prayer potion`, and prayer-toggle actions all applied successfully
+    - visible-target ordering and selected target index were captured explicitly in both the result artifacts and the headed session log
+    - processed ticks advanced one action at a time (`100` through `109`) in the first live smoke run
+  - the replay-first sub-slice is now also real in code and validated with artifact-backed evidence:
+    - replay dispatched shared-schema actions into the trusted headed session without UI clicking
+    - the first replay artifact preserved explicit visible-target ordering, target-resolution, and per-step timing evidence
+    - all replayed steps applied successfully and advanced on coherent forward ticks (`340` through `348`)
+  - the live-checkpoint sub-slice is now also real in code and validated with artifact-backed evidence:
+    - a real trained checkpoint now drives the trusted headed path through the same backend-control inbox/results boundary already proven by smoke and replay
+    - the greedy live artifact captured clean forward-tick timing and a bounded two-visible-target headed situation
+    - the sampled live artifact exercised movement, attack, consumable, prayer-toggle, run-toggle, and wait actions on the headed path
+    - rejected live policy steps surfaced explicit causes (`InvalidTargetIndex`, `ConsumptionLocked`) rather than failing silently
+  - PR 8.1 is now complete:
+    - backend-control smoke is complete
+    - replay-first validation is complete
+    - live checkpoint inference is complete
+    - fallback paths remain explicitly available
+    - broad multi-wave live stress is not claimed by this PR
+- Dependencies on prior PRs:
+  - PR 7A.7
+  - PR 7B.1 if client convenience work proved necessary
+
+### PR 8.2 — Switch Defaults Only If The RSPS-Backed Headed Path Earns Them
+- Status: `completed`
+- Objective: make V2 the default trainer backend and switch the default demo/replay backend only if the RSPS-backed path has passed the trust gate and any required integration work.
+- Why it belongs in this phase/order: default changes are the last step, not the first assumption.
+- Exact files/directories/modules likely touched:
+  - `RL/fight_caves_rl/puffer/factory.py`
+  - `RL/fight_caves_rl/puffer/trainer.py`
+  - RL replay/eval/demo scripts
+  - acceptance-gate scripts
+  - top-level docs and configuration defaults
+- Work items:
+  - make `v2_fast` the default trainer backend
+  - switch the default demo/replay backend only if the RSPS-backed path is ready
+  - preserve explicit fallback selection for `fight-caves-demo-lite` and V1 oracle/reference/debug paths
+  - encode the final performance, parity, and headed-trust requirements into acceptance scripts/docs
+- Completed work:
+  - [x] Switched RL training defaults to the V2 fast path:
+    - `scripts/train.py` now defaults to `configs/train/smoke_fast_v2.yaml`
+    - `load_smoke_train_config()` now defaults to a V2 fast config shape with `env_backend = v2_fast`
+    - default vecenv smoke and benchmark scripts now point at the V2 fast config set
+  - [x] Added an explicit backend-selection surface for demo/replay work in:
+    - `/home/jordan/code/RL/scripts/run_demo_backend.py`
+    - default backend: `rsps_headed`
+    - preserved explicit fallbacks:
+      - `fight_caves_demo_lite`
+      - `oracle_v1`
+  - [x] Kept older paths selectable instead of deleting them:
+    - V1 bridge train configs remain selectable by explicit `--config`
+    - preserved V1 smoke/baseline/benchmark configs now pin `env_backend = v1_bridge` explicitly so they do not inherit the new V2 default by accident
+    - `fight-caves-demo-lite` remains launchable as a frozen reference module
+    - `replay_eval.py` and `eval.py` remain the explicit V1 oracle/reference/debug replay path
+  - [x] Updated RL-side contract/docs/defaults so stale wording no longer presents `fight-caves-demo-lite` as the active headed default.
+  - [x] Added a repo-owned default-selection doc in:
+    - `/home/jordan/code/RL/docs/default_backend_selection.md`
+  - [x] Updated the acceptance gate so the final default choice is grounded in:
+    - V2 fast training defaults
+    - explicit fallback selection
+    - preserved V1 config pinning
+    - presence of the Phase 8 headed proof artifacts
+- Open work:
+  - None.
+- Deliverables:
+  - conditional default-backend switch
+  - updated docs/configs/tests
+  - preserved fallback/reference path
+- Acceptance criteria:
+  - training defaults to V2
+  - headed default switches only after the RSPS-backed path has earned trust
+  - backend-control smoke has passed on the headed RSPS-backed path
+  - replay/live checkpoint integration has passed on the trusted headed path
+  - action mapping, target ordering, target resolution, and headed timing validation are all signed off
+  - `fight-caves-demo-lite` remains available as fallback/reference
+  - V1 remains available as oracle/reference/debug
+  - fallback paths remain explicitly selectable after any default change
+- Expected risks or likely blockers identifiable from planning/repo inspection:
+  - old scripts or automation may still assume earlier defaults
+  - acceptance-gate failures may show that replay integration and default-switchover should remain separate PRs
+- Open questions or unknowns that may require validation during implementation:
+  - whether the fallback path should remain first-class in docs or be demoted after a stable period
+- Dependencies on prior PRs:
+  - PR 8.1
+- Current result:
+  - `v2_fast` is now the default RL training backend
+  - the trusted RSPS-backed headed path is now the explicit default demo/replay backend
+  - `fight-caves-demo-lite` remains selectable as frozen fallback/reference
+  - V1 remains selectable as oracle/reference/debug
+  - preserved V1 config paths now pin `env_backend = v1_bridge` explicitly
+  - docs, scripts, config defaults, and acceptance-gate logic now agree on the default switch
+
+## Pivot Closure State
+The roadmap above is now historical execution record rather than pending work queue.
+
+Use these active references instead:
+
+- final architecture/defaults/fallbacks summary:
+  - `/home/jordan/code/pivot_closure_report.md`
+- high-level architecture/source-of-truth split:
+  - `/home/jordan/code/pivot_plan.md`
+- RL operator defaults and fallback selection:
+  - `/home/jordan/code/RL/docs/default_backend_selection.md`
+- headed demo bring-up and Phase 8 evidence:
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_stock_client_runbook.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_backend_control_validation.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_headed_replay_validation.md`
+  - `/home/jordan/code/RSPS/docs/fight_caves_demo_live_checkpoint_validation.md`
