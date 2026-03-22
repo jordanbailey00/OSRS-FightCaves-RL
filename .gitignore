@@ -1,3 +1,5 @@
 docs/
 resources/
+.claude/
+runescape-rl-runtime/
 runescape-rl/.git-nested/
