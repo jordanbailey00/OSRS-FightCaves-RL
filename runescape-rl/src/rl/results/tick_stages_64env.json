@@ -1,0 +1,125 @@
+{
+  "created_at": "2026-03-21T16:01:51.922611+00:00",
+  "env_count": 64,
+  "rounds": 512,
+  "warmup_rounds": 16,
+  "total_ticks": 512,
+  "tick_total_nanos": 24707572,
+  "kernel_total_nanos": 202586074,
+  "observe_flat_nanos": 128388795,
+  "projection_nanos": 43666664,
+  "apply_actions_nanos": 5823042,
+  "wall_total_nanos": 386687868,
+  "stages": [
+    {
+      "index": 6,
+      "name": "NPCTask",
+      "total_nanos": 9428905,
+      "mean_nanos_per_tick": 18415.830078125,
+      "pct_of_tick": 38.16200555845795,
+      "pct_of_kernel": 4.654271053201811,
+      "calls": 512
+    },
+    {
+      "index": 2,
+      "name": "NPCResetTask",
+      "total_nanos": 4058832,
+      "mean_nanos_per_tick": 7927.40625,
+      "pct_of_tick": 16.427482230953327,
+      "pct_of_kernel": 2.0035098760046064,
+      "calls": 512
+    },
+    {
+      "index": 7,
+      "name": "PlayerTask",
+      "total_nanos": 3721721,
+      "mean_nanos_per_tick": 7268.986328125,
+      "pct_of_tick": 15.063078638402835,
+      "pct_of_kernel": 1.837106039184115,
+      "calls": 512
+    },
+    {
+      "index": 1,
+      "name": "PlayerResetTask",
+      "total_nanos": 3418427,
+      "mean_nanos_per_tick": 6676.615234375,
+      "pct_of_tick": 13.835544018651449,
+      "pct_of_kernel": 1.6873948601225175,
+      "calls": 512
+    },
+    {
+      "index": 4,
+      "name": "InstructionTask",
+      "total_nanos": 829830,
+      "mean_nanos_per_tick": 1620.76171875,
+      "pct_of_tick": 3.358606017620833,
+      "pct_of_kernel": 0.4096184814756813,
+      "calls": 512
+    },
+    {
+      "index": 5,
+      "name": "World",
+      "total_nanos": 580442,
+      "mean_nanos_per_tick": 1133.67578125,
+      "pct_of_tick": 2.3492474290877308,
+      "pct_of_kernel": 0.2865162390184826,
+      "calls": 512
+    },
+    {
+      "index": 12,
+      "name": "CharacterUpdateTask",
+      "total_nanos": 552168,
+      "mean_nanos_per_tick": 1078.453125,
+      "pct_of_tick": 2.2348128743690396,
+      "pct_of_kernel": 0.27255970220341996,
+      "calls": 512
+    },
+    {
+      "index": 9,
+      "name": "GameObjects_timers",
+      "total_nanos": 456486,
+      "mean_nanos_per_tick": 891.57421875,
+      "pct_of_tick": 1.8475550734001707,
+      "pct_of_kernel": 0.22532940739055934,
+      "calls": 512
+    },
+    {
+      "index": 8,
+      "name": "FloorItemTracking",
+      "total_nanos": 409078,
+      "mean_nanos_per_tick": 798.98046875,
+      "pct_of_tick": 1.6556786721091008,
+      "pct_of_kernel": 0.2019279962945528,
+      "calls": 512
+    },
+    {
+      "index": 11,
+      "name": "ZoneBatchUpdates",
+      "total_nanos": 383792,
+      "mean_nanos_per_tick": 749.59375,
+      "pct_of_tick": 1.5533375760273005,
+      "pct_of_kernel": 0.18944638810661782,
+      "calls": 512
+    },
+    {
+      "index": 10,
+      "name": "DynamicZones",
+      "total_nanos": 156917,
+      "mean_nanos_per_tick": 306.478515625,
+      "pct_of_tick": 0.6350968035224182,
+      "pct_of_kernel": 0.0774569529394207,
+      "calls": 512
+    },
+    {
+      "index": 3,
+      "name": "NPCs",
+      "total_nanos": 110834,
+      "mean_nanos_per_tick": 216.47265625,
+      "pct_of_tick": 0.44858313070988926,
+      "pct_of_kernel": 0.05470958482565786,
+      "calls": 512
+    }
+  ],
+  "stages_sum_nanos": 24107432,
+  "tick_vs_stages_delta_pct": -2.428971976687956
+}

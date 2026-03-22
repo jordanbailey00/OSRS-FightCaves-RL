@@ -1,0 +1,206 @@
+[zombie_farmer_kharazi_jungle]
+id = 13101
+examine = "Papa Mambo's undead minion."
+
+[astlayrix_kharazi_jungle]
+id = 13104
+examine = "He'll never give up and he'll never let you down."
+
+[common_jadinko_kharazi_jungle]
+id = 13109
+
+[common_jadinko_kharazi_jungle_2]
+id = 13110
+
+[common_jadinko_kharazi_jungle_3]
+id = 13111
+
+[common_jadinko_kharazi_jungle_4]
+id = 13112
+
+[common_jadinko_kharazi_jungle_5]
+id = 13113
+
+[common_jadinko_kharazi_jungle_6]
+id = 13114
+
+[common_jadinko_kharazi_jungle_7]
+id = 13115
+
+[common_jadinko_kharazi_jungle_8]
+id = 13116
+
+[common_jadinko_kharazi_jungle_9]
+id = 13117
+
+[common_jadinko_kharazi_jungle_10]
+id = 13118
+
+[draconic_jadinko_kharazi_jungle]
+id = 13121
+
+[draconic_jadinko_kharazi_jungle_2]
+id = 13122
+
+[draconic_jadinko_kharazi_jungle_3]
+id = 13123
+
+[draconic_jadinko_kharazi_jungle_4]
+id = 13124
+
+[draconic_jadinko_kharazi_jungle_5]
+id = 13125
+
+[draconic_jadinko_kharazi_jungle_6]
+id = 13126
+
+[draconic_jadinko_kharazi_jungle_7]
+id = 13127
+
+[draconic_jadinko_kharazi_jungle_8]
+id = 13128
+
+[draconic_jadinko_kharazi_jungle_9]
+id = 13129
+
+[igneous_jadinko_kharazi_jungle]
+id = 13133
+
+[igneous_jadinko_kharazi_jungle_2]
+id = 13134
+
+[igneous_jadinko_kharazi_jungle_3]
+id = 13135
+
+[igneous_jadinko_kharazi_jungle_4]
+id = 13136
+
+[igneous_jadinko_kharazi_jungle_5]
+id = 13137
+
+[igneous_jadinko_kharazi_jungle_6]
+id = 13138
+
+[igneous_jadinko_kharazi_jungle_7]
+id = 13139
+
+[igneous_jadinko_kharazi_jungle_8]
+id = 13140
+
+[igneous_jadinko_kharazi_jungle_9]
+id = 13141
+
+[cannibal_jadinko_kharazi_jungle]
+id = 13145
+
+[cannibal_jadinko_kharazi_jungle_2]
+id = 13146
+
+[cannibal_jadinko_kharazi_jungle_3]
+id = 13147
+
+[cannibal_jadinko_kharazi_jungle_4]
+id = 13148
+
+[cannibal_jadinko_kharazi_jungle_5]
+id = 13149
+
+[cannibal_jadinko_kharazi_jungle_6]
+id = 13150
+
+[cannibal_jadinko_kharazi_jungle_7]
+id = 13151
+
+[cannibal_jadinko_kharazi_jungle_8]
+id = 13152
+
+[cannibal_jadinko_kharazi_jungle_9]
+id = 13153
+
+[zamorak_jadinko_kharazi_jungle]
+id = 13157
+
+[zamorak_jadinko_kharazi_jungle_2]
+id = 13158
+
+[zamorak_jadinko_kharazi_jungle_3]
+id = 13159
+
+[zamorak_jadinko_kharazi_jungle_4]
+id = 13160
+
+[zamorak_jadinko_kharazi_jungle_5]
+id = 13161
+
+[zamorak_jadinko_kharazi_jungle_6]
+id = 13162
+
+[jungle_wolf_kharazi_jungle]
+id = 143
+hitpoints = 690
+att = 50
+str = 55
+def = 52
+style = "stab"
+max_hit_melee = 60
+hunt_mode = "cowardly"
+slayer_xp = 70.0
+categories = ["wolves"]
+respawn_delay = 90
+drop_table = "ice_wolf"
+examine = "A rare jungle wolf - specific to the Kharazi jungle."
+
+[tool_leprechaun_kharazi_jungle]
+id = 3121
+examine = "Looks after farming tools."
+
+[papa_mambo_kharazi_jungle]
+id = 3122
+examine = "I saw the witchdoctor, he told me what to do."
+
+[oomlie_bird_kharazi_jungle]
+id = 48
+hitpoints = 400
+att = 40
+str = 40
+def = 40
+style = "stab"
+max_hit_melee = 50
+slayer_xp = 40.0
+categories = ["birds"]
+respawn_delay = 25
+drop_table = "oomlie_bird"
+examine = "A jungle version of the chicken, but more vicious."
+
+[baby_gecko_kharazi_jungle]
+id = 7287
+
+[common_jadinko_kharazi_jungle_11]
+id = 13119
+
+[draconic_jadinko_kharazi_jungle_10]
+id = 13130
+
+[draconic_jadinko_kharazi_jungle_11]
+id = 13131
+
+[igneous_jadinko_kharazi_jungle_10]
+id = 13142
+
+[igneous_jadinko_kharazi_jungle_11]
+id = 13143
+
+[cannibal_jadinko_kharazi_jungle_10]
+id = 13154
+
+[cannibal_jadinko_kharazi_jungle_11]
+id = 13155
+
+[zamorak_jadinko_kharazi_jungle_7]
+id = 13163
+
+[zamorak_jadinko_kharazi_jungle_8]
+id = 13164
+
+[zamorak_jadinko_kharazi_jungle_9]
+id = 13165

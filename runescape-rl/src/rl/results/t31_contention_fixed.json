@@ -1,0 +1,93 @@
+{
+  "created_at": "2026-03-22T14:45:22.707510+00:00",
+  "num_runs": 3,
+  "total_timesteps": 16384,
+  "env_count": 64,
+  "mode6_runs": [
+    {
+      "mode": "mode6",
+      "backend": "fake",
+      "run_index": 0,
+      "sps": 690.9675170357524,
+      "evaluate_seconds": 10.593115142003626,
+      "train_seconds": 13.118529673998637,
+      "elapsed_seconds": 23.711679052999898,
+      "global_step": 16384
+    },
+    {
+      "mode": "mode6",
+      "backend": "fake",
+      "run_index": 1,
+      "sps": 597.1599233540629,
+      "evaluate_seconds": 12.039099083997826,
+      "train_seconds": 15.39739902600104,
+      "elapsed_seconds": 27.436536444000012,
+      "global_step": 16384
+    },
+    {
+      "mode": "mode6",
+      "backend": "fake",
+      "run_index": 2,
+      "sps": 607.2722034442467,
+      "evaluate_seconds": 11.89606705199003,
+      "train_seconds": 15.083560341007797,
+      "elapsed_seconds": 26.979663991000052,
+      "global_step": 16384
+    }
+  ],
+  "mode7_subprocess_runs": [
+    {
+      "mode": "mode7",
+      "backend": "subprocess",
+      "run_index": 0,
+      "sps": 282.3763389727042,
+      "evaluate_seconds": 16.228448230003778,
+      "train_seconds": 41.526329947000704,
+      "elapsed_seconds": 58.02185855799962,
+      "global_step": 16384
+    },
+    {
+      "mode": "mode7",
+      "backend": "subprocess",
+      "run_index": 1,
+      "sps": 420.4412109338773,
+      "evaluate_seconds": 16.77468842399776,
+      "train_seconds": 21.9413120349991,
+      "elapsed_seconds": 38.96858722199977,
+      "global_step": 16384
+    },
+    {
+      "mode": "mode7",
+      "backend": "subprocess",
+      "run_index": 2,
+      "sps": 439.0581705760211,
+      "evaluate_seconds": 16.68498255299528,
+      "train_seconds": 20.380624517998513,
+      "elapsed_seconds": 37.31623984700036,
+      "global_step": 16384
+    }
+  ],
+  "mode6_median_train_s": 15.083560341007797,
+  "mode6_median_eval_s": 11.89606705199003,
+  "mode6_median_sps": 607.2722034442467,
+  "mode7_median_train_s": 21.9413120349991,
+  "mode7_median_eval_s": 16.68498255299528,
+  "mode7_median_sps": 420.4412109338773,
+  "train_phase_inflation": 1.4546507282731571,
+  "eval_phase_inflation": 1.4025629210121286,
+  "pre_b_reference": {
+    "note": "Post-T2.1, embedded backend, before B wave",
+    "mode6_train_s": 15.21,
+    "mode6_eval_s": 12.0,
+    "mode6_sps": 607.9,
+    "mode7_embedded_train_s": 60.21,
+    "mode7_embedded_eval_s": 18.49,
+    "mode7_embedded_sps": 208.2,
+    "train_inflation": 3.96,
+    "b11_spot_check_mode7_subprocess_train_s": 20.63,
+    "b11_spot_check_train_inflation": 1.36,
+    "original_pre_t_mode6_train_s": 20.08,
+    "original_pre_t_mode7_train_s": 39.68,
+    "original_pre_t_train_inflation": 1.98
+  }
+}

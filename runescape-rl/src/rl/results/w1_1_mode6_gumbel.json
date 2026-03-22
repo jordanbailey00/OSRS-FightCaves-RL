@@ -1,0 +1,24 @@
+{
+  "runs": [
+    {
+      "sps": 504.5467914981256,
+      "evaluate_seconds": 12.689157795008214,
+      "train_seconds": 20.07285087699347,
+      "elapsed_nanos": 32980092788
+    },
+    {
+      "sps": 487.4713265938134,
+      "evaluate_seconds": 12.8004326219816,
+      "train_seconds": 21.13948588600033,
+      "elapsed_nanos": 34135341080
+    },
+    {
+      "sps": 493.2749445220307,
+      "evaluate_seconds": 12.692645142997208,
+      "train_seconds": 20.848135868993268,
+      "elapsed_nanos": 33733722307
+    }
+  ],
+  "baseline_eval_s": 28.9,
+  "baseline_sps": 336.6
+}

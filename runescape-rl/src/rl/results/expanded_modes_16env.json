@@ -1,0 +1,123 @@
+{
+  "created_at": "2026-03-21T00:49:41.099882+00:00",
+  "pr21_mode4_sps": null,
+  "modes": [
+    {
+      "mode": 5,
+      "label": "mode_5_env_with_parity",
+      "description": "Env step with parity trace hooks enabled",
+      "feasible": true,
+      "skip_reason": null,
+      "env_count": 16,
+      "total_timesteps": 4096,
+      "global_step": 4096,
+      "elapsed_nanos": 81036667,
+      "sps": 50545.02056457973,
+      "evaluate_seconds": 0.0,
+      "train_seconds": 0.0,
+      "memory_mib": 2084.66015625,
+      "extra": {
+        "rounds": 256,
+        "warmup_rounds": 16
+      }
+    },
+    {
+      "mode": 6,
+      "label": "mode_6_trainer_ceiling",
+      "description": "Trainer ceiling (fake env, real MLP64 policy + PufferLib loop)",
+      "feasible": true,
+      "skip_reason": null,
+      "env_count": 16,
+      "total_timesteps": 4096,
+      "global_step": 4352,
+      "elapsed_nanos": 12409074250,
+      "sps": 350.7110935370219,
+      "evaluate_seconds": 6.917780676998518,
+      "train_seconds": 5.060286799998721,
+      "memory_mib": 2084.66015625,
+      "extra": {
+        "evaluate_iterations": 16,
+        "train_iterations": 16,
+        "runner_stage_seconds": {
+          "vecenv_build_seconds": 0.0005237590012256987,
+          "policy_build_seconds": 0.025829516000158037,
+          "trainer_init_seconds": 0.3914852800007793,
+          "evaluate_seconds": 6.917780676998518,
+          "train_seconds": 5.060286799998721,
+          "final_evaluate_seconds": 0.43098005299907527,
+          "close_seconds": 1.188100031868089e-05
+        }
+      }
+    },
+    {
+      "mode": 7,
+      "label": "mode_7_embedded_training",
+      "description": "Embedded training (real env + MLP64 policy + PufferLib train loop)",
+      "feasible": true,
+      "skip_reason": null,
+      "env_count": 16,
+      "total_timesteps": 4096,
+      "global_step": 4096,
+      "elapsed_nanos": 20262879161,
+      "sps": 202.14304035744232,
+      "evaluate_seconds": 9.320061120997707,
+      "train_seconds": 10.941592633000255,
+      "memory_mib": 2525.7578125,
+      "extra": {
+        "config_path": "configs/benchmark/fast_train_v2_mlp64.yaml",
+        "hidden_size": 64,
+        "batch_size": 256
+      }
+    },
+    {
+      "mode": 8,
+      "label": "mode_8_headed_path",
+      "description": "Headed simulation path",
+      "feasible": false,
+      "skip_reason": "No display available; headed path is not relevant to training perf.",
+      "env_count": 0,
+      "total_timesteps": 0,
+      "global_step": 0,
+      "elapsed_nanos": 0,
+      "sps": 0.0,
+      "evaluate_seconds": 0.0,
+      "train_seconds": 0.0,
+      "memory_mib": 0.0,
+      "extra": {}
+    },
+    {
+      "mode": 9,
+      "label": "mode_9_minimal_legal_training",
+      "description": "Minimal legal training path (= mode 7: embedded, no hooks, no logging)",
+      "feasible": true,
+      "skip_reason": null,
+      "env_count": 16,
+      "total_timesteps": 4096,
+      "global_step": 4096,
+      "elapsed_nanos": 20262879161,
+      "sps": 202.14304035744232,
+      "evaluate_seconds": 9.320061120997707,
+      "train_seconds": 10.941592633000255,
+      "memory_mib": 2525.7578125,
+      "extra": {
+        "note": "Equivalent to mode 7 \u2014 embedded FastKernelVecEnv is already the minimal fast path"
+      }
+    },
+    {
+      "mode": 10,
+      "label": "mode_10_full_feature_training",
+      "description": "Full feature training (subprocess transport + logging)",
+      "feasible": false,
+      "skip_reason": "Subprocess transport requires multi-process JVM workers. Mode 7 provides the embedded-path measurement; mode 10 would add subprocess serialization + process scheduling overhead on top.",
+      "env_count": 0,
+      "total_timesteps": 0,
+      "global_step": 0,
+      "elapsed_nanos": 0,
+      "sps": 0.0,
+      "evaluate_seconds": 0.0,
+      "train_seconds": 0.0,
+      "memory_mib": 0.0,
+      "extra": {}
+    }
+  ]
+}

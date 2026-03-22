@@ -1,0 +1,29 @@
+[nechryael]
+id = 1613
+hitpoints = 1050
+att = 97
+str = 97
+def = 105
+attack_speed = 4
+combat_def = "nechryael"
+hunt_mode = "cowardly"
+respawn_delay = 30
+wander_range = 4
+slayer_xp = 105.0
+slayer_level = 80
+drop_table = "nechryael"
+categories = ["nechryael"]
+examine = "An evil death demon."
+
+[death_spawn]
+id = 1614
+hitpoints = 600
+att = 67
+str = 7
+def = 30
+combat_def = "death_spawn"
+hunt_mode = "cowardly"
+style = "slash"
+slayer_level = 80
+drop_table = "death_spawn"
+examine = "An evil death spawn."

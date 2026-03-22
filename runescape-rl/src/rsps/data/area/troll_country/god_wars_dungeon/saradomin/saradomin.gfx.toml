@@ -1,0 +1,34 @@
+[commander_zilyana_magic_strike]
+id = 1207
+
+[commander_zilyana_magic_impact]
+id = 1194
+
+[growler_sonic_spell]
+id = 1227
+height = -9 # 31
+end_height = -9 #31
+delay = 35
+curve = 5
+time_offset = 1
+multiplier = 10
+
+[growler_sonic_cast]
+id = 1184
+height = -10 # 30
+
+[growler_sonic_impact]
+id = 1186
+height = 84 # 124
+
+[bree_arrow_shoot]
+id = 1187
+
+[bree_arrow]
+id = 1188
+height = 20 # 60
+end_height = -4 # 36
+delay = 30
+curve = 15
+size_offset = 100
+time_offset = 16

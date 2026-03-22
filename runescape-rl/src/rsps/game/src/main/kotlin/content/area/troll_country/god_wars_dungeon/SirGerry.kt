@@ -1,0 +1,100 @@
+package content.area.troll_country.god_wars_dungeon
+
+import content.entity.player.bank.ownsItem
+import content.entity.player.dialogue.Happy
+import content.entity.player.dialogue.Quiz
+import content.entity.player.dialogue.Sad
+import content.entity.player.dialogue.Terrified
+import content.entity.player.dialogue.type.choice
+import content.entity.player.dialogue.type.npc
+import content.entity.player.dialogue.type.player
+import content.entity.player.dialogue.type.statement
+import content.quest.messageScroll
+import content.quest.questCompleted
+import world.gregs.voidps.engine.Script
+import world.gregs.voidps.engine.client.message
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.engine.inv.add
+import world.gregs.voidps.engine.inv.inventory
+import world.gregs.voidps.engine.inv.remove
+import world.gregs.voidps.engine.inv.replace
+
+class SirGerry : Script {
+
+    init {
+        npcOperate("Talk-to", "sir_gerry_*") {
+            if (ownsItem("knights_notes") || get("godwars_knights_notes", false)) {
+                message("He's still alive, but in no condition to talk. He appears to be almost unconscious.")
+                return@npcOperate
+            }
+            player<Quiz>("Who are you? What are you doing here in the snow?")
+            npc<Terrified>("My name is...Sir Gerry. I am...a member of a secret...society of knights. My time is short and I need...your help.")
+            if (questCompleted("recruitment_drive")) {
+                player<Quiz>("A secret society of knights? You don't mean the Temple Knights, do you?")
+                npc<Happy>("Yes! Praise Saradomin! You...have been sent in...my hour of need. Please, take...this scroll to Sir Tiffy in Falador park... You should not...read it.")
+            } else {
+                player<Quiz>("A secret society of knights? What a surprise! Is there an old charter or decree that says if you're a knight you have to belong to a secret order?")
+                npc<Sad>("I'm sorry, my friend... I do not understand your meaning. Please, time is short... Take this scroll to Sir Tiffy. You will find him in Falador park... You should not...read it... It contains information for his eyes only.")
+            }
+            statement("The knight hands you a scroll.")
+            inventory.add("knights_notes")
+        }
+
+        objectOperate("Search", "godwars_knight*") {
+            if (ownsItem("knights_notes") || ownsItem("knights_notes_opened")) {
+                message("You find nothing of value on the knight.")
+                return@objectOperate
+            }
+            message("You find some handwritten notes on the knight.")
+            inventory.add("knights_notes")
+        }
+
+        itemOption("Read", "knights_notes") { (item) ->
+            choice("The scroll is sealed. Do you still want to open it?") {
+                option("Yes") {
+                    if (inventory.replace(item.id, "knights_notes_opened")) {
+                        message("You break the wax seal and open the scroll.")
+                        open(this)
+                    }
+                }
+                option("No")
+            }
+        }
+
+        objectOperate("Tie-rope", "godwars_hole") {
+            if (!inventory.contains("rope")) {
+                return@objectOperate
+            }
+            if (get("godwars_knights_notes", false) || ownsItem("knights_notes") || ownsItem("knights_notes_opened")) {
+                inventory.remove("rope")
+                set("godwars_entrance_rope", true)
+            } else {
+                npc<Terrified>("sir_gerry_normal", "Cough... Hey, over here.")
+            }
+        }
+
+        itemOption("Read", "knights_notes_opened") {
+            open(this)
+        }
+    }
+
+    fun open(player: Player) {
+        player.messageScroll(
+            lines = listOf(
+                "",
+                "",
+                "My friend, you were right to send me to investigate the",
+                "dwarf's drunken claims, for I have discovered a treasure",
+                "beyond our wildest dreams. The aviansie are alive, and I",
+                "suspect they still guard the Godsword! Beneath the remnants",
+                "of the temple a great battle is being fought between followers",
+                "of Bandos, Armadyl, Saradomin and Zamorak. My command was",
+                "slaughtered and I am grievously wounded. YOU MUST PREVENT",
+                "THE GODSWORD FROM FALLING INTO THE WRONG HANDS! I do not",
+                "know how I am going to get this message to you, why is that",
+                "talking skull never around when he's needed? Your comrade,",
+                "Sir Gerry.",
+            ),
+        )
+    }
+}

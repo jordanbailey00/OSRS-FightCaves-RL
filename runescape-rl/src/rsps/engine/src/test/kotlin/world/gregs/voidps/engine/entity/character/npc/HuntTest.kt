@@ -1,0 +1,111 @@
+package world.gregs.voidps.engine.entity.character.npc
+
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
+import world.gregs.voidps.cache.definition.data.ObjectDefinition
+import world.gregs.voidps.engine.Caller
+import world.gregs.voidps.engine.Script
+import world.gregs.voidps.engine.ScriptTest
+import world.gregs.voidps.engine.data.definition.ObjectDefinitions
+import world.gregs.voidps.engine.entity.character.npc.hunt.Hunt
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.engine.entity.item.floor.FloorItem
+import world.gregs.voidps.engine.entity.obj.GameObject
+import world.gregs.voidps.engine.script.KoinMock
+import world.gregs.voidps.type.Tile
+
+class HuntTest {
+
+    @Nested
+    inner class HuntFloorItemTest : ScriptTest {
+        override val checks = listOf(
+            listOf("mode"),
+        )
+        override val failedChecks = emptyList<List<String>>()
+
+        override fun Script.register(args: List<String>, caller: Caller) {
+            huntFloorItem(args[0]) {
+                caller.call()
+            }
+        }
+
+        override fun invoke(args: List<String>) {
+            Hunt.hunt(NPC("npc"), FloorItem(Tile.EMPTY, "item"), "mode")
+        }
+
+        override val apis = listOf(Hunt)
+
+    }
+
+    @Nested
+    inner class HuntNPCTest : ScriptTest {
+        override val checks = listOf(
+            listOf("mode"),
+        )
+        override val failedChecks = emptyList<List<String>>()
+
+        override fun Script.register(args: List<String>, caller: Caller) {
+            huntNPC(args[0]) {
+                caller.call()
+            }
+        }
+
+        override fun invoke(args: List<String>) {
+            Hunt.hunt(NPC("npc"), NPC("target"), "mode")
+        }
+
+        override val apis = listOf(Hunt)
+
+    }
+
+    @Nested
+    inner class HuntPlayerTest : ScriptTest {
+        override val checks = listOf(
+            listOf("npc", "mode"),
+            listOf("*", "mode"),
+        )
+        override val failedChecks = listOf(
+            listOf("npc", "*"),
+        )
+
+        override fun Script.register(args: List<String>, caller: Caller) {
+            huntPlayer(args[0], args[1]) {
+                caller.call()
+            }
+        }
+
+        override fun invoke(args: List<String>) {
+            Hunt.hunt(NPC("npc"), Player(), "mode")
+        }
+
+        override val apis = listOf(Hunt)
+
+    }
+
+    @Nested
+    inner class HuntObjectTest : KoinMock(), ScriptTest {
+        override val checks = listOf(
+            listOf("mode"),
+        )
+        override val failedChecks = emptyList<List<String>>()
+
+        @BeforeEach
+        fun setup() {
+            ObjectDefinitions.init(arrayOf(ObjectDefinition(0, stringId = "obj")))
+        }
+
+        override fun Script.register(args: List<String>, caller: Caller) {
+            huntObject(args[0]) {
+                caller.call()
+            }
+        }
+
+        override fun invoke(args: List<String>) {
+            Hunt.hunt(NPC("npc"), GameObject(0), "mode")
+        }
+
+        override val apis = listOf(Hunt)
+
+    }
+
+}

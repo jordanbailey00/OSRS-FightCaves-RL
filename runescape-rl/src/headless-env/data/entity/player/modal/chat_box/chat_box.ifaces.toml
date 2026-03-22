@@ -1,0 +1,36 @@
+[filter_buttons]
+id = 751
+type = "chat_settings"
+
+[.all]
+id = 30
+
+[.game]
+id = 27
+
+[.public]
+id = 24
+
+[.private]
+id = 21
+
+[.clan]
+id = 18
+
+[.trade]
+id = 15
+
+[.assist]
+id = 12
+
+[.report]
+id = 9
+
+[chat_box]
+id = 752
+type = "chat_box"
+
+[private_chat]
+id = 754
+type = "private_chat"
+

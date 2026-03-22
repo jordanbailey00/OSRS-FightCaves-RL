@@ -1,0 +1,113 @@
+{
+  "created_at": "2026-03-21T00:16:13.482364+00:00",
+  "config": {
+    "config_id": "sps_decomposition_v0",
+    "env_count": 64,
+    "rounds": 256,
+    "warmup_rounds": 16,
+    "start_wave": 1,
+    "tick_cap": 20000,
+    "ammo": 1000,
+    "prayer_potions": 8,
+    "sharks": 20,
+    "seed_base": 70000,
+    "action_id": 0
+  },
+  "env_count": 4,
+  "rounds": 512,
+  "warmup_rounds": 16,
+  "mode_1_core_sim": {
+    "label": "mode_1_core_sim",
+    "description": "JVM tick only (12 headless stages)",
+    "total_nanos": 16229910,
+    "env_steps": 2048,
+    "sps": 126186.77491125952,
+    "mean_step_nanos": 7924.7607421875,
+    "latency": {
+      "mean_ns": 7924.75,
+      "p50_ns": 7924.75,
+      "p95_ns": 7924.75,
+      "p99_ns": 7924.75,
+      "min_ns": 7924.75,
+      "max_ns": 7924.75,
+      "std_ns": 0.0
+    }
+  },
+  "mode_2_sim_reward": {
+    "label": "mode_2_sim_reward",
+    "description": "JVM tick + reward/terminal projection",
+    "total_nanos": 21297565,
+    "env_steps": 2048,
+    "sps": 96161.22782111476,
+    "mean_step_nanos": 10399.20166015625,
+    "latency": {
+      "mean_ns": 10399.0,
+      "p50_ns": 10399.0,
+      "p95_ns": 10399.0,
+      "p99_ns": 10399.0,
+      "min_ns": 10399.0,
+      "max_ns": 10399.0,
+      "std_ns": 0.0
+    }
+  },
+  "mode_3_sim_obs": {
+    "label": "mode_3_sim_obs",
+    "description": "JVM tick + flat observation build",
+    "total_nanos": 28801250,
+    "env_steps": 2048,
+    "sps": 71108.0248253114,
+    "mean_step_nanos": 14063.1103515625,
+    "latency": {
+      "mean_ns": 14063.0,
+      "p50_ns": 14063.0,
+      "p95_ns": 14063.0,
+      "p99_ns": 14063.0,
+      "min_ns": 14063.0,
+      "max_ns": 14063.0,
+      "std_ns": 0.0
+    }
+  },
+  "mode_4_full_env_step": {
+    "label": "mode_4_full_env_step",
+    "description": "Full env step (JVM + Python + JPype crossing)",
+    "total_nanos": 79280926,
+    "env_steps": 2048,
+    "sps": 25832.19070877149,
+    "mean_step_nanos": 38711.3896484375,
+    "latency": {
+      "mean_ns": 38711.3896484375,
+      "p50_ns": 32576.625,
+      "p95_ns": 75195.9125,
+      "p99_ns": 106661.79749999999,
+      "min_ns": 26537.0,
+      "max_ns": 164302.25,
+      "std_ns": 17451.061554450687
+    }
+  },
+  "jvm_kernel_totals": {
+    "tick_nanos": 16229910,
+    "observe_flat_nanos": 12571340,
+    "projection_nanos": 5067655,
+    "apply_actions_nanos": 2306410,
+    "kernel_total_nanos": 36175316,
+    "tick_pct": 44.86459772735641,
+    "observe_flat_pct": 34.751154627094344,
+    "projection_pct": 14.00859912322535,
+    "apply_actions_pct": 6.375645758008029
+  },
+  "python_overhead": {
+    "action_pack_nanos": 5068384,
+    "jpype_call_nanos": 48375426,
+    "buffer_apply_nanos": 13804519,
+    "done_reset_nanos": 0,
+    "total_send_nanos": 78391611,
+    "recv_nanos": 180317
+  },
+  "jvm_pct_of_total": 45.62928036435901,
+  "python_pct_of_total": 54.37071963564099,
+  "memory_profile": {
+    "process_peak_rss_kib": 891040,
+    "children_peak_rss_kib": 0,
+    "combined_peak_rss_kib": 891040
+  }
+}

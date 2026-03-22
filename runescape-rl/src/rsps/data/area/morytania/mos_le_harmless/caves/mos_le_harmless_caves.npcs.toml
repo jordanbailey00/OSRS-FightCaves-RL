@@ -1,0 +1,29 @@
+[albino_bat]
+id = 4345
+hitpoints = 330
+att = 57
+str = 57
+def = 30
+combat_def = "bat"
+max_hit_stab = 70
+hunt_mode = "cowardly"
+slayer_xp = 33.0
+categories = ["bats"]
+respawn_delay = 35
+examine = "It's all white by me."
+
+[cave_horror]
+id = 4355
+hitpoints = 550
+att = 80
+str = 77
+def = 62
+mage = 80
+combat_def = "cave_horror"
+hunt_mode = "cowardly"
+slayer_xp = 55.0
+categories = ["cave_horrors"]
+respawn_delay = 50
+drop_table = "cave_horror"
+examine = "A horrible, emaciated ape like creature with beady red eyes."
+

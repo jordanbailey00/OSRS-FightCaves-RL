@@ -1,0 +1,82 @@
+[monk_of_zamorak_paterdomus_temple]
+id = 1044
+hitpoints = 200
+att = 18
+str = 18
+def = 22
+mage = 25
+combat_def = "monk_of_zamorak"
+max_hit_crush = 30
+max_hit_magic = 110
+hunt_mode = "cowardly"
+respawn_delay = 25
+examine = "An evil human cleric."
+
+[monk_of_zamorak_paterdomus_temple_2]
+id = 1045
+hitpoints = 100
+att = 8
+str = 8
+def = 12
+mage = 25
+combat_def = "monk_of_zamorak"
+max_hit_crush = 50
+max_hit_magic = 50
+hunt_mode = "cowardly"
+respawn_delay = 25
+examine = "An evil human cleric."
+
+[monk_of_zamorak_paterdomus_temple_3]
+id = 1046
+hitpoints = 250
+att = 25
+str = 25
+def = 25
+mage = 40
+combat_def = "monk_of_zamorak"
+max_hit_melee = 30
+max_hit_magic = 80
+hunt_mode = "cowardly"
+respawn_delay = 25
+examine = "An evil human cleric."
+
+[drezel_paterdomus_temple]
+id = 1047
+
+[drezel_paterdomus_temple_normal]
+id = 7707
+
+[mercenary_adventurer]
+id = 1048
+
+[mercenary_adventurer_normal]
+id = 7664
+
+[ulizius_paterdomus_temple]
+id = 1054
+examine = "A slightly nervous guard."
+
+[hiylik_myna]
+id = 1514
+examine = "A local holy man who supports the people trying to get through Mort Myre."
+
+[monk_paterdomus_temple]
+id = 3074
+
+[dead_monk_paterdomus_temple]
+id = 3076
+
+[blaze_sharpeye_paterdomus_temple]
+id = 8065
+
+[monk_paterdomus_temple_2]
+id = 3075
+
+[dead_monk_paterdomus_temple_2]
+id = 3077
+
+[blaze_sharpeye_paterdomus_temple_2]
+id = 5191
+
+[blaze_sharpeye_paterdomus_temple_3]
+id = 5194

@@ -1,0 +1,177 @@
+# 12081 port_sarim
+[basic_ladder_up]
+option = "Climb-up"
+tile = { x = 3005, y = 10363 }
+delta = { y = -6400 }
+
+[9472]
+option = "Climb-down"
+tile = { x = 3008, y = 3150 }
+delta = { y = 6400 }
+
+[40114]
+option = "Climb-up"
+tile = { x = 3010, y = 3184 }
+delta = { level = 1 }
+
+[55450]
+option = "Climb-down"
+tile = { x = 3010, y = 3184, level = 1 }
+delta = { level = -1 }
+
+[40114]
+option = "Climb-up"
+tile = { x = 3013, y = 3179, level = 1 }
+delta = { level = 1 }
+
+[40113]
+option = "Climb-down"
+tile = { x = 3013, y = 3179, level = 2 }
+delta = { level = -1 }
+
+[287]
+option = "Climb-down"
+tile = { x = 3042, y = 3198, level = 1 }
+delta = { level = -1 }
+
+# 12082 port_sarim
+[272]
+option = "Climb-up"
+tile = { x = 3042, y = 3198 }
+delta = { level = 1 }
+
+[2590]
+option = "Climb-down"
+tile = { x = 3049, y = 3208, level = 1 }
+to = { x = 3049, y = 3208 }
+
+[272]
+option = "Climb-up"
+tile = { x = 3049, y = 3208 }
+delta = { level = 1 }
+
+[273]
+option = "Climb-down"
+tile = { x = 3034, y = 3214, level = 1 }
+delta = { level = -1 }
+
+[272]
+option = "Climb-up"
+tile = { x = 3034, y = 3214 }
+delta = { level = 1 }
+
+[273]
+option = "Climb-down"
+tile = { x = 3034, y = 3218, level = 1 }
+delta = { level = -1 }
+
+[272]
+option = "Climb-up"
+tile = { x = 3034, y = 3218 }
+delta = { level = 1 }
+
+[273]
+option = "Climb-down"
+tile = { x = 3034, y = 3222, level = 1 }
+delta = { level = -1 }
+
+[272]
+option = "Climb-up"
+tile = { x = 3034, y = 3222 }
+delta = { level = 1 }
+
+[273]
+option = "Climb-down"
+tile = { x = 3052, y = 3229, level = 1 }
+delta = { level = -1 }
+
+[272]
+option = "Climb-up"
+tile = { x = 3052, y = 3229 }
+delta = { level = 1 }
+
+[40026]
+option = "Climb-up"
+tile = { x = 3011, y = 3235 }
+delta = { level = 1 }
+
+[40027]
+option = "Climb-down"
+tile = { x = 3011, y = 3235, level = 1 }
+delta = { level = -1 }
+
+[10321]
+option = "Climb-down"
+tile = { x = 3018, y = 3232 }
+to = { x = 2962, y = 9650 }
+
+[40026]
+option = "Climb-up"
+tile = { x = 3013, y = 3244 }
+delta = { level = 1 }
+
+[40027]
+option = "Climb-down"
+tile = { x = 3013, y = 3244, level = 1 }
+delta = { level = -1 }
+
+[trapdoor_103_opened]
+option = "Climb-down"
+tile = { x = 3015, y = 3257 }
+to = { x = 3221, y = 4522 }
+
+[40057]
+option = "Climb-up"
+tile = { x = 3023, y = 3261 }
+to = { x = 3025, y = 3261, level = 1 }
+
+[40059]
+option = "Climb-down"
+tile = { x = 3024, y = 3261, level = 1 }
+to = { x = 3024, y = 3260 }
+
+[40057]
+option = "Climb-up"
+tile = { x = 3026, y = 3248 }
+to = { x = 3026, y = 3247, level = 1 }
+
+[port_sarim_entrana_gangplank_exit]
+option = "Cross"
+tile = { x = 3048, y = 3232, level = 1 }
+to = { x = 3048, y = 3234 }
+
+[port_sarim_entrana_gangplank_enter]
+option = "Cross"
+tile = { x = 3048, y = 3233 }
+to = { x = 3048, y = 3231, level = 1 }
+
+[port_sarim_musa_point_gangplank_exit]
+option = "Cross"
+tile = { x = 3031, y = 3217, level = 1 }
+to = { x = 3029, y = 3217 }
+
+[port_sarim_musa_point_gangplank_enter]
+option = "Cross"
+tile = { x = 3030, y = 3217 }
+to = { x = 3032, y = 3217, level = 1 }
+
+[port_sarim_void_outpost_gangplank_exit]
+option = "Cross"
+tile = { x = 3041, y = 3200, level = 1 }
+to = { x = 3041, y = 3202 }
+
+[port_sarim_void_outpost_gangplank_enter]
+option = "Cross"
+tile = { x = 3041, y = 3201 }
+to = { x = 3041, y = 3199, level = 1 }
+
+[port_sarim_lady_lumbridge_gangplank_exit]
+option = "Cross"
+tile = { x = 3047, y = 3206, level = 1 }
+to = { x = 3047, y = 3204 }
+
+[port_sarim_void_outpost_gangplank_enter]
+option = "Cross"
+tile = { x = 3047, y = 3205 }
+to = { x = 3047, y = 3207, level = 1 }
+

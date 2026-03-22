@@ -1,0 +1,44 @@
+{
+  "mode7_gumbel": {
+    "mode": 7,
+    "label": "mode_7_embedded_training",
+    "description": "Embedded training (real env + MLP64 policy + PufferLib train loop)",
+    "feasible": true,
+    "skip_reason": null,
+    "env_count": 64,
+    "total_timesteps": 16384,
+    "global_step": 16384,
+    "elapsed_nanos": 61707183134,
+    "sps": 265.5120387592703,
+    "evaluate_seconds": 18.416601540000556,
+    "train_seconds": 43.28868591200808,
+    "memory_mib": 2129.734375,
+    "extra": {
+      "config_path": "configs/benchmark/fast_train_v2_mlp64.yaml",
+      "hidden_size": 64,
+      "batch_size": 256
+    }
+  },
+  "mode5_gumbel": {
+    "mode": 5,
+    "label": "mode_5_env_with_parity",
+    "description": "Env step with parity trace hooks enabled",
+    "feasible": true,
+    "skip_reason": null,
+    "env_count": 64,
+    "total_timesteps": 16384,
+    "global_step": 16384,
+    "elapsed_nanos": 254022028,
+    "sps": 64498.34342712987,
+    "evaluate_seconds": 0.0,
+    "train_seconds": 0.0,
+    "memory_mib": 1073.26171875,
+    "extra": {
+      "rounds": 256,
+      "warmup_rounds": 16
+    }
+  },
+  "baseline_mode7_sps": 213.7,
+  "baseline_mode7_eval_s": 36.98,
+  "baseline_mode7_train_s": 39.68
+}

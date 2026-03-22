@@ -1,0 +1,9 @@
+[skoblin]
+id = 9611
+hitpoints = 950
+combat_def = "skoblin"
+max_hit_melee = 28
+respawn_delay = 60
+drop_table = "skoblin"
+categories = ["skoblin"]
+examine = "Could do with gaining a few pounds."

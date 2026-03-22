@@ -1,0 +1,13 @@
+{
+  "method": "gumbel",
+  "sps": 321.9119366201917,
+  "evaluate_seconds": 14.915316149010323,
+  "train_seconds": 35.97951158698925,
+  "global_step": 16384,
+  "elapsed_nanos": 50895907036,
+  "extra": {
+    "config_path": "configs/benchmark/fast_train_v2_mlp64.yaml",
+    "hidden_size": 64,
+    "batch_size": 256
+  }
+}

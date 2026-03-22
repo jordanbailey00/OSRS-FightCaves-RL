@@ -1,0 +1,354 @@
+{
+  "training_gc": {
+    "profile": "full_training_gc",
+    "created_at": "2026-03-21T17:13:02.602090+00:00",
+    "env_count": 64,
+    "total_timesteps": 16384,
+    "global_step": 16384,
+    "sps": 227.25723795888183,
+    "elapsed_seconds": 72.094513456,
+    "evaluate_seconds": 35.63108405899766,
+    "train_seconds": 36.461980809000124,
+    "wall_nanos": 72094513456,
+    "jfr_file": "results/gc_full_training.jfr",
+    "gc": {
+      "gc_count": 1,
+      "gc_causes": {
+        "System.gc()": 1
+      },
+      "gc_total_pause_ms": 0,
+      "gc_avg_pause_ms": 0,
+      "gc_max_pause_ms": 0,
+      "gc_durations_ms": [],
+      "pause_event_count": 1,
+      "pause_total_ms": 0,
+      "pause_avg_ms": 0,
+      "pause_max_ms": 0,
+      "heap_used_min_mb": 0.0,
+      "heap_used_max_mb": 0.0,
+      "heap_samples": 2
+    },
+    "allocations": {
+      "total_events": 126,
+      "total_bytes": 2529,
+      "top_types_by_count": [
+        {
+          "type": "java.lang.Integer",
+          "count": 36,
+          "pct": 28.6
+        },
+        {
+          "type": "float[]",
+          "count": 20,
+          "pct": 15.9
+        },
+        {
+          "type": "java.util.ArrayList$Itr",
+          "count": 16,
+          "pct": 12.7
+        },
+        {
+          "type": "java.lang.Object[]",
+          "count": 13,
+          "pct": 10.3
+        },
+        {
+          "type": "java.lang.String",
+          "count": 6,
+          "pct": 4.8
+        },
+        {
+          "type": "boolean[]",
+          "count": 6,
+          "pct": 4.8
+        },
+        {
+          "type": "java.util.ArrayList",
+          "count": 6,
+          "pct": 4.8
+        },
+        {
+          "type": "kotlin.collections.builders.ListBuilder",
+          "count": 3,
+          "pct": 2.4
+        },
+        {
+          "type": "java.util.LinkedHashMap",
+          "count": 3,
+          "pct": 2.4
+        },
+        {
+          "type": "sim.engine.entity.character.npc.NPCs$$Lambda+0x00007f45f81ea9a0.859123506",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "java.util.Collections$SingletonMap",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ExclusiveNode",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionNode",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "java.util.Collections$1",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "byte[]",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "type": "HeadlessTrainingFlatObservationV1",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "type": "kotlin.Pair",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "type": "HeadlessVisibleNpcTarget",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "type": "org.jpype.ref.JPypeReference",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "type": "java.lang.Class",
+          "count": 1,
+          "pct": 0.8
+        }
+      ],
+      "top_types_by_bytes": [
+        {
+          "type": "java.lang.String",
+          "bytes": 1336,
+          "pct": 52.8
+        },
+        {
+          "type": "java.util.ArrayList$Itr",
+          "bytes": 878,
+          "pct": 34.7
+        },
+        {
+          "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ExclusiveNode",
+          "bytes": 200,
+          "pct": 7.9
+        },
+        {
+          "type": "java.lang.Integer",
+          "bytes": 40,
+          "pct": 1.6
+        },
+        {
+          "type": "byte[]",
+          "bytes": 20,
+          "pct": 0.8
+        },
+        {
+          "type": "boolean[]",
+          "bytes": 12,
+          "pct": 0.5
+        },
+        {
+          "type": "java.lang.Object[]",
+          "bytes": 12,
+          "pct": 0.5
+        },
+        {
+          "type": "java.util.ArrayList",
+          "bytes": 8,
+          "pct": 0.3
+        },
+        {
+          "type": "float[]",
+          "bytes": 6,
+          "pct": 0.2
+        },
+        {
+          "type": "sim.engine.entity.character.npc.NPCs$$Lambda+0x00007f45f81ea9a0.859123506",
+          "bytes": 4,
+          "pct": 0.2
+        },
+        {
+          "type": "java.util.Collections$SingletonMap",
+          "bytes": 4,
+          "pct": 0.2
+        },
+        {
+          "type": "kotlin.collections.builders.ListBuilder",
+          "bytes": 4,
+          "pct": 0.2
+        },
+        {
+          "type": "java.util.LinkedHashMap",
+          "bytes": 4,
+          "pct": 0.2
+        },
+        {
+          "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionNode",
+          "bytes": 1,
+          "pct": 0.0
+        }
+      ],
+      "top_alloc_sites": [
+        {
+          "site": "sim.engine.data.definition.DefinitionsDecoder.getOrNull",
+          "count": 36,
+          "pct": 28.6
+        },
+        {
+          "site": "HeadlessFlatObservationBuilder.build",
+          "count": 12,
+          "pct": 9.5
+        },
+        {
+          "site": "FastFightCavesKernelRuntime.fightCaveNpcs",
+          "count": 10,
+          "pct": 7.9
+        },
+        {
+          "site": "headless.fast.FastRewardFeatureWriter.packRows",
+          "count": 7,
+          "pct": 5.6
+        },
+        {
+          "site": "FastFightCavesKernelRuntime.stepBatch",
+          "count": 6,
+          "pct": 4.8
+        },
+        {
+          "site": "HeadlessActionAdapter.sourceNpcsFromInstanceOrRegion",
+          "count": 6,
+          "pct": 4.8
+        },
+        {
+          "site": "headless.fast.FastFlatObsWriter.copyBatch",
+          "count": 5,
+          "pct": 4.0
+        },
+        {
+          "site": "sim.engine.entity.character.npc.NPCs.at_9yWzx4I$lambda$10",
+          "count": 5,
+          "pct": 4.0
+        },
+        {
+          "site": "sim.engine.entity.character.npc.NPCs.at-9yWzx4I(int) line: 134",
+          "count": 5,
+          "pct": 4.0
+        },
+        {
+          "site": "HeadlessFlatObservationBuilderKt.packFlatObservationBatch",
+          "count": 4,
+          "pct": 3.2
+        },
+        {
+          "site": "HeadlessActionAdapter.visibleNpcTargets",
+          "count": 3,
+          "pct": 2.4
+        },
+        {
+          "site": "HeadlessActionAdapter.applied",
+          "count": 3,
+          "pct": 2.4
+        },
+        {
+          "site": "sim.engine.entity.character.npc.NPCs.at-9yWzx4I(int) line: 135",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "HeadlessActionAdapter.toggleRun",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "java.util.concurrent.locks.AbstractQueuedSynchronizer.acquire",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.newConditionNode",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "java.util.ArrayList.iterator",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "java.util.Collections.singletonIterator",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "java.util.Arrays.copyOfRangeByte",
+          "count": 2,
+          "pct": 1.6
+        },
+        {
+          "site": "FastFightCavesKernelRuntime.captureRewardSnapshot",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "site": "HeadlessRuntime.applyActionsBatch",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "site": "sim.engine.client.instruction.InstructionTask.run",
+          "count": 1,
+          "pct": 0.8
+        },
+        {
+          "site": "java.lang.Thread.run",
+          "count": 1,
+          "pct": 0.8
+        }
+      ],
+      "phase_attribution": [
+        {
+          "phase": "other",
+          "count": 75,
+          "pct": 59.5
+        },
+        {
+          "phase": "observe_flat",
+          "count": 26,
+          "pct": 20.6
+        },
+        {
+          "phase": "projection",
+          "count": 13,
+          "pct": 10.3
+        },
+        {
+          "phase": "apply_actions",
+          "count": 11,
+          "pct": 8.7
+        },
+        {
+          "phase": "tick",
+          "count": 1,
+          "pct": 0.8
+        }
+      ]
+    }
+  }
+}

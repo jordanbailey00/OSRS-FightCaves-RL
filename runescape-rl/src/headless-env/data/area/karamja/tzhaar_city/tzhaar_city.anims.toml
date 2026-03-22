@@ -1,0 +1,47 @@
+[tzhaar_mej_attack]
+id = 9260
+
+[tzhaar_attack]
+id = 9286
+
+[tzhaar_defend]
+id = 9287
+
+[tzhaar_death]
+id = 9288
+
+[tzhaar_death_one_arm2]
+id = 9289
+
+[tzhaar_death_one_arm3]
+id = 9290
+
+[tzhaar_death_one_arm4]
+id = 9291
+
+[tzhaar_attack_large_arm]
+id = 9292
+
+[tzhaar_attack_large_arm2]
+id = 9293
+
+[tzhaar_throne_sit]
+id = 9299
+
+[tzhaar_bongos]
+id = 9311
+
+[tzhaar_stomp_rage]
+id = 9312
+
+[tzhaar_attack_two_arms]
+id = 9313
+
+[tzhaar_attack_two_arms2]
+id = 9314
+
+[tzhaar_attack_2]
+id = 9345
+
+[tzhaar_stick_out_arm]
+id = 9349

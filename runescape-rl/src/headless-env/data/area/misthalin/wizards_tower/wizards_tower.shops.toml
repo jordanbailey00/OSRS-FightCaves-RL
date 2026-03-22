@@ -1,0 +1,5 @@
+[mizgogs_amulets_of_accuracy]
+id = 602
+defaults = [
+    { id = "amulet_of_accuracy", amount = 30 },
+]

@@ -1,0 +1,36 @@
+package world.gregs.voidps.engine.entity.character.mode.move
+
+import world.gregs.voidps.engine.data.definition.Areas
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.type.Tile
+
+/**
+ * In osrs this is called an EngineQueue and also handles stat changes/level up:
+ * it would check if the zone entered or exited contains a script and add them to this queue
+ * to fire on the next cycle.
+ *
+ * However, this is simplified and looks up the areas directly and sends an event if one has changed
+ */
+class AreaQueue(
+    private val player: Player,
+) {
+    fun tick() {
+        if (player.steps.movedFrom.id == 0) {
+            return
+        }
+        val from = player.steps.movedFrom
+        player.steps.movedFrom = Tile.EMPTY
+        Moved.player(player, from)
+        val to = player.tile
+        for (def in Areas.get(from.zone)) {
+            if (from in def.area && to !in def.area) {
+                Moved.exit(player, def.name, def)
+            }
+        }
+        for (def in Areas.get(to.zone)) {
+            if (to in def.area && from !in def.area) {
+                Moved.enter(player, def.name, def)
+            }
+        }
+    }
+}

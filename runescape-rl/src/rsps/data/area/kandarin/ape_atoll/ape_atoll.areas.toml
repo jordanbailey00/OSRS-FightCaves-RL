@@ -1,0 +1,24 @@
+[ape_atoll_multi_area]
+x = [2688, 2815]
+y = [2688, 2815]
+level = 0
+tags = ["multi_combat"]
+
+[ape_atoll]
+x = [2688, 2815]
+y = [2688, 2815]
+tags = ["multi_combat", "penguin_area"]
+hint = "where monkeys rule."
+
+[ape_atoll_agility_dungeon]
+x = [3008, 3071]
+y = [5440, 5503]
+tags = ["multi_combat"]
+
+[ape_atoll_east_fishing_area]
+x = [2771, 2780]
+y = [2733, 2741]
+
+[ape_atoll_west_fishing_area]
+x = [2693, 2700]
+y = [2702, 2715]

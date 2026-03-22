@@ -1,0 +1,153 @@
+[door_support_north]
+id = 2440
+retaliates = false
+respawn_delay = 0
+death_anim = "door_support_north_fall"
+
+[door_support_north_fall]
+id = 2441
+
+[door_support_north_fallen]
+id = 2442
+
+[door_support_east]
+id = 2443
+retaliates = false
+respawn_delay = 0
+death_anim = "door_support_east_fall"
+
+[door_support_east_fall]
+id = 2444
+
+[door_support_east_fallen]
+id = 2445
+
+[door_support_south]
+id = 2446
+retaliates = false
+respawn_delay = 0
+death_anim = "door_support_south_fall"
+
+[door_support_south_fall]
+id = 2447
+
+[door_support_south_fallen]
+id = 2448
+
+[akeladden]
+id = 2439
+
+[jarvald_waterbirth_island]
+id = 2438
+examine = "A Fremennik raider."
+
+[bardur_waterbirth_island]
+id = 9104
+
+[dagannoth_guardian_dagannoth_caves]
+id = 9092
+categories = ["dagannoth"]
+examine = "The Dagannoth Mother's guardians."
+
+[bardur]
+id = 2879
+examine = "A Fremennik warrior, hard at work."
+
+[dagannoth_fledgeling]
+id = 2880
+hitpoints = 1000
+att = 50
+str = 50
+def = 50
+style = "stab"
+max_hit_melee = 60
+xp_bonus = -10.0
+slayer_xp = 0.0
+categories = ["dagannoth"]
+respawn_delay = 30
+drop_table = "bones"
+examine = "A knee-high horror from the ocean depths..."
+
+[dagannoth_supreme]
+id = 2881
+hitpoints = 2550
+att = 255
+str = 255
+def = 128
+mage = 255
+range = 255
+combat_def = "dagannoth_supreme"
+hunt_mode = "aggressive"
+hunt_range = 8
+respawn_delay = 150
+slayer_xp = 255.0
+categories = ["dagannoth"]
+xp_bonus = 3.0
+examine = "The dagannoth king responsible for the death of the Bukalla."
+
+[dagannoth_prime]
+id = 2882
+hitpoints = 2550
+att = 255
+str = 255
+def = 255
+mage = 255
+combat_def = "dagannoth_prime"
+hunt_mode = "aggressive"
+hunt_range = 8
+respawn_delay = 150
+slayer_xp = 331.4
+categories = ["dagannoth"]
+xp_bonus = 3.0
+examine = "A legendary dagannoth king, rumoured to fly on the North winds."
+
+[dagannoth_rex]
+id = 2883
+hitpoints = 2550
+att = 255
+str = 255
+def = 255
+range = 255
+combat_def = "dagannoth_rex"
+hunt_mode = "aggressive"
+hunt_range = 8
+respawn_delay = 150
+slayer_xp = 331.4
+categories = ["dagannoth"]
+xp_bonus = 3.0
+examine = "Firstborn of the legendary dagannoth kings."
+
+[suspicious_water]
+id = 2891
+
+[spinolyp]
+id = 2892
+hitpoints = 1000
+att = 10
+str = 10
+def = 10
+range = 100
+combat_def = "spinolyp"
+hunt_mode = "aggressive_intolerant"
+hunt_range = 10
+respawn_delay = 10
+drop_table = "bones"
+examine = "A sneaky, spiny, subterranean sea-dwelling scamp."
+
+[suspicious_water_2]
+id = 2893
+
+[spinolyp_2]
+id = 2894
+clone = "spinolyp"
+
+[suspicious_water_3]
+id = 2895
+
+[spinolyp_3]
+id = 2896
+clone = "spinolyp"
+
+[bardur_waterbirth_island_2]
+id = 9105
+

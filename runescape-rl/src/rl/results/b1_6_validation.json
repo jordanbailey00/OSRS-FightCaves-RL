@@ -1,0 +1,9 @@
+{
+  "subprocess_sps_median": 31665.5,
+  "subprocess_sps_runs": [
+    39201.3,
+    31665.5,
+    30752.8
+  ],
+  "b1_5_baseline": 37700
+}

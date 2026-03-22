@@ -1,0 +1,39 @@
+[chaos_druid_warrior]
+id = 193
+hitpoints = 400
+att = 32
+str = 34
+def = 25
+attack_speed = 5
+style = "crush"
+max_hit_melee = 50
+attack_bonus = 9
+hunt_mode = "cowardly"
+slayer_xp = 40.0
+categories = ["chaos_druids"]
+respawn_delay = 50
+examine = "A crazy evil druid."
+
+[salarin_the_twisted]
+id = 205
+hitpoints = 700
+att = 58
+str = 58
+def = 62
+style = "crush"
+max_hit_melee = 70
+hunt_mode = "cowardly"
+slayer_xp = 70.0
+categories = ["chaos_druids"]
+respawn_delay = 50
+drop_table = "salarin_the_twisted"
+examine = "Twisted by name, twisted by nature."
+
+[sigbert_the_adventurer]
+id = 37
+examine = "A bold knight famed for his travels."
+
+[wizard_frumscone]
+id = 460
+examine = "A Wizard of the Magic Guild."
+

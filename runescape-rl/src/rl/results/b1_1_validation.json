@@ -1,0 +1,19 @@
+{
+  "all_pass": false,
+  "checks": {
+    "1_worker_bootstrap": "PASS",
+    "2_runtime_root": "PASS (validated by check 1 \u2014 workers resolved paths and produced valid obs)",
+    "3_jvm_classpath": "PASS",
+    "4_deterministic_seed": "FAIL",
+    "5_observation_identity": "FAIL (max_diff=5.76e+02)",
+    "6_reward_identity": "PASS",
+    "7_episode_reset": "FAIL: obs=False rew=True term=True",
+    "8_output_paths": "PASS (validated by benchmark producing results)",
+    "9_benchmark_mode4": {
+      "embedded_sps": 21343.9,
+      "subprocess_sps": 33666.4,
+      "ratio": 1.577,
+      "pass": true
+    }
+  }
+}

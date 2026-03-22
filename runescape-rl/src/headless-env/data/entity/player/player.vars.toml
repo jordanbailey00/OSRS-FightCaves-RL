@@ -1,0 +1,28 @@
+[creation]
+format = "int"
+persist = true
+
+[rights]
+format = "list"
+persist = true
+values = [ "None", "Mod", "Admin" ]
+
+[display_name]
+format = "string"
+persist = true
+
+[lifetime_xp]
+format = "long"
+persist = true
+
+[debug]
+format = "boolean"
+persist = true
+
+[god_mode]
+format = "boolean"
+persist = true
+
+[insta_kill]
+format = "boolean"
+persist = true

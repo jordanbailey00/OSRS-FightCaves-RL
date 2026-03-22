@@ -1,0 +1,118 @@
+from dataclasses import dataclass
+from os import environ
+from pathlib import Path
+from typing import Mapping
+from urllib.parse import urlparse
+
+from fight_caves_rl.manifests.versions import (
+    PUFFERLIB_BASELINE_DISTRIBUTION,
+    PUFFERLIB_BASELINE_VERSION,
+)
+from fight_caves_rl.utils.paths import repo_root, runtime_subdir, source_root
+
+
+@dataclass(frozen=True)
+class BootstrapConfig:
+    rl_repo: Path
+    sim_repo: Path
+    rsps_repo: Path
+    python_baseline: str
+    pufferlib_distribution: str
+    pufferlib_version: str
+    wandb_project: str
+    wandb_entity: str | None
+    wandb_group: str | None
+    wandb_mode: str
+    wandb_resume: str
+    wandb_run_prefix: str
+    wandb_tags: tuple[str, ...]
+    wandb_dir: Path
+    wandb_data_dir: Path
+    wandb_cache_dir: Path
+
+
+def _optional_env(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _parse_csv_env(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _normalize_wandb_target(
+    *,
+    entity_value: str | None,
+    project_value: str | None,
+) -> tuple[str | None, str]:
+    default_project = "fight-caves-rl"
+    entity = _optional_env(entity_value)
+    explicit_project = _optional_env(project_value)
+    parsed_entity: str | None = None
+    parsed_project: str | None = None
+
+    if entity is not None:
+        if "://" in entity:
+            parsed = urlparse(entity)
+            if parsed.netloc.endswith("wandb.ai"):
+                parts = [part for part in parsed.path.split("/") if part]
+                if parts:
+                    parsed_entity = parts[0]
+                if len(parts) >= 2:
+                    parsed_project = parts[1]
+        elif entity.startswith("wandb.ai/"):
+            parts = [part for part in entity.split("/")[1:] if part]
+            if parts:
+                parsed_entity = parts[0]
+            if len(parts) >= 2:
+                parsed_project = parts[1]
+        elif "/" in entity:
+            parts = [part for part in entity.split("/") if part]
+            if parts:
+                parsed_entity = parts[0]
+            if len(parts) >= 2:
+                parsed_project = parts[1]
+
+    normalized_entity = parsed_entity or entity
+    normalized_project = explicit_project or default_project
+    if parsed_project is not None and normalized_project == default_project:
+        normalized_project = parsed_project
+    return normalized_entity, normalized_project
+
+
+def load_bootstrap_config(env: Mapping[str, str] | None = None) -> BootstrapConfig:
+    env_map = env or environ
+    rl_root = repo_root()
+    source = source_root()
+    artifacts_root = runtime_subdir("artifacts", "training-env", "rl")
+    wandb_entity, wandb_project = _normalize_wandb_target(
+        entity_value=env_map.get("WANDB_ENTITY"),
+        project_value=env_map.get("WANDB_PROJECT"),
+    )
+    return BootstrapConfig(
+        rl_repo=Path(env_map.get("RL_REPO", str(rl_root))),
+        sim_repo=Path(env_map.get("FIGHT_CAVES_RL_REPO", str(source / "src" / "headless-env"))),
+        rsps_repo=Path(env_map.get("RSPS_REPO", str(source / "src" / "rsps"))),
+        python_baseline=env_map.get("PYTHON_BASELINE", "3.11"),
+        pufferlib_distribution=env_map.get(
+            "PUFFERLIB_DISTRIBUTION",
+            PUFFERLIB_BASELINE_DISTRIBUTION,
+        ),
+        pufferlib_version=env_map.get("PUFFERLIB_VERSION", PUFFERLIB_BASELINE_VERSION),
+        wandb_project=wandb_project,
+        wandb_entity=wandb_entity,
+        wandb_group=_optional_env(env_map.get("WANDB_GROUP", "smoke")),
+        wandb_mode=env_map.get("WANDB_MODE", "offline"),
+        wandb_resume=env_map.get("WANDB_RESUME", "allow"),
+        wandb_run_prefix=env_map.get("WANDB_RUN_PREFIX", "fc-rl"),
+        wandb_tags=_parse_csv_env(env_map.get("WANDB_TAGS", "fight-caves,rl")),
+        wandb_dir=Path(env_map.get("WANDB_DIR", str(artifacts_root / "wandb"))),
+        wandb_data_dir=Path(env_map.get("WANDB_DATA_DIR", str(artifacts_root / "wandb-data"))),
+        wandb_cache_dir=Path(
+            env_map.get("WANDB_CACHE_DIR", str(artifacts_root / "wandb-cache"))
+        ),
+    )

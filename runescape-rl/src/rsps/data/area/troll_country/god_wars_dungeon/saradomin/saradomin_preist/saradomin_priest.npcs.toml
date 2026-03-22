@@ -1,0 +1,16 @@
+[saradomin_priest]
+id = 6254
+hitpoints = 890
+att = 120
+str = 46
+def = 120
+mage = 125
+attack_bonus = 9
+combat_def = "saradomin_priest"
+hunt_mode = "anti_zamorak_aggressive"
+respawn_delay = 25
+categories = ["human"]
+wander_range = 6
+drops = "saradomin_priest"
+god = "saradomin"
+examine = "A holy man wearing ancient clothing."
