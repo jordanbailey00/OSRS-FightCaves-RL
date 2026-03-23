@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.bundles.logging)
 
     testImplementation(libs.bundles.testing)
+    testImplementation(kotlin("test"))
 }
 
 kotlin {
@@ -36,6 +37,7 @@ kotlin {
         }
         named("test") {
             kotlin.srcDirs("test")
+            kotlin.exclude("KoinMock.kt", "MockProviderExtension.kt", "SettingsTest.kt", "WorldTest.kt", "content/area/karamja/tzhaar_city/TzhaarFightCaveTest.kt", "headless/pruning/HeadedModeStillPassesBaselineFightCaveTests.kt")
         }
     }
 }

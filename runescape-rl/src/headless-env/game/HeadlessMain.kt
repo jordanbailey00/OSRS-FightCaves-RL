@@ -102,7 +102,7 @@ object HeadlessMain {
             "SaveQueue",
             "SaveLogs",
             "BotManager",
-            "Hunting",
+            // "Hunting" removed in Step 29: required for NPC aggression in Fight Caves
             "GrandExchange",
             "FloorItems",
         )

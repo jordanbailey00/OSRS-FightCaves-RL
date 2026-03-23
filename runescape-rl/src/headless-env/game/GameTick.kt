@@ -124,6 +124,7 @@ fun getHeadlessTickStages(
     floorItems: FloorItemTracking = get(),
     handlers: InstructionHandlers = get(),
     dynamicZones: DynamicZones = get(),
+    hunting: Hunting = get(),
     sequential: Boolean = CharacterTask.DEBUG,
 ): List<Runnable> {
     val sequentialNpc: TaskIterator<NPC> = SequentialIterator()
@@ -132,6 +133,7 @@ fun getHeadlessTickStages(
     return listOf(
         PlayerResetTask(sequentialPlayer),
         NPCResetTask(sequentialNpc),
+        hunting, // Step 29: required for NPC aggression in Fight Caves
         NPCs,
         InstructionTask(handlers),
         World,

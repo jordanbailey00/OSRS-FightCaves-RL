@@ -9,6 +9,7 @@ content.entity.world.RegionLoading
 content.entity.combat.Combat
 content.entity.combat.hit.CombatHitsplats
 content.entity.npc.combat.Attack
+content.entity.npc.combat.Aggression
 content.entity.death.CharacterDeath
 content.entity.death.NPCDeath
 content.entity.death.PlayerDeath

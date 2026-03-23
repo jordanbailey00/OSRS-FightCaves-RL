@@ -1,4 +1,5 @@
 import content.area.karamja.tzhaar_city.TzhaarFightCave
+import content.entity.combat.damageDealers
 import content.entity.player.effect.energy.MAX_RUN_ENERGY
 import content.entity.player.effect.energy.runEnergy
 import headless.fast.FIGHT_CAVE_DEFAULT_EQUIPMENT_TEMPLATE
@@ -102,11 +103,13 @@ class FightCaveEpisodeInitializer(
     }
 
     private fun resetFightCaveState(player: Player) {
-        clearPreviousInstance(player)
-
+        // Clear wave/remaining variables FIRST so deferred npcDespawn events
+        // from clearPreviousInstance see wave=-1 and are suppressed by the guard.
         for (variable in FIGHT_CAVE_RESET_VARIABLES) {
             player.clear(variable)
         }
+
+        clearPreviousInstance(player)
 
         player["fight_caves_logout_warning"] = false
         player["headless_episode"] = true
@@ -127,6 +130,10 @@ class FightCaveEpisodeInitializer(
         repeat(4) { level ->
             NPCs.clear(previous.toLevel(level))
         }
+        // Set remaining to a sentinel AFTER NPCs are queued for removal
+        // but BEFORE NPCs.run() fires despawn events. This ensures the
+        // npcDespawn handler's dec() always returns > 0, preventing wave advancement.
+        player[FIGHT_CAVE_REMAINING_KEY] = 9999
         NPCs.run()
         player.clearInstance()
     }
@@ -145,9 +152,14 @@ class FightCaveEpisodeInitializer(
         player["movement_temp"] = "run"
         player["skip_level_up"] = true
         // Step 28: Enable auto-retaliation so the player attacks back when NPCs aggress.
-        // Without this, the agent must discover the multi-step attack sequence from scratch,
-        // which random exploration cannot achieve — causing zero positive rewards.
         player["auto_retaliate"] = true
+        // Set combat state variables required for the combat swing cycle.
+        // CombatStyles script isn't loaded in headless mode, so these must
+        // be set explicitly. Without them, fightStyle/attackRange/weapon are
+        // empty and the combat swing handler never fires.
+        player["combat_style"] = "accurate"   // attackType for Ranged
+        player["attack_range"] = 7            // crossbow attack range
+        player["weapon"] = Item("rune_crossbow")  // weapon reference for swing dispatch
     }
 
     private fun resetPlayerLoadout(player: Player, config: FightCaveEpisodeConfig) {
@@ -182,6 +194,12 @@ class FightCaveEpisodeInitializer(
         val offset = player.instanceOffset()
         player.tele(fightCave.entrance.add(offset))
         player.walkTo(fightCave.centre.add(offset))
+        fightCave.startWave(player, config.startWave, start = false)
+
+        // Flush deferred NPC despawn events from previous instance cleanup,
+        // then re-assert the correct wave state. Without this, stale despawns
+        // fire on the next tick and corrupt the wave counter.
+        NPCs.run()
         fightCave.startWave(player, config.startWave, start = false)
     }
 

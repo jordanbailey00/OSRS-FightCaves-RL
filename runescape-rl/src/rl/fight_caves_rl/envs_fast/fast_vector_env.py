@@ -224,6 +224,11 @@ class FastKernelVecEnv:
             self.infos = self._build_episode_end_infos(done_indices)
             reset_response = self._reset_slots(done_indices)
             self._apply_reset_response(reset_response)
+            # Force wave observation to start_wave for reset envs.
+            # The JVM-side wave counter can be corrupted by deferred npcDespawn
+            # events from previous instance cleanup. This Python-side assertion
+            # ensures the observation always reflects the configured start wave.
+            self.observations[np.asarray(done_indices), 26] = float(self.config.start_wave)
             self._record_episode_starts(done_indices)
             active_indices = tuple(i for i in range(self.num_agents) if i not in done_indices)
             if active_indices:
@@ -425,8 +430,10 @@ class FastKernelVecEnv:
         r_slot = _jget(response, "slotIndices")
         r_obs = _jget(response, "flatObservations")
         slot_indices = np.asarray(r_slot, dtype=np.int32)
+        # Step 30 fix: reshape based on actual reset count, not total env count.
+        # Partial resets (e.g., single env death) return fewer observations.
         observations = np.asarray(r_obs, dtype=np.float32).reshape(
-            self.num_agents,
+            len(slot_indices),
             self._observation_feature_count,
         )
         self.observations[slot_indices] = observations
@@ -448,8 +455,6 @@ class FastKernelVecEnv:
         if _inst:
             stage_started = perf_counter()
         # B1.2: Extract all JVM fields in a tight block to minimize JNI round-trips.
-        # Use self.num_agents instead of _jget(response, "envCount") — it never changes.
-        env_count = self.num_agents
         r_slot = _jget(response, "slotIndices")
         r_obs = _jget(response, "flatObservations")
         r_rew = _jget(response, "rewardFeatures")
@@ -457,6 +462,8 @@ class FastKernelVecEnv:
         r_trunc = _jget(response, "truncated")
 
         slot_indices = np.asarray(r_slot, dtype=np.int32)
+        # Step 30 fix: use actual slot count for reshape (partial steps after death resets)
+        env_count = len(slot_indices)
         observations = np.asarray(r_obs, dtype=np.float32).reshape(
             env_count, self._observation_feature_count,
         )

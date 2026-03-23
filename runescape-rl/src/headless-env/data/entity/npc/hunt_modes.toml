@@ -25,6 +25,9 @@ check_not_combat = true
 check_not_combat_self = true
 check_not_busy = false
 check_afk = false
+# Step 29: required so Hunting re-evaluates NPCs that are already in a movement mode
+# (Fight Caves NPCs enter movement mode from spawn walk before Hunting can process them)
+find_keep_hunting = true
 
 ## All players that aren't busy
 [not_busy]

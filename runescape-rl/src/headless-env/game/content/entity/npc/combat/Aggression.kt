@@ -1,5 +1,6 @@
 package content.entity.npc.combat
 
+import content.entity.combat.Combat
 import sim.engine.Script
 import sim.engine.client.instruction.handle.interactNpc
 import sim.engine.client.instruction.handle.interactPlayer
@@ -17,6 +18,22 @@ class Aggression : Script {
         huntPlayer(mode = "aggressive", handler = ::playerHandler)
 
         huntPlayer(mode = "aggressive_intolerant", handler = ::playerHandler)
+
+        // Step 29: NPC→player attack bridge (NPC initiates combat with player).
+        npcApproachPlayer("Attack") { interaction ->
+            interaction.updateInteraction {
+                Combat.combat(interaction.npc, interaction.target)
+            }
+        }
+
+        // Player→NPC attack bridge (player retaliates or manually attacks NPC).
+        // Required for auto-retaliation and explicit AttackVisibleNpc actions.
+        // Lambda context: this=Player, it=PlayerOnNPCInteract
+        npcApproach("Attack") { interaction ->
+            interaction.updateInteraction {
+                Combat.combat(this@npcApproach, interaction.target)
+            }
+        }
 
         huntPlayer(mode = "cowardly") { target ->
             if (!Settings["world.npcs.aggression", true] || attacking(this, target)) {

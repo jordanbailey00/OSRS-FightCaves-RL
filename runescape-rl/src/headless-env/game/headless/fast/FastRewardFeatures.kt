@@ -99,7 +99,10 @@ object FastRewardFeatureWriter {
         values[FAST_REWARD_FEATURE_PRAYER_POTION_USED_INDEX] =
             positiveDelta(before.prayerPotionDoses, after.prayerPotionDoses).toFloat()
         values[FAST_REWARD_FEATURE_INVALID_ACTION_INDEX] = if (actionAccepted) 0f else 1f
-        values[FAST_REWARD_FEATURE_MOVEMENT_PROGRESS_INDEX] = 0f
+        // Step 32: movement_progress fires when the agent issues a walk action.
+        // Combined with a negative weight, this discourages wasteful movement
+        // that moves the player away from auto-retaliation combat range.
+        values[FAST_REWARD_FEATURE_MOVEMENT_PROGRESS_INDEX] = if (actionName == "walk_to_tile") 1f else 0f
         values[FAST_REWARD_FEATURE_IDLE_PENALTY_INDEX] = if (actionName == "wait") 1f else 0f
         values[FAST_REWARD_FEATURE_TICK_PENALTY_BASE_INDEX] = 1f
 
