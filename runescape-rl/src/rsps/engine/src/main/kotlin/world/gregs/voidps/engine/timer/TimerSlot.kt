@@ -1,0 +1,73 @@
+package world.gregs.voidps.engine.timer
+
+import world.gregs.voidps.engine.GameLoop
+import world.gregs.voidps.engine.entity.character.npc.NPC
+
+class TimerSlot(
+    private val npc: NPC,
+) : Timers {
+
+    private var timer: TimerTask? = null
+
+    override fun start(name: String, restart: Boolean): Boolean {
+        val interval = TimerApi.start(npc, name, restart)
+        if (interval == Timer.CANCEL || interval == Timer.CONTINUE) {
+            return false
+        }
+        if (timer != null) {
+            TimerApi.stop(npc, timer!!.name, death = false)
+        }
+        this.timer = TimerTask(name, interval)
+        return true
+    }
+
+    override fun contains(name: String): Boolean = timer?.name == name
+
+    override fun run() {
+        val timer = timer ?: return
+        if (!timer.ready()) {
+            return
+        }
+        timer.reset()
+        val interval = TimerApi.tick(npc, timer.name)
+        if (interval == Timer.CANCEL) {
+            TimerApi.stop(npc, timer.name, death = false)
+            this.timer = null
+        } else if (interval != Timer.CONTINUE) {
+            timer.next(interval)
+        }
+    }
+
+    override fun stop(name: String) {
+        if (contains(name)) {
+            TimerApi.stop(npc, timer!!.name, death = false)
+            timer = null
+        }
+    }
+
+    override fun clear(name: String): Boolean {
+        if (contains(name)) {
+            timer = null
+            return true
+        }
+        return false
+    }
+
+    override fun clearAll() {
+        timer = null
+    }
+
+    override fun stopAll() {
+        if (timer != null) {
+            TimerApi.stop(npc, timer!!.name, death = true)
+        }
+        timer = null
+    }
+
+    override fun remaining(name: String): Int {
+        if (timer?.name != name) {
+            return -1
+        }
+        return timer!!.nextTick - GameLoop.tick
+    }
+}

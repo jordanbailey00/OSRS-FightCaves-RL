@@ -1,0 +1,17 @@
+spawns = [
+  { id = "black_knight", x = 3023, y = 3517 },
+  { id = "black_knight", x = 3029, y = 3517 },
+  { id = "black_knight", x = 3022, y = 3513 },
+  { id = "black_knight", x = 3028, y = 3514 },
+  { id = "black_knight", x = 3027, y = 3512 },
+  { id = "black_knight", x = 3032, y = 3503},
+  { id = "black_knight", x = 3030, y = 3502 },
+  { id = "black_knight", x = 3031, y = 3502 },
+  { id = "black_knight", x = 3015, y = 3515, level = 1 },
+  { id = "black_knight", x = 3023, y = 3516, level = 1 },
+  { id = "black_knight", x = 3023, y = 3512, level = 1 },
+  { id = "black_knight", x = 3024, y = 3510, level = 1 },  
+  { id = "black_knight", x = 3014, y = 3516, level = 2 },
+  { id = "black_knight", x = 3023, y = 3514, level = 2 },
+  { id = "black_knight", x = 3026, y = 3507, level = 2 },
+]

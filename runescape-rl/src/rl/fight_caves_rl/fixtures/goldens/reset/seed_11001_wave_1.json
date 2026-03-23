@@ -1,0 +1,149 @@
+{
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "0c7405c8a5eb2f286907a73dd1fd03566ea53ca84a699011beeaa2930c277d10"
+  },
+  "metadata": {
+    "fixture_type": "reset_fixture",
+    "generator_script": "scripts/generate_pr1_golden_fixtures.py",
+    "parameters": {
+      "ammo": 1000,
+      "prayer_potions": 8,
+      "seed": 11001,
+      "sharks": 20,
+      "start_wave": 1
+    },
+    "schema_versions": {
+      "action_schema_id": "headless_action_v1",
+      "action_schema_version": 1,
+      "episode_start_contract_id": "fight_cave_episode_start_v1",
+      "episode_start_contract_version": 1,
+      "flat_observation_schema_id": "headless_training_flat_observation_v1",
+      "flat_observation_schema_version": 1
+    },
+    "source_commit": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538",
+    "source_runtime": "wrapper_headless_debug_client",
+    "source_version": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538-dirty"
+  },
+  "payload": {
+    "ammo": 1000,
+    "first_episode_state": {
+      "player_tile": {
+        "level": 0,
+        "x": 0,
+        "y": 0
+      },
+      "remaining": 1,
+      "rotation": 13,
+      "seed": 11001,
+      "wave": 1
+    },
+    "first_observation": {
+      "compatibility_policy": "v1_additive_only",
+      "episode_seed": 11001,
+      "npcs": [],
+      "player": {
+        "consumables": {
+          "ammo_count": 1000,
+          "ammo_id": "adamant_bolts",
+          "prayer_potion_dose_count": 32,
+          "shark_count": 20
+        },
+        "hitpoints_current": 700,
+        "hitpoints_max": 700,
+        "lockouts": {
+          "attack_locked": false,
+          "busy_locked": false,
+          "combo_locked": false,
+          "drink_locked": false,
+          "food_locked": false
+        },
+        "prayer_current": 43,
+        "prayer_max": 43,
+        "protection_prayers": {
+          "protect_from_magic": false,
+          "protect_from_melee": false,
+          "protect_from_missiles": false
+        },
+        "run_energy": 10000,
+        "run_energy_max": 10000,
+        "run_energy_percent": 100,
+        "running": true,
+        "tile": {
+          "level": 0,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "schema_id": "headless_observation_v1",
+      "schema_version": 1,
+      "tick": 0,
+      "wave": {
+        "remaining": 1,
+        "rotation": 13,
+        "wave": 1
+      }
+    },
+    "prayer_potions": 8,
+    "second_episode_state": {
+      "player_tile": {
+        "level": 0,
+        "x": 0,
+        "y": 0
+      },
+      "remaining": 1,
+      "rotation": 13,
+      "seed": 11001,
+      "wave": 1
+    },
+    "second_observation": {
+      "compatibility_policy": "v1_additive_only",
+      "episode_seed": 11001,
+      "npcs": [],
+      "player": {
+        "consumables": {
+          "ammo_count": 1000,
+          "ammo_id": "adamant_bolts",
+          "prayer_potion_dose_count": 32,
+          "shark_count": 20
+        },
+        "hitpoints_current": 700,
+        "hitpoints_max": 700,
+        "lockouts": {
+          "attack_locked": false,
+          "busy_locked": false,
+          "combo_locked": false,
+          "drink_locked": false,
+          "food_locked": false
+        },
+        "prayer_current": 43,
+        "prayer_max": 43,
+        "protection_prayers": {
+          "protect_from_magic": false,
+          "protect_from_melee": false,
+          "protect_from_missiles": false
+        },
+        "run_energy": 10000,
+        "run_energy_max": 10000,
+        "run_energy_percent": 100,
+        "running": true,
+        "tile": {
+          "level": 0,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "schema_id": "headless_observation_v1",
+      "schema_version": 1,
+      "tick": 0,
+      "wave": {
+        "remaining": 1,
+        "rotation": 13,
+        "wave": 1
+      }
+    },
+    "seed": 11001,
+    "sharks": 20,
+    "start_wave": 1
+  }
+}

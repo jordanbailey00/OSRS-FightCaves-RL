@@ -1,0 +1,14 @@
+[earth_warrior]
+id = 124
+hitpoints = 510
+att = 42
+str = 42
+def = 42
+combat_def = "earth_warrior"
+wander_range = 4
+hunt_mode = "cowardly"
+respawn_delay = 30
+drop_table = "earth_warrior"
+categories = ["earth_warrior"]
+slayer_xp = 54.0
+examine = "A strange, inhuman, elemental warrior."

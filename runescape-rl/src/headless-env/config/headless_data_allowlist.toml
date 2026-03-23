@@ -1,0 +1,110 @@
+[manifest]
+name = "fight-caves-headless-data"
+version = "0.1.0"
+status = "step3-complete"
+
+[files]
+required = [
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave_waves.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.npcs.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.combat.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.areas.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.vars.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.varbits.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.ifaces.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.anims.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.gfx.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.sounds.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.jingles.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.scripts.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.objs.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.items.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.npcs.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.drops.toml",
+  "data/skill/range/crossbow.items.toml",
+  "data/skill/range/bolt.items.toml",
+  "data/skill/range/ranged_armour.items.toml",
+  "data/skill/range/ammo_groups.toml",
+  "data/minigame/tai_bwo_wannai_cleanup/tai_bwo_wannai_cleanup.items.toml",
+  "data/skill/fishing/fish.items.toml",
+  "data/skill/herblore/potion.items.toml",
+  "data/entity/player/inventory/inventory.invs.toml",
+  "data/entity/player/equipment/worn_equipment.invs.toml",
+  "data/entity/player/combat/weapon_animations.toml",
+  "data/entity/player/combat/combat_styles/weapon_styles.toml",
+  "data/entity/player/combat/combat_styles/combat_style.varps.toml",
+  "data/entity/player/combat/weapon.anims.toml",
+  "data/entity/player/combat/combat.sounds.toml",
+  "data/skill/prayer/prayers.toml",
+  "data/skill/prayer/prayer.varps.toml",
+  "data/skill/prayer/prayer.varbits.toml",
+  "data/skill/prayer/prayer.sounds.toml",
+  "data/entity/player/modal/toplevel/gameframe.varps.toml",
+  "data/entity/player/human.anims.toml",
+  "data/entity/player/player.sounds.toml",
+  "data/entity/npc/hunt_modes.toml",
+  "data/client/categories.toml",
+  "data/client/parameters.toml",
+  "data/client/structs.toml",
+  "data/client/all.enums.toml",
+  "data/entity/player/modal/interface_types.toml",
+  "data/entity/player/modal/fonts.toml",
+  "data/skill/magic/spells.toml",
+  "data/quest/quests.toml",
+  "data/entity/player/render_emotes.toml",
+  "data/entity/bot/gear_sets.toml",
+  "data/skill/slayer/turael.tasks.toml",
+  "data/client/client.scripts.toml",
+  "data/entity/player/modal/tab/music_player/music_tracks.toml",
+  "data/quest/members/fairy_tale_ii/fairy_ring/fairy_ring_codes.toml",
+  "data/entity/obj/boat/charter_ship_prices.toml",
+  "data/skill/farming/farming_produce.toml",
+  "data/entity/obj/canoe/canoe_stations.toml",
+  "data/quest/free/cooks_assistant/cooks_assistant.books.toml"
+]
+optional = [
+  "data/area/karamja/tzhaar_city/tzhaar_city.npc-spawns.toml"
+]
+
+[regions]
+required_source_regions = [9551]
+oracle_only_regions = [9808]
+
+[settings]
+required = [
+  "spawns.fight.cave.waves",
+  "fightCave.startWave",
+  "map.areas",
+  "definitions.npcs",
+  "definitions.combatAttacks",
+  "definitions.prayers",
+  "definitions.items",
+  "definitions.inventories",
+  "definitions.objects",
+  "definitions.variables.players",
+  "definitions.variables.bits",
+  "definitions.animations",
+  "definitions.graphics",
+  "definitions.sounds",
+  "definitions.jingles",
+  "definitions.weapons.styles",
+  "definitions.weapons.animations",
+  "definitions.ammoGroups",
+  "definitions.parameters",
+  "definitions.structs",
+  "definitions.interfaces.types",
+  "definitions.fonts",
+  "definitions.spells",
+  "definitions.quests",
+  "definitions.renderEmotes",
+  "definitions.huntModes",
+  "definitions.gearSets",
+  "definitions.categories",
+  "definitions.clientScripts",
+  "definitions.produce",
+  "definitions.fairyCodes",
+  "map.music",
+  "map.canoes",
+  "map.ships.prices"
+]
+

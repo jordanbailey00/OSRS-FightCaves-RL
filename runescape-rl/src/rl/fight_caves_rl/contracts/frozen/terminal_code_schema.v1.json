@@ -1,0 +1,47 @@
+{
+  "artifact_type": "terminal_code_schema",
+  "codes": [
+    {
+      "code": 0,
+      "description": "No terminal condition was emitted for the slot.",
+      "name": "NONE"
+    },
+    {
+      "code": 1,
+      "description": "The player died and the episode terminated.",
+      "name": "PLAYER_DEATH"
+    },
+    {
+      "code": 2,
+      "description": "The player completed Fight Caves and emitted the success terminal.",
+      "name": "CAVE_COMPLETE"
+    },
+    {
+      "code": 3,
+      "description": "The episode reached its configured tick cap and truncated.",
+      "name": "TICK_CAP"
+    },
+    {
+      "code": 4,
+      "description": "The runtime detected a state invariant violation and aborted the slot.",
+      "name": "INVALID_STATE"
+    },
+    {
+      "code": 5,
+      "description": "Oracle/reference validation aborted the slot before a gameplay terminal.",
+      "name": "ORACLE_ABORT"
+    }
+  ],
+  "compatibility_rules": {
+    "codes": "append_only"
+  },
+  "contract": {
+    "compatibility_policy": "append_only_codes",
+    "contract_id": "fight_caves_v2_terminal_codes_v1",
+    "version": 1
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "be925ad9f103481375e54dc19dbb75d2945b428cb5c586f4a4f1655e39873ad8"
+  }
+}

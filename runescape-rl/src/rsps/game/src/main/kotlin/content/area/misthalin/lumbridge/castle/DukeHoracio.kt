@@ -1,0 +1,96 @@
+package content.area.misthalin.lumbridge.castle
+
+import content.entity.player.bank.ownsItem
+import content.entity.player.dialogue.*
+import content.entity.player.dialogue.type.*
+import content.quest.quest
+import content.quest.refreshQuestJournal
+import world.gregs.voidps.engine.Script
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.engine.inv.add
+import world.gregs.voidps.engine.inv.inventory
+
+class DukeHoracio : Script {
+
+    init {
+        npcOperate("Talk-to", "duke_horacio") {
+            set("hail_to_the_duke_baby_task", true)
+            npc<Idle>("Greetings. Welcome to my castle.")
+            when (quest("rune_mysteries")) {
+                "unstarted" -> unstarted()
+                "started" -> started()
+                else -> completed()
+            }
+        }
+    }
+
+    suspend fun Player.started() {
+        choice {
+            option<Quiz>("What did you want me to do again?") {
+                if (ownsItem("air_talisman")) {
+                    npc<Idle>("Take that talisman I gave you to Sedridor at the Wizards' Tower. You'll find it south west of here, across the bridge from Draynor Village.")
+                    player<Happy>("Okay, will do.")
+                    return@option
+                }
+                npc<Quiz>("Did you take that talisman to Sedridor?")
+                player<Disheartened>("No, I lost it.")
+                npc<Idle>("Ah, well that explains things. One of my servants found it outside, and it seemed too much of a coincidence that another would suddenly show up.")
+                if (inventory.isFull()) {
+                    item("air_talisman", 600, "The Duke tries to hand you the talisman, but you don't have enough room to take it.")
+                    return@option
+                }
+                npc<Idle>("Here, take it to the Wizards' Tower, south west of here. Please try not to lose it this time.")
+                inventory.add("air_talisman")
+                item("air_talisman", 600, "The Duke hands you the talisman.")
+            }
+            findMoney()
+        }
+    }
+
+    suspend fun Player.unstarted() {
+        choice {
+            option<Quiz>("Have you any quests for me?") {
+                npc<Confused>("Well, I wouldn't describe it as a quest, but there is something I could use some help with.")
+                player<Quiz>("What is it?")
+                npc<Idle>("We were recently sorting through some of the things stored down in the cellar, and we found this old talisman.")
+                item("air_talisman", 600, "The Duke shows you a talisman.")
+                npc<Idle>("The Order of Wizards over at the Wizards' Tower have been on the hunt for magical artefacts recently. I wonder if this might be just the kind of thing they're after.")
+                npc<Quiz>("Would you be willing to take it to them for me?")
+                startQuest()
+            }
+            findMoney()
+        }
+    }
+
+    suspend fun Player.completed() {
+        choice {
+            option<Quiz>("Have you any quests for me?") {
+                npc<Idle>("The only job I had was the delivery of that talisman, so I'm afraid not.")
+            }
+            findMoney()
+        }
+    }
+
+    fun ChoiceOption.findMoney(): Unit = option<Quiz>("Where can I find money?") {
+        npc<Idle>("I've heard that the blacksmiths are prosperous amongst the peasantry. Maybe you could try your hand at that?")
+    }
+
+    suspend fun Player.startQuest() {
+        choice("Start the Rune Mysteries quest?") {
+            option<Happy>("Sure, no problem.") {
+                if (inventory.isFull()) {
+                    item("air_talisman", 600, "The Duke tries to hand you the talisman, but you don't have enough room to take it.")
+                    return@option
+                }
+                set("rune_mysteries", "started")
+                inventory.add("air_talisman")
+                npc<Idle>("Thank you very much. You'll find the Wizards' Tower south west of here, across the bridge from Draynor Village. When you arrive, look for Sedridor. He is the Archmage of the wizards there.")
+                refreshQuestJournal()
+                item("air_talisman", 600, "The Duke hands you the talisman.")
+            }
+            option<Idle>("Not right now.") {
+                npc<Disheartened>("As you wish. Hopefully I can find someone else to help.")
+            }
+        }
+    }
+}

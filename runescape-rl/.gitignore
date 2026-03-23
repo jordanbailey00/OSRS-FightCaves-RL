@@ -1,0 +1,38 @@
+# Root hygiene: source-only repo layout
+
+# runtime roots and scratch
+/.cache/
+/.config/
+/.gradle/
+/.tmp/
+/.tmp-build/
+/.workspace-tools/
+/.artifacts/
+/.grade/
+
+# common transient files
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# python
+__pycache__/
+*.pyc
+
+# gradle/java build outputs
+**/build/
+**/.gradle/
+**/.kotlin/
+**/.run/
+
+# runtime outputs that must stay out of source
+**/artifacts/
+**/session-logs/
+**/logs/
+**/tmp/
+**/replays/
+**/videos/
+**/checkpoints/

@@ -1,0 +1,46 @@
+[blessed_giant_rat_underground_pass_dungeon]
+id = 4941
+hitpoints = 300
+att = 5
+style = "stab"
+max_hit_melee = 10
+slayer_xp = 30.0
+categories = ["rats"]
+respawn_delay = 300
+examine = "Some oversized vermin, blessed by Zamorak."
+
+[blessed_giant_rat_underground_pass_dungeon_2]
+id = 978
+clone = "blessed_giant_rat_underground_pass_dungeon"
+
+[slave_underground_pass_dungeon]
+id = 979
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_2]
+id = 980
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_3]
+id = 981
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_4]
+id = 982
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_5]
+id = 983
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_6]
+id = 984
+examine = "A wretched slave of Iban."
+
+[slave_underground_pass_dungeon_7]
+id = 985
+examine = "A wretched slave of Iban."
+
+[unicorn_underground_pass_dungeon]
+id = 987
+

@@ -1,0 +1,629 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from collections.abc import Callable
+from pathlib import Path
+from time import perf_counter
+from typing import Any, Mapping, Sequence
+
+import numpy as np
+import pufferlib
+import pufferlib.vector
+
+from fight_caves_rl.benchmarks.instrumentation import (
+    BucketInstrumentation,
+    InstrumentationSnapshot,
+)
+from fight_caves_rl.bridge.contracts import HeadlessBootstrapConfig
+from fight_caves_rl.bridge.errors import BridgeError, BridgeJVMStateError
+from fight_caves_rl.bridge.launcher import (
+    assert_sim_runtime_ready,
+    build_headless_settings_overrides,
+    discover_headless_runtime_paths,
+)
+from fight_caves_rl.contracts.mechanics_contract import FIGHT_CAVES_V2_MECHANICS_CONTRACT
+from fight_caves_rl.contracts.reward_feature_schema import REWARD_FEATURE_SCHEMA
+from fight_caves_rl.contracts.terminal_codes import TERMINAL_CODE_SCHEMA
+from fight_caves_rl.envs.shared_memory_transport import (
+    INFO_PAYLOAD_MODE_MINIMAL,
+    INFO_PAYLOAD_MODES,
+)
+from fight_caves_rl.envs_fast.fast_policy_encoding import (
+    pack_joint_actions,
+)
+from fight_caves_rl.envs_fast.fast_reward_adapter import FastRewardAdapter
+from fight_caves_rl.envs_fast.fast_spaces import (
+    FAST_OBSERVATION_FEATURE_COUNT,
+    build_fast_action_space,
+    build_fast_observation_space,
+)
+from fight_caves_rl.utils.java_runtime import resolve_jvm_library_path
+
+QUIET_LOGBACK_CONFIG = (
+    Path(__file__).resolve().parents[2] / "configs" / "logging" / "headless_quiet_logback.xml"
+)
+
+# Must match headlessTickStageOrder in GameTick.kt
+HEADLESS_TICK_STAGE_NAMES: list[str] = [
+    "PlayerResetTask",
+    "NPCResetTask",
+    "NPCs",
+    "InstructionTask",
+    "World",
+    "NPCTask",
+    "PlayerTask",
+    "FloorItemTracking",
+    "GameObjects_timers",
+    "DynamicZones",
+    "ZoneBatchUpdates",
+    "CharacterUpdateTask",
+]
+
+
+@dataclass
+class _FastJVMContext:
+    jpype: Any
+    classpath: Path
+    user_dir: Path
+    classes: dict[str, Any]
+
+
+_FAST_JVM_CONTEXT: _FastJVMContext | None = None
+ResetOptionsProvider = Callable[[int, int], Mapping[str, object] | None]
+
+
+@dataclass(frozen=True)
+class FastKernelVecEnvConfig:
+    env_count: int
+    account_name_prefix: str = "rl_fast_vecenv"
+    start_wave: int = 1
+    ammo: int = 1000
+    prayer_potions: int = 8
+    sharks: int = 20
+    tick_cap: int = 20_000
+    include_future_leakage: bool = False
+    info_payload_mode: str = INFO_PAYLOAD_MODE_MINIMAL
+    instrumentation_enabled: bool = False
+    bootstrap: HeadlessBootstrapConfig = field(default_factory=HeadlessBootstrapConfig)
+    reset_options_provider: ResetOptionsProvider | None = None
+
+
+class FastKernelVecEnv:
+    reset = pufferlib.vector.reset
+    step = pufferlib.vector.step
+
+    def __init__(
+        self,
+        config: FastKernelVecEnvConfig,
+        *,
+        reward_adapter: FastRewardAdapter,
+    ) -> None:
+        if int(config.env_count) <= 0:
+            raise ValueError(f"env_count must be > 0, got {config.env_count}.")
+        if str(config.info_payload_mode) not in INFO_PAYLOAD_MODES:
+            raise ValueError(
+                f"Unsupported info_payload_mode: {config.info_payload_mode!r}. "
+                f"Expected one of {INFO_PAYLOAD_MODES!r}."
+            )
+        if str(config.info_payload_mode) != INFO_PAYLOAD_MODE_MINIMAL:
+            raise ValueError(
+                "The Phase 4.1 fast vecenv only supports info_payload_mode='minimal'. "
+                "It must not reconstruct structured semantics in Python."
+            )
+        reward_adapter.validate_supported()
+
+        self.config = config
+        self._reward_adapter = reward_adapter
+        self._instrumentation = (
+            BucketInstrumentation() if bool(config.instrumentation_enabled) else None
+        )
+        self._runtime, self._classes = _create_fast_kernel_runtime(config)
+        self._descriptor = self._runtime.describe()
+        self._reward_feature_count = int(_jget(self._descriptor, "rewardFeatureCount"))
+        self._observation_feature_count = int(_jget(self._descriptor, "flatObservationFeatureCount"))
+        self._validate_descriptor()
+
+        self.driver_env = self
+        self.agents_per_batch = int(config.env_count)
+        self.num_agents = self.agents_per_batch
+        self.single_observation_space = build_fast_observation_space()
+        self.single_action_space = build_fast_action_space()
+        self.action_space = pufferlib.spaces.joint_space(
+            self.single_action_space,
+            self.agents_per_batch,
+        )
+        self.observation_space = pufferlib.spaces.joint_space(
+            self.single_observation_space,
+            self.agents_per_batch,
+        )
+        self.emulated = {
+            "observation_dtype": self.single_observation_space.dtype,
+            "emulated_observation_dtype": self.single_observation_space.dtype,
+        }
+        pufferlib.set_buffers(self)
+        self.agent_ids = np.arange(self.num_agents)
+        self.initialized = False
+        self.flag = pufferlib.vector.RESET
+        self.infos: list[dict[str, Any]] = []
+        self._seed_base: int | None = None
+        self._episodes_started = np.zeros(self.num_agents, dtype=np.int64)
+        self._episode_returns = np.zeros(self.num_agents, dtype=np.float32)
+        self._episode_lengths = np.zeros(self.num_agents, dtype=np.int32)
+        self._minimal_infos = tuple({} for _ in range(self.num_agents))
+
+        # B1.5: Pre-allocate scratch arrays for per-step data extraction.
+        # Reused every step to avoid per-step numpy allocation.
+        n = self.num_agents
+        self._scratch_slot_indices = np.arange(n, dtype=np.int32)
+        self._scratch_obs = np.zeros((n, self._observation_feature_count), dtype=np.float32)
+        self._scratch_rew = np.zeros((n, self._reward_feature_count), dtype=np.float32)
+        self._scratch_term = np.zeros(n, dtype=np.bool_)
+        self._scratch_trunc = np.zeros(n, dtype=np.bool_)
+        self._all_slot_indices = tuple(range(n))
+
+        # Step 34 continuation: previous observations for proximity shaping.
+        # Stores the observation from the prior step so distance deltas can
+        # be computed.  Initialised on reset so the first step has valid prev.
+        self._prev_observations: np.ndarray | None = (
+            np.zeros((n, self._observation_feature_count), dtype=np.float32)
+            if reward_adapter.has_proximity_shaping
+            else None
+        )
+
+    @property
+    def num_envs(self) -> int:
+        return self.agents_per_batch
+
+    @property
+    def episode_counts(self) -> np.ndarray:
+        return self._episodes_started.copy()
+
+    def topology_snapshot(self) -> dict[str, Any]:
+        return {
+            "backend": "embedded",
+            "env_backend": "v2_fast",
+            "transport_mode": "embedded_jvm",
+            "worker_count": 1,
+            "worker_env_counts": [int(self.num_agents)],
+            "info_payload_mode": str(self.config.info_payload_mode),
+        }
+
+    def instrumentation_snapshot(self) -> InstrumentationSnapshot:
+        if self._instrumentation is None:
+            return {}
+        return self._instrumentation.snapshot()
+
+    def reset_instrumentation(self) -> None:
+        if self._instrumentation is not None:
+            self._instrumentation.clear()
+
+    def async_reset(self, seed: int | None = None) -> None:
+        stage_started = perf_counter()
+        self.flag = pufferlib.vector.RECV
+        self._seed_base = None if seed is None else int(seed)
+        self._episodes_started.fill(0)
+        self._episode_returns.fill(0.0)
+        self._episode_lengths.fill(0)
+        slot_indices = tuple(range(self.num_agents))
+        response = self._reset_slots(slot_indices)
+        self._apply_reset_response(response)
+        self._record_episode_starts(slot_indices)
+        self.infos = list(self._minimal_infos)
+        self._record_instrumentation("fast_vecenv_async_reset_total", perf_counter() - stage_started)
+
+    def send(self, actions: np.ndarray) -> None:
+        # B1.6: Skip all perf_counter() calls when instrumentation is disabled.
+        _inst = self._instrumentation is not None
+        if _inst:
+            stage_started = perf_counter()
+        if not actions.flags.contiguous:
+            actions = np.ascontiguousarray(actions)
+        actions = pufferlib.vector.send_precheck(self, actions)
+
+        # B1.5: Fast-path for the common case (no done envs).
+        done_mask = self.terminals | self.truncations
+        if not done_mask.any():
+            step_response = self._step_slots(self._all_slot_indices, actions)
+            self._apply_step_response(step_response, joint_actions=actions)
+            self.infos = self._minimal_infos
+        else:
+            done_indices = tuple(int(i) for i in np.flatnonzero(done_mask))
+            # G1.2: Snapshot episode metrics BEFORE reset zeroes them out.
+            self.infos = self._build_episode_end_infos(done_indices)
+            reset_response = self._reset_slots(done_indices)
+            self._apply_reset_response(reset_response)
+            # Force wave observation to start_wave for reset envs.
+            # The JVM-side wave counter can be corrupted by deferred npcDespawn
+            # events from previous instance cleanup. This Python-side assertion
+            # ensures the observation always reflects the configured start wave.
+            self.observations[np.asarray(done_indices), 26] = float(self.config.start_wave)
+            self._record_episode_starts(done_indices)
+            active_indices = tuple(i for i in range(self.num_agents) if i not in done_indices)
+            if active_indices:
+                step_response = self._step_slots(active_indices, actions[np.asarray(active_indices)])
+                self._apply_step_response(step_response, joint_actions=actions)
+        if _inst:
+            self._record_instrumentation("fast_vecenv_send_total", perf_counter() - stage_started)
+
+    def recv(self):
+        # B1.6: skip perf_counter when instrumentation is disabled.
+        _inst = self._instrumentation is not None
+        if _inst:
+            stage_started = perf_counter()
+        pufferlib.vector.recv_precheck(self)
+        transition = (
+            self.observations,
+            self.rewards,
+            self.terminals,
+            self.truncations,
+            self.teacher_actions,
+            self.infos,
+            self.agent_ids,
+            self.masks,
+        )
+        if _inst:
+            self._record_instrumentation("fast_vecenv_recv_total", perf_counter() - stage_started)
+        return transition
+
+    def notify(self) -> None:
+        return None
+
+    def close(self) -> None:
+        self._runtime.close()
+
+    def _validate_descriptor(self) -> None:
+        contract = _jget(self._descriptor, "contract")
+        if str(_jget(contract, "sharedActionSchemaId")) != FIGHT_CAVES_V2_MECHANICS_CONTRACT.action_schema_id:
+            raise BridgeError("Fast kernel action schema id drifted from the frozen mechanics contract.")
+        if int(_jget(contract, "sharedActionSchemaVersion")) != FIGHT_CAVES_V2_MECHANICS_CONTRACT.action_schema_version:
+            raise BridgeError("Fast kernel action schema version drifted from the frozen mechanics contract.")
+        if str(_jget(self._descriptor, "rewardFeatureSchemaId")) != REWARD_FEATURE_SCHEMA.contract_id:
+            raise BridgeError("Fast kernel reward feature schema id drifted from the frozen mechanics contract.")
+        if int(_jget(self._descriptor, "rewardFeatureSchemaVersion")) != REWARD_FEATURE_SCHEMA.version:
+            raise BridgeError("Fast kernel reward feature schema version drifted from the frozen mechanics contract.")
+        if self._observation_feature_count != FAST_OBSERVATION_FEATURE_COUNT:
+            raise BridgeError(
+                "Fast kernel flat observation feature count drifted from the RL fast observation space."
+            )
+        if str(_jget(contract, "sharedTerminalCodeSchemaId")) != TERMINAL_CODE_SCHEMA.contract_id:
+            raise BridgeError("Fast kernel terminal code schema id drifted from the frozen mechanics contract.")
+        if int(_jget(contract, "sharedTerminalCodeSchemaVersion")) != TERMINAL_CODE_SCHEMA.version:
+            raise BridgeError("Fast kernel terminal code schema version drifted from the frozen mechanics contract.")
+
+    def _reset_slots(self, slot_indices: Sequence[int]):
+        stage_started = perf_counter()
+        seeds = self._allocate_seeds(slot_indices)
+        configs = _java_episode_configs(self._classes, self._episode_configs(slot_indices, seeds))
+        response = self._runtime.resetBatch(_java_int_array(slot_indices), configs, False, None, None)
+        self._record_instrumentation("fast_vecenv_reset_batch_call", perf_counter() - stage_started)
+        self._record_instrumentation(
+            "fast_kernel_reset_elapsed",
+            _nanos_to_seconds(_jget(response, "elapsedNanos")),
+        )
+        return response
+
+    def _step_slots(self, slot_indices: Sequence[int], actions: np.ndarray):
+        _inst = self._instrumentation is not None
+        if _inst:
+            pack_started = perf_counter()
+        packed_actions = pack_joint_actions(actions)
+        if _inst:
+            self._record_instrumentation("fast_vecenv_action_pack", perf_counter() - pack_started)
+            stage_started = perf_counter()
+        response = self._runtime.stepBatch(
+            _java_int_array(slot_indices),
+            _java_int_array(packed_actions),
+            False,
+            None,
+            None,
+        )
+        if _inst:
+            self._record_instrumentation("fast_vecenv_step_batch_call", perf_counter() - stage_started)
+        if _inst:
+            metrics = _jget(response, "metrics")
+            self._record_instrumentation(
+                "fast_kernel_apply_actions",
+                _nanos_to_seconds(_jget(metrics, "applyActionsNanos")),
+            )
+            self._record_instrumentation(
+                "fast_kernel_tick",
+                _nanos_to_seconds(_jget(metrics, "tickNanos")),
+            )
+            self._record_instrumentation(
+                "fast_kernel_observe_flat",
+                _nanos_to_seconds(_jget(metrics, "observeFlatNanos")),
+            )
+            self._record_instrumentation(
+                "fast_kernel_projection",
+                _nanos_to_seconds(_jget(metrics, "projectionNanos")),
+            )
+            self._record_instrumentation(
+                "fast_kernel_total",
+                _nanos_to_seconds(_jget(metrics, "totalNanos")),
+            )
+            try:
+                stage_nanos = _jget(metrics, "tickStageNanos")
+                if stage_nanos is not None:
+                    for i, nanos in enumerate(stage_nanos):
+                        if i < len(HEADLESS_TICK_STAGE_NAMES):
+                            name = HEADLESS_TICK_STAGE_NAMES[i]
+                        else:
+                            name = f"stage_{i}"
+                        self._record_instrumentation(
+                            f"fast_kernel_tick_stage_{name}",
+                            _nanos_to_seconds(nanos),
+                        )
+            except (AttributeError, TypeError):
+                pass
+        return response
+
+    def _episode_configs(
+        self,
+        slot_indices: Sequence[int],
+        seeds: Sequence[int] | None,
+    ) -> list[tuple[int, int, int, int, int]]:
+        configs: list[tuple[int, int, int, int, int]] = []
+        provider = self.config.reset_options_provider
+        for position, slot_index in enumerate(slot_indices):
+            options = {}
+            if provider is not None:
+                provided = provider(
+                    slot_index=int(slot_index),
+                    episode_index=int(self._episodes_started[int(slot_index)]),
+                )
+                if provided is not None:
+                    options = dict(provided)
+            seed = (
+                int(seeds[position])
+                if seeds is not None
+                else int(options.get("seed", int(slot_index) + int(self._episodes_started[int(slot_index)]) * self.num_agents))
+            )
+            configs.append(
+                (
+                    seed,
+                    int(options.get("start_wave", self.config.start_wave)),
+                    int(options.get("ammo", self.config.ammo)),
+                    int(options.get("prayer_potions", self.config.prayer_potions)),
+                    int(options.get("sharks", self.config.sharks)),
+                )
+            )
+        return configs
+
+    def _allocate_seeds(self, slot_indices: Sequence[int]) -> list[int] | None:
+        if self._seed_base is None:
+            return None
+        stride = self.num_agents
+        return [
+            int(self._seed_base) + int(slot_index) + int(self._episodes_started[int(slot_index)]) * stride
+            for slot_index in slot_indices
+        ]
+
+    def _build_episode_end_infos(self, done_indices: Sequence[int]) -> tuple[dict[str, Any], ...]:
+        """G1.2: Build info dicts with episode metrics for envs that just finished.
+
+        Must be called BEFORE _record_episode_starts zeroes the accumulators.
+        Non-done envs get empty dicts. Done envs get episode_return, episode_length,
+        and terminal_reason.
+        """
+        infos: list[dict[str, Any]] = list(self._minimal_infos)
+        done_set = set(done_indices)
+        for i in done_indices:
+            info: dict[str, Any] = {
+                "episode_return": float(self._episode_returns[i]),
+                "episode_length": int(self._episode_lengths[i]),
+            }
+            if self.terminals[i]:
+                info["terminal_reason"] = "death"
+            elif self.truncations[i]:
+                info["terminal_reason"] = "truncation"
+            # Wave reached: observation index 26 = fight_cave_wave_id
+            obs_wave_idx = 26
+            if self.observations.shape[1] > obs_wave_idx:
+                info["wave_reached"] = int(self.observations[i, obs_wave_idx])
+            infos[i] = info
+        return tuple(infos)
+
+    def _record_episode_starts(self, slot_indices: Sequence[int]) -> None:
+        for slot_index in slot_indices:
+            slot = int(slot_index)
+            self._episodes_started[slot] += 1
+            self._episode_returns[slot] = 0.0
+            self._episode_lengths[slot] = 0
+
+    def _apply_reset_response(self, response: Any) -> None:
+        # B1.6: skip perf_counter when instrumentation is disabled.
+        _inst = self._instrumentation is not None
+        if _inst:
+            stage_started = perf_counter()
+        r_slot = _jget(response, "slotIndices")
+        r_obs = _jget(response, "flatObservations")
+        slot_indices = np.asarray(r_slot, dtype=np.int32)
+        # Step 30 fix: reshape based on actual reset count, not total env count.
+        # Partial resets (e.g., single env death) return fewer observations.
+        observations = np.asarray(r_obs, dtype=np.float32).reshape(
+            len(slot_indices),
+            self._observation_feature_count,
+        )
+        self.observations[slot_indices] = observations
+        self.rewards[slot_indices] = 0.0
+        self.terminals[slot_indices] = False
+        self.truncations[slot_indices] = False
+        self.teacher_actions[slot_indices] = 0
+        self.masks[slot_indices] = True
+        # Step 34 continuation: seed prev_observations so first step has a
+        # valid baseline for proximity delta (delta will be ~0 on first step).
+        if self._prev_observations is not None:
+            self._prev_observations[slot_indices] = observations
+        if _inst:
+            self._record_instrumentation("fast_vecenv_apply_reset_buffers", perf_counter() - stage_started)
+
+    def _apply_step_response(
+        self,
+        response: Any,
+        *,
+        joint_actions: np.ndarray,
+    ) -> None:
+        _inst = self._instrumentation is not None
+        if _inst:
+            stage_started = perf_counter()
+        # B1.2: Extract all JVM fields in a tight block to minimize JNI round-trips.
+        r_slot = _jget(response, "slotIndices")
+        r_obs = _jget(response, "flatObservations")
+        r_rew = _jget(response, "rewardFeatures")
+        r_term = _jget(response, "terminated")
+        r_trunc = _jget(response, "truncated")
+
+        slot_indices = np.asarray(r_slot, dtype=np.int32)
+        # Step 30 fix: use actual slot count for reshape (partial steps after death resets)
+        env_count = len(slot_indices)
+        observations = np.asarray(r_obs, dtype=np.float32).reshape(
+            env_count, self._observation_feature_count,
+        )
+        reward_features = np.asarray(r_rew, dtype=np.float32).reshape(
+            env_count, self._reward_feature_count,
+        )
+        terminals = np.asarray(r_term, dtype=np.bool_)
+        truncations = np.asarray(r_trunc, dtype=np.bool_)
+
+        rewards = self._reward_adapter.weight_batch(reward_features)
+        # Step 34 continuation: add observation-based proximity shaping.
+        if self._prev_observations is not None:
+            proximity_bonus = self._reward_adapter.proximity_shaping_batch(
+                self._prev_observations[slot_indices],
+                observations,
+            )
+            rewards += proximity_bonus
+        self.observations[slot_indices] = observations
+        self.rewards[slot_indices] = rewards
+        self.terminals[slot_indices] = terminals
+        self.truncations[slot_indices] = truncations
+        self.masks[slot_indices] = True
+        self.actions[slot_indices] = joint_actions[slot_indices]
+        self._episode_returns[slot_indices] += rewards
+        self._episode_lengths[slot_indices] += 1
+        # Update prev_observations AFTER shaping computation.
+        if self._prev_observations is not None:
+            self._prev_observations[slot_indices] = observations
+        if _inst:
+            self._record_instrumentation("fast_vecenv_apply_step_buffers", perf_counter() - stage_started)
+
+    def _record_instrumentation(self, bucket: str, seconds: float) -> None:
+        if self._instrumentation is None:
+            return
+        self._instrumentation.record(bucket, seconds)
+
+
+def _create_fast_kernel_runtime(config: FastKernelVecEnvConfig) -> tuple[Any, dict[str, Any]]:
+    paths = discover_headless_runtime_paths()
+    assert_sim_runtime_ready(paths)
+    classes = _ensure_fast_jvm(paths.headless_jar, paths.launch_cwd)
+    override_map = classes["HashMap"]()
+    for key, value in build_headless_settings_overrides(paths, config.bootstrap).items():
+        override_map.put(str(key), str(value))
+    runtime = classes["FastFightCavesKernelRuntime"].createKernel(
+        int(config.env_count),
+        int(config.tick_cap),
+        str(config.account_name_prefix),
+        override_map,
+    )
+    return runtime, classes
+
+
+def _ensure_fast_jvm(headless_jar: Path, launch_cwd: Path) -> dict[str, Any]:
+    global _FAST_JVM_CONTEXT
+    if _FAST_JVM_CONTEXT is not None:
+        if _FAST_JVM_CONTEXT.classpath != headless_jar.resolve():
+            raise BridgeJVMStateError(
+                "Embedded JVM is already pinned to a different classpath: "
+                f"{_FAST_JVM_CONTEXT.classpath} != {headless_jar.resolve()}"
+            )
+        if _FAST_JVM_CONTEXT.user_dir != launch_cwd.resolve():
+            raise BridgeJVMStateError(
+                "Embedded JVM is already pinned to a different user.dir: "
+                f"{_FAST_JVM_CONTEXT.user_dir} != {launch_cwd.resolve()}"
+            )
+        return _FAST_JVM_CONTEXT.classes
+
+    try:
+        import jpype
+        from jpype.types import JInt, JLong
+    except ModuleNotFoundError as exc:
+        raise BridgeJVMStateError("jpype1 is not installed in the RL environment.") from exc
+
+    if not jpype.isJVMStarted():
+        start_jvm_kwargs: dict[str, object] = {"classpath": [str(headless_jar.resolve())]}
+        jvm_library_path = resolve_jvm_library_path()
+        if jvm_library_path is not None:
+            start_jvm_kwargs["jvmpath"] = str(jvm_library_path)
+        # FC_RL_JVM_OPTS: space-separated extra JVM flags (e.g. "-Xmx128m -XX:+UseSerialGC")
+        extra_jvm_opts_str = os.environ.get("FC_RL_JVM_OPTS", "").strip()
+        extra_jvm_opts = tuple(extra_jvm_opts_str.split()) if extra_jvm_opts_str else ()
+        try:
+            jpype.startJVM(
+                f"-Duser.dir={launch_cwd.resolve()}",
+                f"-Dlogback.configurationFile={QUIET_LOGBACK_CONFIG.resolve()}",
+                *extra_jvm_opts,
+                **start_jvm_kwargs,
+            )
+        except jpype.JVMNotFoundException as exc:
+            raise BridgeJVMStateError(
+                "Could not resolve a Linux JVM runtime for the embedded fast kernel. "
+                "Set FC_RL_JAVA_HOME or JAVA_HOME to a JDK/JRE home containing "
+                "bin/java and lib/server/libjvm.so."
+            ) from exc
+
+    classes = {
+        "jpype": jpype,
+        "JInt": JInt,
+        "JLong": JLong,
+        "HashMap": jpype.JClass("java.util.HashMap"),
+        "ArrayList": jpype.JClass("java.util.ArrayList"),
+        "FastFightCavesKernelRuntime": jpype.JClass("FastFightCavesKernelRuntime"),
+        "FastEpisodeConfig": jpype.JClass("headless.fast.FastEpisodeConfig"),
+    }
+    _FAST_JVM_CONTEXT = _FastJVMContext(
+        jpype=jpype,
+        classpath=headless_jar.resolve(),
+        user_dir=launch_cwd.resolve(),
+        classes=classes,
+    )
+    return classes
+
+
+def _java_episode_configs(classes: dict[str, Any], configs: Sequence[tuple[int, int, int, int, int]]) -> Any:
+    items = classes["ArrayList"]()
+    for seed, start_wave, ammo, prayer_potions, sharks in configs:
+        items.add(
+            classes["FastEpisodeConfig"](
+                classes["JLong"](int(seed)),
+                int(start_wave),
+                int(ammo),
+                int(prayer_potions),
+                int(sharks),
+            )
+        )
+    return items
+
+
+def _java_int_array(values: Sequence[int] | np.ndarray) -> Any:
+    context = _FAST_JVM_CONTEXT
+    if context is None:
+        raise BridgeJVMStateError("Fast JVM context is not initialized.")
+    jpype = context.jpype
+    JInt = context.classes["JInt"]
+    return jpype.JArray(JInt)([int(value) for value in values])
+
+
+def _jget(target: Any, name: str) -> Any:
+    if hasattr(target, name):
+        return getattr(target, name)
+    getter_name = "get" + name[0].upper() + name[1:]
+    getter = getattr(target, getter_name, None)
+    if getter is None:
+        raise AttributeError(f"{target!r} has neither attribute {name!r} nor getter {getter_name!r}.")
+    return getter()
+
+
+def _nanos_to_seconds(value: Any) -> float:
+    return max(0.0, float(int(value)) / 1_000_000_000.0)

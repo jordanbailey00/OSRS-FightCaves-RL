@@ -1,0 +1,116 @@
+package content.area.misthalin.barbarian_village
+
+import content.entity.player.dialogue.*
+import content.entity.player.dialogue.type.choice
+import content.entity.player.dialogue.type.npc
+import content.entity.player.dialogue.type.player
+import content.quest.quest
+import world.gregs.voidps.engine.Script
+import world.gregs.voidps.engine.entity.character.player.Player
+
+class ChieftainGunthor : Script {
+
+    init {
+        npcOperate("Talk-to", "chieftain_gunthor_*") {
+            when (quest("gunnars_ground")) {
+                "completed" -> {
+                }
+                "tell_gudrun", "tell_dororan", "write_poem", "more_poem", "one_more_poem", "poem_done", "poem", "recital", "gunnars_ground" -> {
+                    npc<Frustrated>("Run back to Gudrun and tell her to remember her forefathers!")
+                    npc<Angry>("Tell her to think of Gunnar and what he would think of this insult! Now go before I have Haakon dismember you.")
+                    seeHimTry()
+                }
+                "meet_chieftain" -> meetChieftain()
+                else -> unstarted()
+            }
+        }
+    }
+
+    suspend fun Player.meetChieftain() {
+        npc<Angry>("Begone, outerlander! Your kind are not welcome here!")
+        choice {
+            option<Idle>("I need to speak with you, chieftain.") {
+                makeItShort()
+            }
+            option<Idle>("Be quiet and listen.") {
+                makeItShort()
+            }
+        }
+    }
+
+    suspend fun Player.makeItShort() {
+        npc<Frustrated>("Make it short.")
+        player<Neutral>("Your daughter seeks permission to court an outerlander.")
+        npc<Mad>("WHAT??")
+        choice {
+            option<Idle>("Your daughter seeks permission to court an outerlander.") {
+                barbarians()
+            }
+            option<Idle>("Are you deaf?") {
+                barbarians()
+            }
+        }
+    }
+
+    suspend fun Player.barbarians() {
+        npc<Frustrated>("Do you have ANY idea who we are?")
+        choice {
+            option<Idle>("You're barbarians.") {
+                waitAMoment()
+            }
+            option<Idle>("You're a tribe of primitives.") {
+                waitAMoment()
+            }
+        }
+    }
+
+    suspend fun Player.waitAMoment() {
+        npc<Angry>("We are storm that sweeps from the mountains! We are the scourge of these soft lands!")
+        choice {
+            option<Idle>("Please wait a moment.") {
+                campOfWar()
+            }
+            option<Idle>("Are you finished?") {
+                campOfWar()
+            }
+        }
+    }
+
+    suspend fun Player.campOfWar() {
+        npc<Frustrated>("We are the freemen of the ice. You think this a settlement, but it is a camp of war!")
+        npc<Frustrated>("haakon_the_champion", "Chieftain! May I interrupt?")
+        npc<Frustrated>("What is it, Haakon?")
+        npc<Frustrated>("haakon_the_champion", "We have lived here since before the time of my father. Perhaps we are no longer a camp.")
+        npc<Quiz>("Your father? Do you honour him, Haakon?")
+        npc<Angry>("haakon_the_champion", "Of course!")
+        npc<Quiz>("And do you honour Warloard Gunnar?")
+        npc<Angry>("haakon_the_champion", "Of course, Chieftain!")
+        npc<Frustrated>("Then why do you dishonour his name by abandoning what he fought for?")
+        npc<Angry>("We will honour our fathers and we will honour Gunnar!")
+        npc<Frustrated>("haakon_the_champion", "Yes, Chieftain. You are wise. I am sorry.")
+        npc<Mad>("You! Outerlander!")
+        player<Quiz>("What?")
+        npc<Mad>("We are not friends, you and I! We are not allies!")
+        npc<Frustrated>("Run back to Gudrun and tell her to remember her forefathers!")
+        set("gunnars_ground", "tell_gudrun")
+        npc<Frustrated>("Tell her to think of Gunnar and what he would think of this insult! Now go before I have Haakon dismember you.")
+        seeHimTry()
+    }
+
+    suspend fun Player.seeHimTry() {
+        choice {
+            option<Neutral>("I'm going!") {
+            }
+            option<Neutral>("I'd like to see him try.") {
+                npc<Angry>("haakon_the_champion", "Come here and say that to my face, outerlander!")
+            }
+            option<Neutral>("I'm going to challenge him right now!") {
+                npc<Angry>("haakon_the_champion", "Come here and say that to my face, outerlander!")
+            }
+        }
+    }
+
+    suspend fun Player.unstarted() {
+        npc<Frustrated>("Begone, outerlander! Your kind are not welcome here!")
+    }
+}

@@ -1,0 +1,18 @@
+{
+  "artifact_type": "flat_observation_schema",
+  "base_field_count": 30,
+  "contract": {
+    "compatibility_policy": "replace_on_shape_or_semantic_change",
+    "contract_id": "headless_training_flat_observation_v1",
+    "version": 1
+  },
+  "dtype": "float32",
+  "feature_count": 134,
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "ac906fb8583f456ef8d5059acddcf9f8d91430a1130722b2bb441e1f4e1016be"
+  },
+  "max_visible_npcs": 8,
+  "npc_slot_field_count": 13,
+  "shape_policy": "replace_on_shape_or_semantic_change"
+}

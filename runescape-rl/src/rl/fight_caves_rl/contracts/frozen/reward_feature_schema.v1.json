@@ -1,0 +1,98 @@
+{
+  "artifact_type": "reward_feature_schema",
+  "compatibility_rules": {
+    "features": "append_only"
+  },
+  "contract": {
+    "compatibility_policy": "append_only_features",
+    "contract_id": "fight_caves_v2_reward_features_v1",
+    "version": 1
+  },
+  "feature_count": 16,
+  "features": [
+    {
+      "description": "Positive damage applied to Fight Caves NPCs.",
+      "index": 0,
+      "name": "damage_dealt"
+    },
+    {
+      "description": "Damage received by the player.",
+      "index": 1,
+      "name": "damage_taken"
+    },
+    {
+      "description": "Count of NPC kills resolved on this step.",
+      "index": 2,
+      "name": "npc_kill"
+    },
+    {
+      "description": "Wave clear event emitted on this step.",
+      "index": 3,
+      "name": "wave_clear"
+    },
+    {
+      "description": "Positive damage applied specifically to Jad.",
+      "index": 4,
+      "name": "jad_damage_dealt"
+    },
+    {
+      "description": "Jad kill event emitted on this step.",
+      "index": 5,
+      "name": "jad_kill"
+    },
+    {
+      "description": "Player death event emitted on this step.",
+      "index": 6,
+      "name": "player_death"
+    },
+    {
+      "description": "Fight Caves completion event emitted on this step.",
+      "index": 7,
+      "name": "cave_complete"
+    },
+    {
+      "description": "Food-consumption event emitted on this step.",
+      "index": 8,
+      "name": "food_used"
+    },
+    {
+      "description": "Prayer-potion-consumption event emitted on this step.",
+      "index": 9,
+      "name": "prayer_potion_used"
+    },
+    {
+      "description": "Correct Jad prayer state at the hit-resolution boundary.",
+      "index": 10,
+      "name": "correct_jad_prayer_on_resolve"
+    },
+    {
+      "description": "Incorrect Jad prayer state at the hit-resolution boundary.",
+      "index": 11,
+      "name": "wrong_jad_prayer_on_resolve"
+    },
+    {
+      "description": "Action rejection or invalid-intent event emitted on this step.",
+      "index": 12,
+      "name": "invalid_action"
+    },
+    {
+      "description": "Movement/progress feature reserved for validated shaping only.",
+      "index": 13,
+      "name": "movement_progress"
+    },
+    {
+      "description": "Idle-step indicator for optional shaping penalties.",
+      "index": 14,
+      "name": "idle_penalty_flag"
+    },
+    {
+      "description": "Per-tick shaping baseline emitted every environment step.",
+      "index": 15,
+      "name": "tick_penalty_base"
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "4272d46dff1cedfbfb8cc0f871eeff84a647634cddc097dc80477005ce6406fe"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "actions": [
+    {
+      "action_id": 0,
+      "name": "wait",
+      "parameters": [],
+      "source_name": "Wait"
+    },
+    {
+      "action_id": 1,
+      "name": "walk_to_tile",
+      "parameters": [
+        "tile.x",
+        "tile.y",
+        "tile.level"
+      ],
+      "source_name": "WalkToTile"
+    },
+    {
+      "action_id": 2,
+      "name": "attack_visible_npc",
+      "parameters": [
+        "visible_npc_index"
+      ],
+      "source_name": "AttackVisibleNpc"
+    },
+    {
+      "action_id": 3,
+      "name": "toggle_protection_prayer",
+      "parameters": [
+        "prayer"
+      ],
+      "source_name": "ToggleProtectionPrayer"
+    },
+    {
+      "action_id": 4,
+      "name": "eat_shark",
+      "parameters": [],
+      "source_name": "EatShark"
+    },
+    {
+      "action_id": 5,
+      "name": "drink_prayer_potion",
+      "parameters": [],
+      "source_name": "DrinkPrayerPotion"
+    },
+    {
+      "action_id": 6,
+      "name": "toggle_run",
+      "parameters": [],
+      "source_name": "ToggleRun"
+    }
+  ],
+  "artifact_type": "action_schema",
+  "compatibility_rules": {
+    "action_ids": "append_only",
+    "parameter_names": "append_only_per_action",
+    "reject_reasons": "append_only"
+  },
+  "contract": {
+    "compatibility_policy": "append_only_ids",
+    "contract_id": "headless_action_v1",
+    "version": 1
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "9370d6e2c7623feab50f3055148ae40b52a1dc7e40c3c155eba75c8a14cd74e0"
+  },
+  "packed_fast_schema": {
+    "dtype": "int32",
+    "word_count": 4
+  },
+  "protection_prayer_ids": [
+    "protect_from_magic",
+    "protect_from_missiles",
+    "protect_from_melee"
+  ],
+  "reject_reasons": [
+    "AlreadyActedThisTick",
+    "InvalidTargetIndex",
+    "TargetNotVisible",
+    "PlayerBusy",
+    "MissingConsumable",
+    "ConsumptionLocked",
+    "PrayerPointsDepleted",
+    "InsufficientRunEnergy",
+    "NoMovementRequired"
+  ]
+}

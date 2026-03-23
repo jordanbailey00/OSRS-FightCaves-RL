@@ -1,0 +1,73 @@
+[hobgoblin_unarmed]
+id = 122
+hitpoints = 290
+att = 22
+str = 24
+def = 24
+combat_def = "hobgoblin_unarmed"
+hunt_mode = "cowardly"
+wander_range = 4
+drop_table = "hobgoblin"
+categories = ["hobgoblins"]
+slayer_xp = 29.0
+respawn_delay = 30
+examine = "An ugly, smelly creature."
+
+[hobgoblin_armed]
+id = 123
+hitpoints = 490
+att = 33
+str = 31
+def = 36
+combat_def = "hobgoblin_armed"
+hunt_mode = "cowardly"
+wander_range = 4
+drop_table = "hobgoblin"
+categories = ["hobgoblins"]
+slayer_xp = 49.0
+respawn_delay = 30
+examine = "An ugly, smelly creature wielding a spear."
+
+[rimmington_hobgoblin_unarmed]
+clone = "hobgoblin_unarmed"
+id = 2685
+
+[rimmington_hobgoblin_unarmed_brown]
+clone = "hobgoblin_unarmed"
+id = 2686
+
+[rimmington_hobgoblin_unarmed_red]
+clone = "hobgoblin_unarmed"
+id = 2687
+
+[rimmington_hobgoblin_armed]
+clone = "hobgoblin_armed"
+id = 2688
+
+[poh_hobgoblin]
+id = 3583
+hitpoints = 620
+att = 45
+str = 43
+def = 43
+combat_def = "poh_hobgoblin"
+wander_range = 4
+drop_table = "hobgoblin"
+categories = ["hobgoblins"]
+examine = "He doesn't look very welcoming."
+
+[hobgoblin_god_wars]
+id = 6275
+hitpoints = 520
+att = 39
+str = 39
+def = 35
+combat_def = "hobgoblin_god_wars"
+hunt_mode = "anti_zamorak_aggressive"
+slayer_xp = 52.0
+respawn_delay = 30
+wander_range = 4
+drop_table = "hobgoblin"
+categories = ["hobgoblin"]
+god = "bandos"
+examine = "An ugly, smelly creature."

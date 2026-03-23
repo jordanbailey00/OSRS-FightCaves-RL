@@ -1,0 +1,151 @@
+[monk_harmony]
+id = 5608
+examine = "Holier than thou."
+
+[monk_harmony_2]
+id = 5609
+examine = "Holier than thou."
+
+[monk_harmony_3]
+id = 5610
+examine = "Holier than thou."
+
+[monk_harmony_4]
+id = 5611
+examine = "Holier than thou."
+
+[sorebones_harmony]
+id = 5627
+hitpoints = 520
+att = 49
+str = 50
+def = 50
+style = "crush"
+max_hit_melee = 60
+slayer_xp = 22.0
+categories = ["zombies"]
+respawn_delay = 25
+drop_table = "sorebones"
+examine = "Bedside manner is a little lacking, I think."
+
+[sorebones_harmony_apron]
+id = 5628
+clone = "sorebones_harmony"
+
+[zombie_pirate_harmony]
+id = 5629
+hitpoints = 520
+att = 49
+str = 50
+def = 50
+style = "crush"
+max_hit_melee = 60
+hunt_mode = "cowardly"
+slayer_xp = 52.0
+categories = ["zombies"]
+respawn_delay = 50
+examine = "Aaaarg, me hearty!"
+
+[zombie_pirate_harmony_2]
+id = 5631
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_3]
+id = 5633
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_4]
+id = 5634
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_5]
+id = 5635
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_6]
+id = 5637
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_7]
+id = 5638
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_8]
+id = 5639
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_9]
+id = 5640
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_10]
+id = 5641
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_11]
+id = 5642
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_12]
+id = 5644
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_13]
+id = 5646
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_14]
+id = 5647
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_15]
+id = 5650
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_16]
+id = 5656
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_17]
+id = 5658
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_18]
+id = 5659
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_19]
+id = 5661
+clone = "zombie_pirate_harmony"
+
+[zombie_pirate_harmony_20]
+id = 5665
+clone = "zombie_pirate_harmony"
+
+[monk_harmony_5]
+id = 5669
+
+[monk_harmony_6]
+id = 5670
+
+[monk_harmony_7]
+id = 5671
+
+[monk_harmony_8]
+id = 5672
+
+[puffin]
+id = 5614
+examine = "I'd prefer it if it were a muffin..."
+
+[monk_harmony_5_2]
+id = 5623
+
+[monk_harmony_6_2]
+id = 5624
+
+[monk_harmony_7_2]
+id = 5625
+
+[monk_harmony_8_2]
+id = 5626

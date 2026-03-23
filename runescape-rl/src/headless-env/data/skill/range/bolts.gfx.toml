@@ -1,0 +1,61 @@
+[crossbow_bolt]
+id = 27
+delay = 41
+height = 3
+curve = 5
+time_offset = 5
+
+[bone_bolts]
+id = 696
+delay = 41
+height = 3
+curve = 5
+time_offset = 5
+
+[barbed_bolts]
+id = 696
+delay = 41
+height = 3
+curve = 5
+time_offset = 5
+
+[zaniks_crossbow_special]
+id = 1714
+
+[zaniks_crossbow_bolt]
+id = 1497
+delay = 80
+height = 3
+curve = 5
+time_offset = 19
+multiplier = 3
+
+[armour_piercing]
+id = 758
+
+[blood_forfeit]
+id = 754
+
+[clear_mind]
+id = 751
+
+[down_to_earth]
+id = 757
+
+[dragons_breath]
+id = 756
+
+[earths_fury]
+id = 755
+
+[life_leech]
+id = 753
+
+[lucky_lightning]
+id = 749
+
+[magical_poison]
+id = 752
+
+[sea_curse]
+id = 750

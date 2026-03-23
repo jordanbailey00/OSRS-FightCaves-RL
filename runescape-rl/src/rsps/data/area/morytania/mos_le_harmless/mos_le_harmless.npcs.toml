@@ -1,0 +1,160 @@
+[charley]
+id = 3161
+shop = "two_feet_charleys_fish_shop"
+examine = "'Two Feet' Charley."
+
+[smith]
+id = 3162
+shop = "smithing_smiths_shop"
+examine = "Smithing Smith."
+
+[joe]
+id = 3163
+shop = "harpoon_joes_house_of_rum"
+examine = "Harpoon Joe."
+
+[mama]
+id = 3164
+examine = "Mama La'Fiette."
+
+[mike]
+id = 3166
+shop = "dodgy_mikes_second_hand_clothing"
+examine = "Dodgy Mike."
+
+[pirate_mos_le_harmless]
+id = 3167
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_2]
+id = 3168
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_3]
+id = 3169
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_4]
+id = 3170
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_5]
+id = 3171
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_6]
+id = 3172
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_7]
+id = 3173
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_8]
+id = 3174
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_9]
+id = 3175
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_10]
+id = 3176
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_11]
+id = 3177
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_12]
+id = 3178
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_13]
+id = 3179
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_14]
+id = 3180
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_15]
+id = 3181
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_16]
+id = 3182
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_17]
+id = 3183
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_18]
+id = 3184
+examine = "A pirate of Mos Le'Harmless."
+
+[pirate_mos_le_harmless_19]
+id = 3185
+
+[pirate_mos_le_harmless_20]
+id = 3186
+
+[snake_mos_le_harmless]
+id = 4343
+
+[monkey_mos_le_harmless]
+id = 4344
+
+[crab_mos_le_harmless]
+id = 4346
+
+[giant_mosquito]
+id = 4347
+hitpoints = 30
+att = 5
+def = 45
+attack_speed = 12
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 50
+examine = "A flying blood sucker."
+
+[jungle_horror]
+id = 4352
+hitpoints = 450
+att = 70
+str = 70
+def = 55
+style = "stab"
+max_hit_melee = 80
+hunt_mode = "cowardly"
+slayer_xp = 45.0
+categories = ["jungle_horrors"]
+respawn_delay = 50
+examine = "A horrible, emaciated ape like creature with beady red eyes."
+
+[cavey_davey]
+id = 4358
+examine = "A pirate of Mos Le'Harmless."
+
+[patchy]
+id = 4359
+examine = "Patchy the pirate."
+
+[50_ships_mufassah]
+id = 7825
+examine = "How novel - a pirate with a leg injury that does not involve a wooden peg."
+
+[brass_hand_harry]
+id = 7857
+examine = "Talk to the hand, because the Harry ain't interested."
+
+[kchunk]
+id = 11319
+
+[kchunk_2]
+id = 11320
+
+[kchunk_3]
+id = 11321

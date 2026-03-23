@@ -1,0 +1,5112 @@
+{
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "c96229a77313c6b8b6206b4e047deb94ee120da029c722e6b2c1e320de3cc9f9"
+  },
+  "metadata": {
+    "fixture_type": "mechanics_parity_trace",
+    "generator_script": "scripts/generate_pr1_golden_fixtures.py",
+    "parameters": {
+      "scenario_id": "full_run"
+    },
+    "schema_versions": {
+      "action_schema_id": "headless_action_v1",
+      "action_schema_version": 1,
+      "mechanics_contract_id": "fight_caves_v2_mechanics_v1",
+      "mechanics_contract_version": 1,
+      "parity_trace_schema_id": "fight_caves_mechanics_parity_trace_v1",
+      "parity_trace_schema_version": 1,
+      "reward_feature_schema_id": "fight_caves_v2_reward_features_v1",
+      "reward_feature_schema_version": 1,
+      "terminal_code_schema_id": "fight_caves_v2_terminal_codes_v1",
+      "terminal_code_schema_version": 1
+    },
+    "source_commit": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538",
+    "source_runtime": "oracle",
+    "source_version": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538-dirty"
+  },
+  "payload": {
+    "field_names": [
+      "tick_index",
+      "action_name",
+      "action_accepted",
+      "rejection_code",
+      "player_hitpoints",
+      "player_prayer_points",
+      "run_enabled",
+      "inventory_ammo",
+      "inventory_sharks",
+      "inventory_prayer_potions",
+      "wave_id",
+      "remaining_npcs",
+      "visible_target_order",
+      "visible_npc_type",
+      "visible_npc_hitpoints",
+      "visible_npc_alive",
+      "jad_telegraph_state",
+      "jad_hit_resolve_outcome",
+      "damage_dealt",
+      "damage_taken",
+      "terminal_code"
+    ],
+    "record_count": 161,
+    "records": [
+      {
+        "action_accepted": true,
+        "action_name": "reset",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 0,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 7,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 2
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 100.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 14,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200
+        ],
+        "visible_npc_type": [
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          5
+        ],
+        "wave_id": 3
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 21,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          7,
+          6
+        ],
+        "wave_id": 3
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 28,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          8
+        ],
+        "wave_id": 4
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 100.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 35,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          10,
+          11
+        ],
+        "wave_id": 4
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 42,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          14,
+          12
+        ],
+        "wave_id": 5
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 200.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 49,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          15,
+          16
+        ],
+        "wave_id": 5
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 56,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 6
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 63,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          20,
+          19,
+          22,
+          21
+        ],
+        "wave_id": 6
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 70,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 8
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 860.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 77,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          20
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          23,
+          25
+        ],
+        "wave_id": 8
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 84,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          26,
+          27
+        ],
+        "wave_id": 9
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 91,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          400,
+          200
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tok_xil",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          28,
+          30,
+          29
+        ],
+        "wave_id": 10
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 400.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 98,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          20
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          32,
+          31,
+          30
+        ],
+        "wave_id": 10
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 105,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          35
+        ],
+        "wave_id": 11
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 497.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 112,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          3,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          35,
+          37,
+          36
+        ],
+        "wave_id": 11
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 119,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          38
+        ],
+        "wave_id": 12
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 580.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 126,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          20
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          43,
+          42,
+          41
+        ],
+        "wave_id": 12
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 133,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200
+        ],
+        "visible_npc_type": [
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          44
+        ],
+        "wave_id": 13
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 380.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 140,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          46,
+          49,
+          50
+        ],
+        "wave_id": 13
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 147,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          51
+        ],
+        "wave_id": 14
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 760.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 154,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          51
+        ],
+        "wave_id": 14
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 161,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          54
+        ],
+        "wave_id": 16
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1580.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 168,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 16
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 175,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          800
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          56,
+          58
+        ],
+        "wave_id": 17
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 182,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          60,
+          58
+        ],
+        "wave_id": 18
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 800.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 189,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          60
+        ],
+        "wave_id": 18
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 196,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          64,
+          63
+        ],
+        "wave_id": 19
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 840.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 203,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          66,
+          67
+        ],
+        "wave_id": 19
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 210,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          100,
+          200
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tz_kih",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          71,
+          69,
+          70
+        ],
+        "wave_id": 20
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 940.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 217,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          71,
+          73,
+          72
+        ],
+        "wave_id": 20
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 224,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          800
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          75,
+          76
+        ],
+        "wave_id": 21
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 740.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 231,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          60
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          78,
+          77,
+          76
+        ],
+        "wave_id": 21
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 238,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          81
+        ],
+        "wave_id": 22
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1140.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 245,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 22
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 252,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          800
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          83,
+          85
+        ],
+        "wave_id": 23
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1020.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 259,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          260
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          85
+        ],
+        "wave_id": 23
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 266,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400,
+          100,
+          206,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tz_kih",
+          "yt_mej_kot",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          88,
+          86,
+          85,
+          87
+        ],
+        "wave_id": 24
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1546.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 273,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          89
+        ],
+        "wave_id": 24
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 280,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          400,
+          200
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tok_xil",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          92,
+          91,
+          90
+        ],
+        "wave_id": 25
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1120.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 287,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          60,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "yt_mej_kot",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          91,
+          92,
+          94,
+          93
+        ],
+        "wave_id": 25
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 294,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          800,
+          400
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "yt_mej_kot",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          95,
+          98,
+          97
+        ],
+        "wave_id": 26
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1280.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 301,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          97
+        ],
+        "wave_id": 26
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 308,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          800
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          103,
+          105
+        ],
+        "wave_id": 27
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1334.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 315,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          46
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          106,
+          107,
+          105
+        ],
+        "wave_id": 27
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 322,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          110
+        ],
+        "wave_id": 28
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1140.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 329,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 28
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 336,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          118
+        ],
+        "wave_id": 29
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1500.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 343,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          118
+        ],
+        "wave_id": 29
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 350,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 30
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1480.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 357,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 30
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 364,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          1600
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          122,
+          123
+        ],
+        "wave_id": 32
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 3037.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 371,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          123
+        ],
+        "visible_npc_type": [
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          123
+        ],
+        "wave_id": 32
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 378,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          100
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          126,
+          125
+        ],
+        "wave_id": 33
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 385,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          140
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          127,
+          126
+        ],
+        "wave_id": 34
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1600.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 392,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          129,
+          130
+        ],
+        "wave_id": 34
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 399,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          200
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          133,
+          132
+        ],
+        "wave_id": 35
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1560.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 406,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          133,
+          134,
+          135
+        ],
+        "wave_id": 35
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 413,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          1600
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          136,
+          139
+        ],
+        "wave_id": 36
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1660.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 420,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140
+        ],
+        "visible_npc_type": [
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          139
+        ],
+        "wave_id": 36
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 427,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200
+        ],
+        "visible_npc_type": [
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          142
+        ],
+        "wave_id": 37
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1460.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 434,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          147,
+          148
+        ],
+        "wave_id": 37
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 441,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600
+        ],
+        "visible_npc_type": [
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          150
+        ],
+        "wave_id": 38
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1921.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 448,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          59
+        ],
+        "visible_npc_type": [
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          150
+        ],
+        "wave_id": 38
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 455,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          152,
+          151
+        ],
+        "wave_id": 39
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1960.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 462,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 39
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 469,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          400,
+          100
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          157,
+          156,
+          154
+        ],
+        "wave_id": 40
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2040.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 476,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          20
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          157,
+          156
+        ],
+        "wave_id": 40
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 483,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          400
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          160,
+          159
+        ],
+        "wave_id": 41
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1840.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 490,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          20
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          160,
+          159
+        ],
+        "wave_id": 41
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 497,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          1600
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          164,
+          166
+        ],
+        "wave_id": 42
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1940.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 504,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          140
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          167,
+          168,
+          166
+        ],
+        "wave_id": 42
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 511,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400,
+          100
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          172,
+          170
+        ],
+        "wave_id": 43
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2060.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 518,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": 43
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 525,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          200
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          179,
+          177
+        ],
+        "wave_id": 44
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 1840.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 532,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          179,
+          181,
+          180
+        ],
+        "wave_id": 44
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 539,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          185
+        ],
+        "wave_id": 45
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2220.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 546,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20
+        ],
+        "visible_npc_type": [
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          185
+        ],
+        "wave_id": 45
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 553,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          187
+        ],
+        "wave_id": 46
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2200.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 560,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          187
+        ],
+        "wave_id": 46
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 567,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          1600
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          190,
+          191
+        ],
+        "wave_id": 47
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2300.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 574,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60,
+          140
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          190,
+          191
+        ],
+        "wave_id": 47
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 581,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          1600,
+          100
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "ket_zek",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          192,
+          195,
+          193
+        ],
+        "wave_id": 48
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2400.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 588,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140
+        ],
+        "visible_npc_type": [
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          195
+        ],
+        "wave_id": 48
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 595,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          200
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          197,
+          196
+        ],
+        "wave_id": 49
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2200.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 602,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          197,
+          200,
+          199
+        ],
+        "wave_id": 49
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 609,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          100,
+          800
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kih",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          204,
+          201,
+          203
+        ],
+        "wave_id": 50
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2300.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 616,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          60
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          204,
+          203
+        ],
+        "wave_id": 50
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 623,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          200,
+          1600
+        ],
+        "visible_npc_type": [
+          "tz_kih",
+          "tz_kek",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          208,
+          209,
+          211
+        ],
+        "wave_id": 51
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2407.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 630,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          133
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          213,
+          212,
+          211
+        ],
+        "wave_id": 51
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 637,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          200,
+          800
+        ],
+        "visible_npc_type": [
+          "tz_kek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          215,
+          216
+        ],
+        "wave_id": 52
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2200.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 644,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          60
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          218,
+          219,
+          216
+        ],
+        "wave_id": 52
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 651,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          400
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          224,
+          222
+        ],
+        "wave_id": 53
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2580.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 658,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          20
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          224,
+          222
+        ],
+        "wave_id": 53
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 665,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          400,
+          100
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tok_xil",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          227,
+          226,
+          225
+        ],
+        "wave_id": 54
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2680.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 672,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          60
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          226,
+          227
+        ],
+        "wave_id": 54
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 679,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          100,
+          800,
+          400
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kih",
+          "yt_mej_kot",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          233,
+          230,
+          232,
+          231
+        ],
+        "wave_id": 55
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2580.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 686,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          340,
+          60,
+          20
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "yt_mej_kot",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          233,
+          232,
+          231
+        ],
+        "wave_id": 55
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 693,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          14,
+          1600,
+          800
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "ket_zek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          233,
+          237,
+          236
+        ],
+        "wave_id": 56
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2594.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 700,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          100,
+          100,
+          140,
+          60
+        ],
+        "visible_npc_type": [
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "ket_zek",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          238,
+          239,
+          237,
+          236
+        ],
+        "wave_id": 56
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 5,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 707,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400,
+          1600
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          242,
+          244
+        ],
+        "wave_id": 57
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2680.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 714,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          140
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          242,
+          244
+        ],
+        "wave_id": 57
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 6,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 721,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "tz_kih",
+          "tz_kih"
+        ],
+        "visible_target_order": [
+          251,
+          248,
+          247
+        ],
+        "wave_id": 58
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2780.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 4,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 728,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          251
+        ],
+        "wave_id": 58
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 6,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 735,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          200,
+          200
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek",
+          "tz_kek"
+        ],
+        "visible_target_order": [
+          259,
+          256,
+          255
+        ],
+        "wave_id": 59
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2580.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 6,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 742,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          100,
+          100,
+          100,
+          100
+        ],
+        "visible_npc_type": [
+          "ket_zek",
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tz_kek_spawn",
+          "tz_kek_spawn"
+        ],
+        "visible_target_order": [
+          259,
+          261,
+          260,
+          262,
+          263
+        ],
+        "wave_id": 59
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 749,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          400,
+          400
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          265,
+          264
+        ],
+        "wave_id": 60
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2960.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 3,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 756,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          20,
+          20
+        ],
+        "visible_npc_type": [
+          "tok_xil",
+          "tok_xil"
+        ],
+        "visible_target_order": [
+          265,
+          264
+        ],
+        "wave_id": 60
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 763,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          800,
+          800
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          269,
+          268
+        ],
+        "wave_id": 61
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2740.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 770,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          260,
+          60
+        ],
+        "visible_npc_type": [
+          "yt_mej_kot",
+          "yt_mej_kot"
+        ],
+        "visible_target_order": [
+          269,
+          268
+        ],
+        "wave_id": 61
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 2,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 777,
+        "visible_npc_alive": [
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          1600,
+          206,
+          1600
+        ],
+        "visible_npc_type": [
+          "ket_zek_spawn_point",
+          "yt_mej_kot",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          272,
+          269,
+          271
+        ],
+        "wave_id": 62
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 3126.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 784,
+        "visible_npc_alive": [
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          140,
+          140
+        ],
+        "visible_npc_type": [
+          "ket_zek_spawn_point",
+          "ket_zek"
+        ],
+        "visible_target_order": [
+          272,
+          271
+        ],
+        "wave_id": 62
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 1,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 0,
+        "run_enabled": true,
+        "terminal_code": 2,
+        "tick_index": 791,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          2500
+        ],
+        "visible_npc_type": [
+          "tztok_jad"
+        ],
+        "visible_target_order": [
+          273
+        ],
+        "wave_id": 63
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 1,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 0,
+        "run_enabled": true,
+        "terminal_code": 2,
+        "tick_index": 798,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          600,
+          430,
+          600,
+          600,
+          600
+        ],
+        "visible_npc_type": [
+          "yt_hur_kot",
+          "tztok_jad",
+          "yt_hur_kot",
+          "yt_hur_kot",
+          "yt_hur_kot"
+        ],
+        "visible_target_order": [
+          276,
+          273,
+          277,
+          274,
+          275
+        ],
+        "wave_id": 63
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 2047.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 2,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 0,
+        "run_enabled": true,
+        "terminal_code": 2,
+        "tick_index": 805,
+        "visible_npc_alive": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "visible_npc_hitpoints": [
+          623,
+          40,
+          40,
+          40,
+          40
+        ],
+        "visible_npc_type": [
+          "tztok_jad",
+          "yt_hur_kot",
+          "yt_hur_kot",
+          "yt_hur_kot",
+          "yt_hur_kot"
+        ],
+        "visible_target_order": [
+          273,
+          274,
+          276,
+          277,
+          275
+        ],
+        "wave_id": 63
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 541.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 2,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 0,
+        "run_enabled": true,
+        "terminal_code": 2,
+        "tick_index": 812,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          242
+        ],
+        "visible_npc_type": [
+          "tztok_jad"
+        ],
+        "visible_target_order": [
+          273
+        ],
+        "wave_id": 63
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 238.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 1,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 0,
+        "run_enabled": true,
+        "terminal_code": 2,
+        "tick_index": 819,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          4
+        ],
+        "visible_npc_type": [
+          "tztok_jad"
+        ],
+        "visible_target_order": [
+          273
+        ],
+        "wave_id": 63
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 4.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 826,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 833,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 840,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 847,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 854,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 861,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 868,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 875,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 882,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 889,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 896,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 903,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 910,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 917,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 924,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 931,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 938,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 945,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 952,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 959,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 966,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 973,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 980,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 987,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 994,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1001,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1008,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1015,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1022,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1029,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1036,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1043,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1050,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1057,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1064,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1071,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1078,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1085,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1092,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1099,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1106,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1113,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      },
+      {
+        "action_accepted": true,
+        "action_name": "wait",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "none",
+        "jad_telegraph_state": 0,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": -1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 1120,
+        "visible_npc_alive": [],
+        "visible_npc_hitpoints": [],
+        "visible_npc_type": [],
+        "visible_target_order": [],
+        "wave_id": -1
+      }
+    ],
+    "runtime_path": "oracle",
+    "scenario_id": "full_run",
+    "schema_id": "fight_caves_mechanics_parity_trace_v1",
+    "schema_version": 1,
+    "semantic_digest": "f6b5ab74f221922ec29e5a2291a5d7b38167b06c32bdc9e73189f8e3f4102fdd"
+  }
+}

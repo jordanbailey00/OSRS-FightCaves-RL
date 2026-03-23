@@ -1,0 +1,13 @@
+[mugger]
+id = 175
+hitpoints = 80
+att = 5
+str = 5
+def = 5
+combat_def = "mugger"
+respawn_delay = 25
+wander_range = 2
+hunt_mode = "cowardly"
+categories = ["human", "mugger"]
+drop_table = "mugger"
+examine = "He jumps out and attacks people."

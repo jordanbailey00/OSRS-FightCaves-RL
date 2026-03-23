@@ -1,0 +1,92 @@
+{
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "9378e36d7b7f2d496e61037c399a4a5532ec7e4a8ddb4721691cfe5a180f15ad"
+  },
+  "metadata": {
+    "fixture_type": "mechanics_parity_trace",
+    "generator_script": "scripts/generate_pr1_golden_fixtures.py",
+    "parameters": {
+      "scenario_id": "jad_telegraph"
+    },
+    "schema_versions": {
+      "action_schema_id": "headless_action_v1",
+      "action_schema_version": 1,
+      "mechanics_contract_id": "fight_caves_v2_mechanics_v1",
+      "mechanics_contract_version": 1,
+      "parity_trace_schema_id": "fight_caves_mechanics_parity_trace_v1",
+      "parity_trace_schema_version": 1,
+      "reward_feature_schema_id": "fight_caves_v2_reward_features_v1",
+      "reward_feature_schema_version": 1,
+      "terminal_code_schema_id": "fight_caves_v2_terminal_codes_v1",
+      "terminal_code_schema_version": 1
+    },
+    "source_commit": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538",
+    "source_runtime": "oracle",
+    "source_version": "d6b6ac6541e4beffb49dfd98987c8f259c9bf538-dirty"
+  },
+  "payload": {
+    "field_names": [
+      "tick_index",
+      "action_name",
+      "action_accepted",
+      "rejection_code",
+      "player_hitpoints",
+      "player_prayer_points",
+      "run_enabled",
+      "inventory_ammo",
+      "inventory_sharks",
+      "inventory_prayer_potions",
+      "wave_id",
+      "remaining_npcs",
+      "visible_target_order",
+      "visible_npc_type",
+      "visible_npc_hitpoints",
+      "visible_npc_alive",
+      "jad_telegraph_state",
+      "jad_hit_resolve_outcome",
+      "damage_dealt",
+      "damage_taken",
+      "terminal_code"
+    ],
+    "record_count": 1,
+    "records": [
+      {
+        "action_accepted": true,
+        "action_name": "reset",
+        "damage_dealt": 0.0,
+        "damage_taken": 0.0,
+        "inventory_ammo": 1000,
+        "inventory_prayer_potions": 32,
+        "inventory_sharks": 20,
+        "jad_hit_resolve_outcome": "pending",
+        "jad_telegraph_state": 2,
+        "player_hitpoints": 700,
+        "player_prayer_points": 43,
+        "rejection_code": 0,
+        "remaining_npcs": 1,
+        "run_enabled": true,
+        "terminal_code": 0,
+        "tick_index": 0,
+        "visible_npc_alive": [
+          true
+        ],
+        "visible_npc_hitpoints": [
+          2500
+        ],
+        "visible_npc_type": [
+          "tztok_jad"
+        ],
+        "visible_target_order": [
+          3
+        ],
+        "wave_id": 1
+      }
+    ],
+    "runtime_path": "oracle",
+    "scenario_id": "jad_telegraph",
+    "schema_id": "fight_caves_mechanics_parity_trace_v1",
+    "schema_version": 1,
+    "semantic_digest": "487a5d5924dc6c6709384d4119412aae37835111461ee5fa09f6246a2291244d"
+  }
+}

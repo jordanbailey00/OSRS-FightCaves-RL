@@ -1,0 +1,23 @@
+[gnome_trainer]
+id = 162
+dialogue = "old"
+categories = ["gnome"]
+wander_range = 4
+examine = "He can advise on training."
+
+[brimstail]
+id = 171
+dialogue = "old"
+examine = "Small but wise, he is."
+
+[blurberry]
+id = 848
+dialogue = "old"
+categories = ["gnome"]
+wander_range = 3
+examine = "He seems to run the cocktail bar."
+
+[captain_daerkin]
+id = 4595
+wander_range = 3
+examine = "A gnome pilot off duty, he looks a bit drunk."

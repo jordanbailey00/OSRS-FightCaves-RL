@@ -1,0 +1,16 @@
+[signpost_directions]
+id = 135
+type = "wide_screen"
+
+[.north]
+id = 3
+
+[.east]
+id = 8
+
+[.south]
+id = 9
+
+[.west]
+id = 12
+

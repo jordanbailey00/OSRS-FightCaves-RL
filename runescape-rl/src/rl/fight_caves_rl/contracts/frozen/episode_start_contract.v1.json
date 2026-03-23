@@ -1,0 +1,85 @@
+{
+  "artifact_type": "episode_start_contract",
+  "contract": {
+    "compatibility_policy": "sim_aligned_replace_on_change",
+    "contract_id": "fight_cave_episode_start_v1",
+    "version": 1
+  },
+  "defaults": {
+    "ammo": 1000,
+    "prayer_potions": 8,
+    "run_energy_percent": 100,
+    "run_toggle_on": true,
+    "sharks": 20,
+    "xp_gain_blocked": true
+  },
+  "equipment": [
+    "coif",
+    "rune_crossbow",
+    "black_dragonhide_body",
+    "black_dragonhide_chaps",
+    "black_dragonhide_vambraces",
+    "snakeskin_boots",
+    "adamant_bolts"
+  ],
+  "fixed_levels": [
+    {
+      "level": 1,
+      "skill": "Attack"
+    },
+    {
+      "level": 1,
+      "skill": "Strength"
+    },
+    {
+      "level": 70,
+      "skill": "Defence"
+    },
+    {
+      "level": 700,
+      "skill": "Constitution"
+    },
+    {
+      "level": 70,
+      "skill": "Ranged"
+    },
+    {
+      "level": 43,
+      "skill": "Prayer"
+    },
+    {
+      "level": 1,
+      "skill": "Magic"
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "checksum": "ce57110de0bc3baa1b2adbeaf32131516ea3002b69ea36a3bfb8dfd68e0b8aa2"
+  },
+  "inventory_item_ids": [
+    "prayer_potion_4",
+    "shark"
+  ],
+  "reset_clocks": [
+    "delay",
+    "movement_delay",
+    "food_delay",
+    "drink_delay",
+    "combo_delay",
+    "fight_cave_cooldown"
+  ],
+  "reset_variables": [
+    "fight_cave_wave",
+    "fight_cave_rotation",
+    "fight_cave_remaining",
+    "fight_cave_start_time",
+    "healed"
+  ],
+  "seed_key": "episode_seed",
+  "start_wave": {
+    "default": 1,
+    "max": 63,
+    "min": 1
+  },
+  "start_wave_invocation": "fightCave.startWave(player, startWave, start = false)"
+}

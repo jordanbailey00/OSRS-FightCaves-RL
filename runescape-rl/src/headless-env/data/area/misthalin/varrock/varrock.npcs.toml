@@ -1,0 +1,761 @@
+[shopkeeper_varrock]
+id = 522
+categories = ["human"]
+shop = "varrock_general_store"
+wander_range = 2
+collision = "indoors"
+examine = "Likes people spending money."
+
+[shop_assistant_varrock]
+id = 523
+categories = ["human"]
+shop = "varrock_general_store"
+wander_range = 2
+collision = "indoors"
+examine = "Likes helping sell stuff."
+
+[thessalia]
+id = 548
+shop = "thessalias_fine_clothes"
+categories = ["human"]
+wander_range = 3
+collision = "indoors"
+examine = "Interesting assortment of clothes on offer..."
+
+[aubury]
+id = 553
+shop = "auburys_rune_shop"
+categories = ["human"]
+wander_range = 3
+collision = "indoors"
+examine = "Runes are his passion."
+
+[mage_of_zamorak_normal]
+id = 2261
+interacts = false
+categories = ["human"]
+wander_range = 5
+collision = "indoors"
+examine = "A disciple of Zamorak."
+
+[mage_of_zamorak_wilderness]
+id = 2257
+interacts = false
+categories = ["human"]
+wander_range = 4
+examine = "A disciple of Zamorak."
+
+[mage_of_zamorak_wilderness_trade]
+id = 2258
+interacts = false
+categories = ["human"]
+wander_range = 4
+examine = "A disciple of Zamorak."
+
+[mage_of_zamorak_wilderness_teleport]
+id = 2259
+interacts = false
+categories = ["human"]
+wander_range = 4
+examine = "A disciple of Zamorak."
+
+[mage_of_zamorak_varrock]
+id = 2260
+clone = "mage_of_zamorak_normal"
+
+[reldo]
+id = 647
+categories = ["human"]
+wander_range = 4
+collision = "indoors"
+examine = "Reldo the librarian"
+
+[reldo_plaque]
+id = 2660
+
+[reldo_normal]
+id = 2661
+categories = ["human"]
+wander_range = 4
+examine = "Reldo the librarian."
+
+[tarquin]
+id = 3328
+examine = "A dandy canoe man."
+
+[sir_prysin_normal]
+id = 883
+categories = ["human"]
+wander_range = 3
+collision = "indoors"
+examine = "One of the king's knights."
+
+[sir_prysin_sword]
+clone = "sir_prysin_normal"
+id = 4657
+
+[sir_prysin]
+id = 9359
+clone = "sir_prysin_normal"
+
+[gypsy_aris]
+id = 9362
+examine = "A fortune-teller."
+
+[dark_wizard_water]
+id = 8871
+att = 5
+str = 2
+def = 5
+mage = 6
+hitpoints = 120
+combat_def = "dark_wizard_water"
+respawn_delay = 50
+hunt_mode = "cowardly"
+wander_range = 4
+categories = ["human"]
+examine = "He works evil magic."
+
+[dark_wizard_water_2]
+clone = "dark_wizard_water"
+id = 8872
+drop_table = "dark_wizard_water"
+
+[dark_wizard_earth]
+clone = "dark_wizard_water"
+id = 8873
+att = 17
+str = 17
+def = 14
+mage = 22
+hitpoints = 240
+combat_def = "dark_wizard_earth"
+categories = ["human"]
+drop_table = "dark_wizard_earth"
+examine = "A practicer of dark arts."
+
+[dark_wizard_earth_2]
+clone = "dark_wizard_earth"
+id = 8874
+
+[iffie]
+id = 5914
+categories = ["human"]
+interacts = false
+examine = "An old woman busily knitting."
+
+[ash_cleaner]
+id = 5916
+categories = ["human"]
+wander_range = 12
+hunt_range = 4
+hunt_mode = "ash_finder"
+examine = "Does what too many people aren't interested in doing."
+
+[surok_magis_normal]
+id = 5834
+categories = ["human"]
+collision = "indoors"
+examine = "A powerful wizard."
+
+[surok_magis_dagon_hai]
+id = 5835
+categories = ["human"]
+collision = "indoors"
+examine = "Leader of the Dagon'hai Order."
+
+[surok_magis]
+id = 5853
+collision = "indoors"
+wander_range = 4
+
+[captain_rovin]
+id = 884
+categories = ["human"]
+wander_range = 3
+examine = "The head of the palace guard."
+
+[baraek]
+id = 547
+categories = ["human"]
+wander_range = 3
+examine = "Animal skins are a speciality."
+
+[bartender_jolly_boar_inn]
+id = 731
+categories = ["human"]
+wander_range = 5
+collision = "indoors"
+examine = "I could get a beer from him."
+
+[bartender_blue_moon_inn]
+id = 733
+categories = ["human"]
+wander_range = 4
+collision = "indoors"
+examine = "I could get a beer from him."
+
+[schoolgirl]
+id = 10
+examine = "She looks happy."
+
+[dealga]
+id = 11475
+shop = "dealgas_scimitar_emporium"
+area = "varrock_sword_shop"
+collision = "indoors"
+examine = "A shrewd-looking monkey salesman."
+
+[tolna]
+id = 1732
+
+[guildmaster]
+id = 198
+examine = "Master of the Champions' Guild."
+
+[giant_rat_varrock]
+id = 2091
+att = 6
+str = 5
+def = 2
+hitpoints = 100
+slayer_xp = 10.0
+combat_def = "giant_rat"
+wander_range = 10
+drop_table = "giant_rat"
+categories = ["giant_rats", "rats"]
+examine = "Overgrown vermin."
+
+[master_farmer_varrock]
+id = 2235
+examine = "A master at farming."
+
+[tanner_varrock]
+id = 2320
+examine = "He has a certain bovine aroma."
+
+[dreven]
+id = 2335
+patch = "farming_bush_patch_varrock"
+examine = "Perhaps this gardener might look after your crops for you."
+
+[ellamaria]
+id = 2581
+examine = "Queen Ellamaria of Varrock."
+
+[pox]
+id = 2943
+examine = "Not the healthiest cat you've ever seen."
+
+[hooknosed_jack]
+id = 2948
+examine = "Obviously punches above his weight."
+
+[romily_weaklax]
+id = 3205
+shop = "pie_shop"
+examine = "A family baker, from the North."
+
+[martina_scorsby]
+id = 3326
+examine = "A less enthusiastic ecclesiastic woman, she seems slightly tired."
+
+[jeremy_clerksin]
+id = 3327
+examine = "Rather more tired than most."
+
+[da_vinci]
+id = 337
+examine = "He has a colourful personality."
+
+[chancy]
+id = 339
+examine = "He's ready for a bet."
+
+[hops]
+id = 341
+examine = "He's drunk."
+
+[guidors_wife]
+id = 342
+examine = "She looks rather concerned."
+
+[guidor]
+id = 343
+examine = "He's not that ill."
+
+[naff]
+id = 359
+examine = "Cheeky little chappy."
+
+[launa]
+id = 3638
+
+[guard_biohazard]
+id = 368
+examine = "He tries to keep order around here."
+
+[sawmill_operator]
+id = 4250
+
+[assistant_serf]
+id = 5066
+
+[valaine]
+id = 536
+shop = "valaines_shop_of_champions"
+examine = "A champion saleswoman!"
+
+[scavvo]
+id = 537
+shop = "scavvos_rune_store"
+examine = "He's got the best armour around."
+
+[fancy_dress_shop_owner]
+id = 554
+shop = "fancy_clothes_store"
+collision = "indoors"
+examine = "For the interesting clothing items you just can't find elsewhere."
+
+[rat_burgiss]
+id = 5833
+examine = "A travelling trader."
+
+[anna_jones]
+id = 5837
+examine = "An archeologist."
+
+[bench_varrock]
+id = 5854
+examine = "For sitting on."
+
+[cook_jolly_boar_inn]
+id = 5911
+examine = "He's suspiciously talented with a meat-cleaver."
+
+[captain_varrock]
+id = 5922
+examine = "Trains the guards of the future."
+
+[thief_phoenix_gang]
+id = 5927
+hitpoints = 170
+att = 14
+str = 13
+def = 12
+style = "melee"
+style = "crush"
+max_hit_melee = 20
+respawn_delay = 25
+examine = "Known for his light-fingered qualities."
+
+[art_critic_jacques]
+id = 5930
+examine = "Jacques Netis - a slightly pompous art expert."
+
+[historian_minas]
+id = 5931
+examine = "Seth Minas - an aged expert in Gielinorian history."
+
+[barnabus_hurma]
+id = 5932
+
+[marius_giste]
+id = 5933
+
+[caden_azro]
+id = 5934
+
+[thias_leacke]
+id = 5935
+
+[sinco_doar]
+id = 5936
+
+[tinse_torpe]
+id = 5937
+
+[information_clerk]
+id = 5938
+examine = "A lady with lots of information about the Museum."
+
+[torrcs]
+id = 5939
+examine = "A brave adventurer."
+
+[marfet]
+id = 5940
+examine = "Looks like he knows a thing or two."
+
+[museum_guard]
+id = 5941
+
+[museum_guard_2]
+id = 5943
+
+[teacher_and_pupil]
+id = 5944
+examine = "A teacher and one of his pupils."
+
+[schoolboy]
+id = 5945
+examine = "Looks kind of familiar."
+
+[schoolboy_2]
+id = 5946
+
+[teacher_and_pupil_2]
+id = 5947
+examine = "A teacher and one of her pupils."
+
+[tea_seller]
+id = 595
+shop = "ye_olde_tea_shoppe"
+examine = "He seems to sell tea."
+
+[natural_historian]
+id = 5966
+examine = "An aged expert in natural history."
+
+[natural_historian_2]
+id = 5967
+
+[natural_historian_3]
+id = 5968
+
+[natural_historian_4]
+id = 5969
+
+[leech_display]
+id = 5971
+examine = "Bloodsuckers!"
+
+[sea_slugs_display]
+id = 5972
+examine = "Slugs of the sea variety."
+
+[snail_display]
+id = 5973
+examine = "A house on its back."
+
+[monkey_display]
+id = 5974
+examine = "A cheeky little monkey."
+
+[lizard_display]
+id = 5975
+examine = "A scaly little fellow."
+
+[penguin_display]
+id = 5976
+examine = "Nice suit."
+
+[camel_display]
+id = 5977
+examine = "He's got the hump."
+
+[terrorbird_display]
+id = 5978
+examine = "Terrifying!"
+
+[dragon_display]
+id = 5979
+examine = "Looks like a fire-breather."
+
+[wyvern_display]
+id = 5980
+examine = "Needs a good square meal."
+
+[battle_tortoise_display]
+id = 5981
+examine = "A huge beast."
+
+[mole_display]
+id = 5982
+examine = "Loves making molehills."
+
+[schoolgirl_2]
+id = 5984
+
+[town_crier_varrock]
+id = 6135
+examine = "Get useful information from this guy."
+
+[father_lawrence]
+id = 640
+examine = "A religious man... And occasional drunk."
+
+[katrine]
+id = 642
+examine = "An empowered woman."
+
+[weaponsmaster]
+id = 643
+hitpoints = 200
+att = 21
+str = 21
+def = 21
+attack_speed = 5
+style = "crush"
+max_hit_melee = 30
+attack_bonus = 8
+respawn_delay = 350
+drop_table = "bones"
+examine = "Looks kind of obsessive..."
+
+[straven]
+id = 644
+examine = "Kind of funny looking."
+
+[curator_haig_halen]
+id = 646
+examine = "Curator of the museum."
+
+[dimintheis]
+id = 664
+
+[dimintheis_shield]
+id = 8171
+
+[dimintheis_normal]
+id = 8172
+
+[johnathon]
+id = 668
+examine = "A well-dressed nobleman."
+
+[surok_magis_varrock]
+id = 7009
+
+[bartender_varrock]
+id = 732
+examine = "I could get a beer from him."
+
+[fluffs]
+id = 759
+
+[fluffs_hidden]
+id = 7744
+
+[fluffs_normal]
+id = 7742
+
+[will]
+id = 7737
+
+[phil]
+id = 7739
+
+[gertrude]
+id = 780
+examine = "A busy housewife."
+
+[philop]
+id = 782
+examine = "One of Gertrude's sons."
+
+[kanel]
+id = 784
+examine = "One of Gertrude's sons."
+
+[rogue]
+id = 8124
+
+[hartwin]
+id = 8141
+
+[clive]
+id = 8174
+examine = "Rather dense and soppy-looking."
+
+[head_chef]
+id = 847
+examine = "Despite his name, rarely actually cooks heads."
+
+[overseer]
+id = 8904
+
+[guardian_varrock]
+id = 8906
+
+[man_varrock_4]
+id = 12346
+
+[orlando_smith]
+id = 5965
+examine = "Looks very young."
+
+[elsie]
+id = 5915
+examine = "Armed with a pair of needles."
+
+[tramp_varrock]
+id = 11
+examine = "A man down on his luck."
+
+[market_guard_varrock]
+id = 11269
+examine = "On guard for thieves and ne'erdowells."
+
+[urist_loric]
+id = 11270
+shop = "urists_crafting_supplies"
+examine = "A crafter at the pinnacle of his art."
+
+[man_varrock]
+id = 12345
+
+[man_varrock_2]
+id = 12347
+
+[tramp_varrock_2]
+id = 2792
+examine = "A man down on his luck."
+
+[sani]
+id = 4905
+examine = "A master smith."
+
+[zaff]
+id = 546
+shop = "zaffs_superior_spellcasting"
+collision = "indoors"
+examine = "Sells superior staffs."
+
+[horvik]
+id = 549
+shop = "horviks_armour_shop"
+examine = "The man with the armour."
+
+[lowe]
+id = 550
+shop = "lowes_archery_emporium"
+examine = "Sells arrows."
+
+[sword_shopkeeper_varrock]
+id = 551
+shop = "varrock_sword_shop"
+area = "varrock_sword_shop"
+examine = "Ironically, makes a living from swords."
+
+[sword_shop_assistant_varrock]
+id = 552
+shop = "varrock_sword_shop"
+area = "varrock_sword_shop"
+examine = "Helps the shopkeeper sell swords."
+
+[cook_blue_moon_inn]
+id = 5910
+examine = "A greasy, grimy gourmet."
+
+[guard_varrock]
+id = 5919
+hitpoints = 220
+att = 19
+str = 18
+def = 14
+attack_bonus = 4
+combat_def = "guard_varrock"
+respawn_delay = 50
+examine = "He tries to keep order around here. His bizarre uniform isn't helping."
+
+[man_varrock_3]
+id = 5923
+examine = "One of Gielinor's many citizens."
+
+[woman_varrock]
+id = 5924
+examine = "One of Gielinor's many citizens."
+
+[benny]
+id = 5925
+examine = "Newspaper seller."
+
+[thief_black_arm_gang]
+id = 5926
+clone = "thief_phoenix_gang"
+
+[thief_black_arm_gang_red]
+id = 5928
+clone = "thief_phoenix_gang"
+
+[thief_black_arm_gang_blonde]
+id = 5929
+clone = "thief_phoenix_gang"
+
+[apothecary]
+id = 638
+examine = "A dealer in potions."
+
+[charlie_the_tramp]
+id = 641
+examine = "Looks down on his luck."
+
+[jonny_the_beard]
+id = 645
+hitpoints = 80
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 37
+drop_table = "jonny_the_beard"
+examine = "Looks kind of shifty..."
+
+[dr_harlow]
+id = 756
+examine = "A retired vampyre hunter."
+
+[shilop]
+id = 781
+examine = "One of Gertrude's sons."
+
+[wilough]
+id = 783
+examine = "One of Gertrude's sons."
+
+[treznor]
+id = 2341
+patch = "farming_tree_patch_varrock"
+examine = "Perhaps this gardener might look after your crops for you."
+
+[ambassador_ferrnook]
+id = 4582
+examine = "Peaceful man!"
+
+[guard_varrock_2]
+id = 5920
+examine = "He tries to keep order around here. His bizarre uniform isn't helping."
+
+[trainee_guard]
+id = 5921
+examine = "He's studying to be a guard."
+
+[king_roald]
+id = 648
+examine = "Varrock's resident monarch."
+
+[king_roald_in_combat]
+id = 5838
+hitpoints = 750
+att = 35
+str = 30
+def = 30
+style = "crush"
+max_hit_melee = 30
+hunt_mode = "cowardly"
+immune_poison = true
+examine = "Varrock's resident monarch. He looks strangely evil!"
+
+[tolna_2]
+id = 5462
+
+[launa_2]
+id = 3639
+
+[assistant_serf_2]
+id = 5053
+
+[surok_magis_varrock_2]
+id = 7002
+
+[hartwin_2]
+id = 8140
