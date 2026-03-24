@@ -30,20 +30,20 @@ This plan assumes the current pass has already cleaned the workspace and establi
   - dependency: PR4
   - note: completed with native generic combat/wave/terminal handling plus direct-test core-trace parity hooks, while keeping Jad/healer/Tz-Kek special mechanics out of scope
 - PR5b
-  - status: not_started
+  - status: done
   - goal: move the highest-risk special mechanics parity into the native runtime
   - dependency: PR5a
-  - note: next
+  - note: completed with frozen special-trace parity coverage and direct-test-only snapshot plumbing, without opening PR6 output work or PR7 cutover work
 - PR6
   - status: not_started
   - goal: move flat observation and reward-feature emission into the native hot path
   - dependency: PR5b
-  - note: upcoming
+  - note: next
 - PR7
   - status: not_started
   - goal: cut Python `v2_fast` integration over to the native backend without changing the trainer contract
   - dependency: PR6
-  - note: queued
+  - note: upcoming
 - PR8
   - status: not_started
   - goal: clear the explicit performance gates and make the native backend the default fast path
@@ -112,6 +112,20 @@ This plan assumes the current pass has already cleaned the workspace and establi
   - no trainer or vecenv/native cutover.
 - Scope boundary held:
   - PR5a used frozen core-trace fixtures for single-wave/full-run acceptance and kept the special-mechanics parity surface deferred to PR5b instead of silently absorbing it.
+
+## PR5b Completion Note
+
+- Completed:
+  - native special-mechanics parity coverage for the frozen Jad telegraph, Jad prayer-protected, Jad prayer-too-late, healer, and Tz-Kek split artifacts,
+  - direct-test-only native snapshot plumbing so reset-state special traces can be validated without opening the standard vecenv/train path,
+  - continued enforcement that `native_preview` remains outside the standard Python env factory cutover path.
+- Intentionally not done:
+  - no PR6 flat-observation hot-path work,
+  - no PR6 reward-feature emission work,
+  - no Python/native cutover,
+  - no trainer or broader vecenv integration changes.
+- Scope boundary held:
+  - PR5b extended the trace-backed oracle validation surface only as far as needed to match the frozen special-mechanics artifacts and did not absorb PR6 output work or PR7 integration work.
 
 ## Ownership and non-goals
 
@@ -351,7 +365,7 @@ Validation and parity expectations:
 
 Dependency ordering:
 
-- Depends on PR5.
+- Depends on PR5b.
 
 ## PR7: Python `v2_fast` Integration Cutover
 
@@ -429,9 +443,10 @@ Recommended order:
 2. PR2
 3. PR3
 4. PR4
-5. PR5
-6. PR6
-7. PR7
-8. PR8
+5. PR5a
+6. PR5b
+7. PR6
+8. PR7
+9. PR8
 
 Do not combine PR5 through PR8 into one migration batch. The highest-risk failure mode in this project is losing parity while changing runtime, outputs, and trainer integration at the same time.

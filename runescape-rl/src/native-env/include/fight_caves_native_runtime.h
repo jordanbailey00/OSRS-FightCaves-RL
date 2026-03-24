@@ -107,6 +107,11 @@ int fc_native_runtime_debug_load_core_trace(
     int slot_index,
     int trace_id
 );
+int fc_native_runtime_debug_snapshot_slots(
+    fc_native_runtime* runtime,
+    const int* slot_indices,
+    int env_count
+);
 int fc_native_runtime_step_batch(
     fc_native_runtime* runtime,
     const int* slot_indices,
@@ -119,6 +124,8 @@ const int* fc_native_runtime_last_step_action_ids(const fc_native_runtime* runti
 const int* fc_native_runtime_last_step_action_accepted(const fc_native_runtime* runtime);
 const int* fc_native_runtime_last_step_rejection_codes(const fc_native_runtime* runtime);
 const int* fc_native_runtime_last_step_resolved_target_npc_indices(const fc_native_runtime* runtime);
+const int* fc_native_runtime_last_step_jad_telegraph_states(const fc_native_runtime* runtime);
+const int* fc_native_runtime_last_step_jad_hit_resolve_outcome_codes(const fc_native_runtime* runtime);
 const float* fc_native_runtime_last_step_flat_observations(const fc_native_runtime* runtime);
 const float* fc_native_runtime_last_step_reward_features(const fc_native_runtime* runtime);
 const int* fc_native_runtime_last_step_terminal_codes(const fc_native_runtime* runtime);

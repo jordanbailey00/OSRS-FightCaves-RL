@@ -7,8 +7,10 @@
 - PR3 is complete.
 - PR4 is complete.
 - PR5a is complete.
-- Native implementation now includes the PR2 scaffold/load/query/close surface plus deterministic reset, episode initialization, reset-state projection, packed action decoding, visible-target ordering, rejection handling, the PR4 per-step tick/control skeleton, and the PR5a native core combat/wave/terminal path.
-- The current approved next step is PR5b.
+- PR5b is complete.
+- PR6 is complete.
+- Native implementation now includes the PR2 scaffold/load/query/close surface plus deterministic reset, episode initialization, reset-state projection, packed action decoding, visible-target ordering, rejection handling, the PR4 per-step tick/control skeleton, the PR5a native core combat/wave/terminal path, the PR5b special-mechanics parity surface, and the PR6 native flat-observation and reward-feature emission path.
+- The current approved next step is PR7.
 - The native rewrite boundary remains unchanged: the native runtime will eventually own the headless hot path, while legacy headless Kotlin and RSPS stay as oracle/reference validation infrastructure.
 - The active ownership model remains unchanged: long-term active ownership is limited to the native headless training environment, headed demo environment, and RL/PufferLib connectivity code.
 

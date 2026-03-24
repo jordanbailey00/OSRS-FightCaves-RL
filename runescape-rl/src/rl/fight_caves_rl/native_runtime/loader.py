@@ -20,6 +20,7 @@ from fight_caves_rl.native_runtime.reset import (
     NativeResetSlotState,
 )
 from fight_caves_rl.native_runtime.step import (
+    JAD_HIT_RESOLVE_OUTCOME_BY_CODE,
     NativeSlotDebugState,
     NativeStepBatchResult,
     NativeVisibleNpcConfig,
@@ -352,6 +353,33 @@ class NativeRuntimeHandle:
         ) != 1:
             raise NativeRuntimeError(_last_error(self._library))
 
+    def snapshot_slots(
+        self,
+        *,
+        slot_indices: np.ndarray | list[int] | tuple[int, ...] | None = None,
+    ) -> NativeStepBatchResult:
+        self._require_open()
+        if slot_indices is None:
+            env_count = int(self._library.fc_native_runtime_last_reset_env_count(self._handle))
+            if env_count < 0:
+                raise NativeRuntimeError(
+                    "native runtime snapshot requires a reset or explicit slot_indices first"
+                )
+            slot_index_array = np.arange(env_count, dtype=np.int32)
+        else:
+            slot_index_array = np.asarray(slot_indices, dtype=np.int32).reshape(-1)
+            env_count = int(slot_index_array.size)
+        if (
+            self._library.fc_native_runtime_debug_snapshot_slots(
+                self._handle,
+                slot_index_array.ctypes.data_as(ctypes.POINTER(ctypes.c_int)) if env_count > 0 else None,
+                env_count,
+            )
+            != 1
+        ):
+            raise NativeRuntimeError(_last_error(self._library))
+        return self._read_last_step_batch_result()
+
     def step_batch(
         self,
         packed_actions: np.ndarray | list[int] | tuple[int, ...],
@@ -387,11 +415,20 @@ class NativeRuntimeHandle:
             != 1
         ):
             raise NativeRuntimeError(_last_error(self._library))
+        return self._read_last_step_batch_result()
+
+    def _read_last_step_batch_result(self) -> NativeStepBatchResult:
+        self._require_open()
 
         actual_env_count = int(self._library.fc_native_runtime_last_step_env_count(self._handle))
         summary = self.descriptor_bundle()["summary"]
         observation_feature_count = int(summary["flat_observation_feature_count"])
         reward_feature_count = int(summary["reward_feature_count"])
+        jad_hit_resolve_outcome_codes = _copy_pointer_array(
+            self._library.fc_native_runtime_last_step_jad_hit_resolve_outcome_codes(self._handle),
+            shape=(actual_env_count,),
+            dtype=np.int32,
+        )
         return NativeStepBatchResult(
             env_count=actual_env_count,
             slot_indices=_copy_pointer_array(
@@ -418,6 +455,15 @@ class NativeRuntimeHandle:
                 self._library.fc_native_runtime_last_step_resolved_target_npc_indices(self._handle),
                 shape=(actual_env_count,),
                 dtype=np.int32,
+            ),
+            jad_telegraph_states=_copy_pointer_array(
+                self._library.fc_native_runtime_last_step_jad_telegraph_states(self._handle),
+                shape=(actual_env_count,),
+                dtype=np.int32,
+            ),
+            jad_hit_resolve_outcome_codes=jad_hit_resolve_outcome_codes,
+            jad_hit_resolve_outcomes=tuple(
+                JAD_HIT_RESOLVE_OUTCOME_BY_CODE[int(code)] for code in jad_hit_resolve_outcome_codes
             ),
             flat_observations=_copy_pointer_array(
                 self._library.fc_native_runtime_last_step_flat_observations(self._handle),
@@ -593,6 +639,12 @@ def _configure_api(library: ctypes.CDLL) -> None:
         ctypes.c_int,
     ]
     library.fc_native_runtime_debug_load_core_trace.restype = ctypes.c_int
+    library.fc_native_runtime_debug_snapshot_slots.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.c_int,
+    ]
+    library.fc_native_runtime_debug_snapshot_slots.restype = ctypes.c_int
     library.fc_native_runtime_step_batch.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(ctypes.c_int),
@@ -612,6 +664,12 @@ def _configure_api(library: ctypes.CDLL) -> None:
     library.fc_native_runtime_last_step_rejection_codes.restype = ctypes.POINTER(ctypes.c_int)
     library.fc_native_runtime_last_step_resolved_target_npc_indices.argtypes = [ctypes.c_void_p]
     library.fc_native_runtime_last_step_resolved_target_npc_indices.restype = ctypes.POINTER(
+        ctypes.c_int
+    )
+    library.fc_native_runtime_last_step_jad_telegraph_states.argtypes = [ctypes.c_void_p]
+    library.fc_native_runtime_last_step_jad_telegraph_states.restype = ctypes.POINTER(ctypes.c_int)
+    library.fc_native_runtime_last_step_jad_hit_resolve_outcome_codes.argtypes = [ctypes.c_void_p]
+    library.fc_native_runtime_last_step_jad_hit_resolve_outcome_codes.restype = ctypes.POINTER(
         ctypes.c_int
     )
     library.fc_native_runtime_last_step_flat_observations.argtypes = [ctypes.c_void_p]

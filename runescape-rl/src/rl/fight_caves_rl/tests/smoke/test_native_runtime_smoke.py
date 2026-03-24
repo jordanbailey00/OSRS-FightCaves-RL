@@ -25,7 +25,7 @@ def test_native_runtime_build_load_query_and_close_smoke(tmp_path: Path):
     with load_native_runtime(library_path=library_path) as runtime:
         assert runtime.closed is False
         assert runtime.descriptor_count == 5
-        assert runtime.runtime_version == "pr5a_core_combat_terminal_v1"
+        assert runtime.runtime_version == "pr6_flat_obs_reward_features_v1"
         assert runtime.descriptor_bundle() == expected_descriptor_bundle()
 
     assert runtime.closed is True

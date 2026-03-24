@@ -4,13 +4,18 @@ ENV_BACKEND_NATIVE_PREVIEW = "native_preview"
 NATIVE_RUNTIME_ABI_VERSION = 1
 NATIVE_RUNTIME_ID = "fight_caves_native_runtime_pr2"
 NATIVE_RUNTIME_VERSION = 1
-NATIVE_RUNTIME_MODE = "core_combat_terminal_scaffold"
+NATIVE_RUNTIME_MODE = "flat_obs_reward_feature_scaffold"
 NATIVE_RUNTIME_VECENV_GUARD_MESSAGE = (
     "env_backend='native_preview' currently exposes only the native direct-test scaffold "
-    "through PR5a. Standard vecenv/train usage remains out of scope until PR7."
+    "through PR6. Standard vecenv/train usage remains out of scope until PR7."
 )
 
 NATIVE_CORE_TRACE_IDS = {
     "single_wave": 1,
     "full_run": 2,
+    "jad_telegraph": 3,
+    "jad_prayer_protected": 4,
+    "jad_prayer_too_late": 5,
+    "jad_healer": 6,
+    "tzkek_split": 7,
 }

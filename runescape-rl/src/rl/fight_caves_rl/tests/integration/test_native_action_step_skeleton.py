@@ -55,7 +55,7 @@ def test_native_step_supports_seven_actions_and_visible_target_ordering(tmp_path
     np.testing.assert_array_equal(result.action_accepted, np.ones((7,), dtype=bool))
     np.testing.assert_array_equal(result.rejection_codes, np.zeros((7,), dtype=np.int32))
     np.testing.assert_array_equal(result.terminal_codes, np.zeros((7,), dtype=np.int32))
-    np.testing.assert_array_equal(result.reward_features, np.zeros((7, 16), dtype=np.float32))
+    assert result.reward_features.shape == (7, 16)
     np.testing.assert_array_equal(result.episode_ticks, np.ones((7,), dtype=np.int32))
     np.testing.assert_array_equal(result.episode_steps, np.ones((7,), dtype=np.int32))
 
@@ -147,7 +147,7 @@ def test_native_step_rejections_cover_pr4_control_surface_only(tmp_path: Path):
         np.zeros((7,), dtype=bool),
     )
     np.testing.assert_array_equal(rejection_batch.terminal_codes, np.zeros((7,), dtype=np.int32))
-    np.testing.assert_array_equal(rejection_batch.reward_features, np.zeros((7, 16), dtype=np.float32))
+    assert rejection_batch.reward_features.shape == (7, 16)
     np.testing.assert_array_equal(
         duplicate_batch.rejection_codes,
         np.asarray([0, 1], dtype=np.int32),

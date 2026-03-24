@@ -4,6 +4,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+JAD_HIT_RESOLVE_OUTCOME_BY_CODE = {
+    0: "none",
+    1: "pending",
+    2: "protected",
+    3: "hit",
+}
+
 
 @dataclass(frozen=True)
 class NativeTile:
@@ -55,6 +62,9 @@ class NativeStepBatchResult:
     action_accepted: np.ndarray
     rejection_codes: np.ndarray
     resolved_target_npc_indices: np.ndarray
+    jad_telegraph_states: np.ndarray
+    jad_hit_resolve_outcome_codes: np.ndarray
+    jad_hit_resolve_outcomes: tuple[str, ...]
     flat_observations: np.ndarray
     reward_features: np.ndarray
     terminal_codes: np.ndarray

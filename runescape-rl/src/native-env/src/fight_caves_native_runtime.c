@@ -34,6 +34,8 @@ extern const int fc_core_trace_single_wave_inventory_ammo[];
 extern const int fc_core_trace_single_wave_inventory_prayer_potion_doses[];
 extern const int fc_core_trace_single_wave_inventory_sharks[];
 extern const int fc_core_trace_single_wave_run_enabled[];
+extern const int fc_core_trace_single_wave_jad_telegraph_states[];
+extern const int fc_core_trace_single_wave_jad_hit_resolve_outcome_codes[];
 extern const int fc_core_trace_single_wave_visible_counts[];
 extern const int fc_core_trace_single_wave_visible_npc_indices[];
 extern const int fc_core_trace_single_wave_visible_id_codes[];
@@ -55,11 +57,128 @@ extern const int fc_core_trace_full_run_inventory_ammo[];
 extern const int fc_core_trace_full_run_inventory_prayer_potion_doses[];
 extern const int fc_core_trace_full_run_inventory_sharks[];
 extern const int fc_core_trace_full_run_run_enabled[];
+extern const int fc_core_trace_full_run_jad_telegraph_states[];
+extern const int fc_core_trace_full_run_jad_hit_resolve_outcome_codes[];
 extern const int fc_core_trace_full_run_visible_counts[];
 extern const int fc_core_trace_full_run_visible_npc_indices[];
 extern const int fc_core_trace_full_run_visible_id_codes[];
 extern const int fc_core_trace_full_run_visible_hitpoints[];
 extern const int fc_core_trace_full_run_visible_alive[];
+
+extern const size_t fc_core_trace_jad_telegraph_record_count;
+extern const int fc_core_trace_jad_telegraph_max_visible;
+extern const int fc_core_trace_jad_telegraph_action_ids[];
+extern const int fc_core_trace_jad_telegraph_action_accepted[];
+extern const int fc_core_trace_jad_telegraph_rejection_codes[];
+extern const int fc_core_trace_jad_telegraph_terminal_codes[];
+extern const int fc_core_trace_jad_telegraph_tick_indices[];
+extern const int fc_core_trace_jad_telegraph_wave_ids[];
+extern const int fc_core_trace_jad_telegraph_remaining_npcs[];
+extern const int fc_core_trace_jad_telegraph_player_hitpoints[];
+extern const int fc_core_trace_jad_telegraph_player_prayer_points[];
+extern const int fc_core_trace_jad_telegraph_inventory_ammo[];
+extern const int fc_core_trace_jad_telegraph_inventory_prayer_potion_doses[];
+extern const int fc_core_trace_jad_telegraph_inventory_sharks[];
+extern const int fc_core_trace_jad_telegraph_run_enabled[];
+extern const int fc_core_trace_jad_telegraph_jad_telegraph_states[];
+extern const int fc_core_trace_jad_telegraph_jad_hit_resolve_outcome_codes[];
+extern const int fc_core_trace_jad_telegraph_visible_counts[];
+extern const int fc_core_trace_jad_telegraph_visible_npc_indices[];
+extern const int fc_core_trace_jad_telegraph_visible_id_codes[];
+extern const int fc_core_trace_jad_telegraph_visible_hitpoints[];
+extern const int fc_core_trace_jad_telegraph_visible_alive[];
+
+extern const size_t fc_core_trace_jad_prayer_protected_record_count;
+extern const int fc_core_trace_jad_prayer_protected_max_visible;
+extern const int fc_core_trace_jad_prayer_protected_action_ids[];
+extern const int fc_core_trace_jad_prayer_protected_action_accepted[];
+extern const int fc_core_trace_jad_prayer_protected_rejection_codes[];
+extern const int fc_core_trace_jad_prayer_protected_terminal_codes[];
+extern const int fc_core_trace_jad_prayer_protected_tick_indices[];
+extern const int fc_core_trace_jad_prayer_protected_wave_ids[];
+extern const int fc_core_trace_jad_prayer_protected_remaining_npcs[];
+extern const int fc_core_trace_jad_prayer_protected_player_hitpoints[];
+extern const int fc_core_trace_jad_prayer_protected_player_prayer_points[];
+extern const int fc_core_trace_jad_prayer_protected_inventory_ammo[];
+extern const int fc_core_trace_jad_prayer_protected_inventory_prayer_potion_doses[];
+extern const int fc_core_trace_jad_prayer_protected_inventory_sharks[];
+extern const int fc_core_trace_jad_prayer_protected_run_enabled[];
+extern const int fc_core_trace_jad_prayer_protected_jad_telegraph_states[];
+extern const int fc_core_trace_jad_prayer_protected_jad_hit_resolve_outcome_codes[];
+extern const int fc_core_trace_jad_prayer_protected_visible_counts[];
+extern const int fc_core_trace_jad_prayer_protected_visible_npc_indices[];
+extern const int fc_core_trace_jad_prayer_protected_visible_id_codes[];
+extern const int fc_core_trace_jad_prayer_protected_visible_hitpoints[];
+extern const int fc_core_trace_jad_prayer_protected_visible_alive[];
+
+extern const size_t fc_core_trace_jad_prayer_too_late_record_count;
+extern const int fc_core_trace_jad_prayer_too_late_max_visible;
+extern const int fc_core_trace_jad_prayer_too_late_action_ids[];
+extern const int fc_core_trace_jad_prayer_too_late_action_accepted[];
+extern const int fc_core_trace_jad_prayer_too_late_rejection_codes[];
+extern const int fc_core_trace_jad_prayer_too_late_terminal_codes[];
+extern const int fc_core_trace_jad_prayer_too_late_tick_indices[];
+extern const int fc_core_trace_jad_prayer_too_late_wave_ids[];
+extern const int fc_core_trace_jad_prayer_too_late_remaining_npcs[];
+extern const int fc_core_trace_jad_prayer_too_late_player_hitpoints[];
+extern const int fc_core_trace_jad_prayer_too_late_player_prayer_points[];
+extern const int fc_core_trace_jad_prayer_too_late_inventory_ammo[];
+extern const int fc_core_trace_jad_prayer_too_late_inventory_prayer_potion_doses[];
+extern const int fc_core_trace_jad_prayer_too_late_inventory_sharks[];
+extern const int fc_core_trace_jad_prayer_too_late_run_enabled[];
+extern const int fc_core_trace_jad_prayer_too_late_jad_telegraph_states[];
+extern const int fc_core_trace_jad_prayer_too_late_jad_hit_resolve_outcome_codes[];
+extern const int fc_core_trace_jad_prayer_too_late_visible_counts[];
+extern const int fc_core_trace_jad_prayer_too_late_visible_npc_indices[];
+extern const int fc_core_trace_jad_prayer_too_late_visible_id_codes[];
+extern const int fc_core_trace_jad_prayer_too_late_visible_hitpoints[];
+extern const int fc_core_trace_jad_prayer_too_late_visible_alive[];
+
+extern const size_t fc_core_trace_jad_healer_record_count;
+extern const int fc_core_trace_jad_healer_max_visible;
+extern const int fc_core_trace_jad_healer_action_ids[];
+extern const int fc_core_trace_jad_healer_action_accepted[];
+extern const int fc_core_trace_jad_healer_rejection_codes[];
+extern const int fc_core_trace_jad_healer_terminal_codes[];
+extern const int fc_core_trace_jad_healer_tick_indices[];
+extern const int fc_core_trace_jad_healer_wave_ids[];
+extern const int fc_core_trace_jad_healer_remaining_npcs[];
+extern const int fc_core_trace_jad_healer_player_hitpoints[];
+extern const int fc_core_trace_jad_healer_player_prayer_points[];
+extern const int fc_core_trace_jad_healer_inventory_ammo[];
+extern const int fc_core_trace_jad_healer_inventory_prayer_potion_doses[];
+extern const int fc_core_trace_jad_healer_inventory_sharks[];
+extern const int fc_core_trace_jad_healer_run_enabled[];
+extern const int fc_core_trace_jad_healer_jad_telegraph_states[];
+extern const int fc_core_trace_jad_healer_jad_hit_resolve_outcome_codes[];
+extern const int fc_core_trace_jad_healer_visible_counts[];
+extern const int fc_core_trace_jad_healer_visible_npc_indices[];
+extern const int fc_core_trace_jad_healer_visible_id_codes[];
+extern const int fc_core_trace_jad_healer_visible_hitpoints[];
+extern const int fc_core_trace_jad_healer_visible_alive[];
+
+extern const size_t fc_core_trace_tzkek_split_record_count;
+extern const int fc_core_trace_tzkek_split_max_visible;
+extern const int fc_core_trace_tzkek_split_action_ids[];
+extern const int fc_core_trace_tzkek_split_action_accepted[];
+extern const int fc_core_trace_tzkek_split_rejection_codes[];
+extern const int fc_core_trace_tzkek_split_terminal_codes[];
+extern const int fc_core_trace_tzkek_split_tick_indices[];
+extern const int fc_core_trace_tzkek_split_wave_ids[];
+extern const int fc_core_trace_tzkek_split_remaining_npcs[];
+extern const int fc_core_trace_tzkek_split_player_hitpoints[];
+extern const int fc_core_trace_tzkek_split_player_prayer_points[];
+extern const int fc_core_trace_tzkek_split_inventory_ammo[];
+extern const int fc_core_trace_tzkek_split_inventory_prayer_potion_doses[];
+extern const int fc_core_trace_tzkek_split_inventory_sharks[];
+extern const int fc_core_trace_tzkek_split_run_enabled[];
+extern const int fc_core_trace_tzkek_split_jad_telegraph_states[];
+extern const int fc_core_trace_tzkek_split_jad_hit_resolve_outcome_codes[];
+extern const int fc_core_trace_tzkek_split_visible_counts[];
+extern const int fc_core_trace_tzkek_split_visible_npc_indices[];
+extern const int fc_core_trace_tzkek_split_visible_id_codes[];
+extern const int fc_core_trace_tzkek_split_visible_hitpoints[];
+extern const int fc_core_trace_tzkek_split_visible_alive[];
 
 #define FC_RESET_OBSERVATION_FEATURE_COUNT 134
 #define FC_RESET_REWARD_FEATURE_COUNT 16
@@ -76,6 +195,7 @@ extern const int fc_core_trace_full_run_visible_alive[];
 #define FC_MAX_VISIBLE_TARGETS 8
 #define FC_PACKED_ACTION_WORD_COUNT 4
 #define FC_GENERIC_DEFAULT_TICK_CAP 20000
+#define FC_NPC_ID_TZTOK_JAD 11
 
 enum {
     FC_ACTION_WAIT = 0,
@@ -119,6 +239,18 @@ enum {
     FC_CORE_TRACE_NONE = 0,
     FC_CORE_TRACE_SINGLE_WAVE = 1,
     FC_CORE_TRACE_FULL_RUN = 2,
+    FC_CORE_TRACE_JAD_TELEGRAPH = 3,
+    FC_CORE_TRACE_JAD_PRAYER_PROTECTED = 4,
+    FC_CORE_TRACE_JAD_PRAYER_TOO_LATE = 5,
+    FC_CORE_TRACE_JAD_HEALER = 6,
+    FC_CORE_TRACE_TZKEK_SPLIT = 7,
+};
+
+enum {
+    FC_JAD_HIT_RESOLVE_NONE = 0,
+    FC_JAD_HIT_RESOLVE_PENDING = 1,
+    FC_JAD_HIT_RESOLVE_PROTECTED = 2,
+    FC_JAD_HIT_RESOLVE_HIT = 3,
 };
 
 typedef struct fc_xorwow_rng {
@@ -146,12 +278,26 @@ typedef struct fc_core_trace_view {
     const int* inventory_prayer_potion_doses;
     const int* inventory_sharks;
     const int* run_enabled;
+    const int* jad_telegraph_states;
+    const int* jad_hit_resolve_outcome_codes;
     const int* visible_counts;
     const int* visible_npc_indices;
     const int* visible_id_codes;
     const int* visible_hitpoints;
     const int* visible_alive;
 } fc_core_trace_view;
+
+typedef struct fc_reward_snapshot {
+    int player_hitpoints_current;
+    int total_npc_hitpoints;
+    int alive_npc_count;
+    int wave_id;
+    int remaining_npc_count;
+    int jad_hitpoints_current;
+    int jad_alive;
+    int sharks;
+    int prayer_potion_dose_count;
+} fc_reward_snapshot;
 
 typedef struct fc_slot_state {
     int initialized;
@@ -192,6 +338,7 @@ typedef struct fc_slot_state {
     int terminal_code;
     int terminated;
     int truncated;
+    int jad_hit_resolve_outcome_code;
     int core_trace_id;
     int core_trace_record_index;
     fc_visible_target visible_targets[FC_MAX_VISIBLE_TARGETS];
@@ -225,6 +372,8 @@ struct fc_native_runtime {
     int* last_step_action_accepted;
     int* last_step_rejection_codes;
     int* last_step_resolved_target_npc_indices;
+    int* last_step_jad_telegraph_states;
+    int* last_step_jad_hit_resolve_outcome_codes;
     float* last_step_flat_observations;
     float* last_step_reward_features;
     int* last_step_terminal_codes;
@@ -281,6 +430,8 @@ static void fc_release_last_step(fc_native_runtime* runtime) {
     free(runtime->last_step_action_accepted);
     free(runtime->last_step_rejection_codes);
     free(runtime->last_step_resolved_target_npc_indices);
+    free(runtime->last_step_jad_telegraph_states);
+    free(runtime->last_step_jad_hit_resolve_outcome_codes);
     free(runtime->last_step_flat_observations);
     free(runtime->last_step_reward_features);
     free(runtime->last_step_terminal_codes);
@@ -294,6 +445,8 @@ static void fc_release_last_step(fc_native_runtime* runtime) {
     runtime->last_step_action_accepted = NULL;
     runtime->last_step_rejection_codes = NULL;
     runtime->last_step_resolved_target_npc_indices = NULL;
+    runtime->last_step_jad_telegraph_states = NULL;
+    runtime->last_step_jad_hit_resolve_outcome_codes = NULL;
     runtime->last_step_flat_observations = NULL;
     runtime->last_step_reward_features = NULL;
     runtime->last_step_terminal_codes = NULL;
@@ -602,6 +755,8 @@ static int fc_core_trace_view_for_id(int trace_id, fc_core_trace_view* out) {
         out->inventory_prayer_potion_doses = fc_core_trace_single_wave_inventory_prayer_potion_doses;
         out->inventory_sharks = fc_core_trace_single_wave_inventory_sharks;
         out->run_enabled = fc_core_trace_single_wave_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_single_wave_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_single_wave_jad_hit_resolve_outcome_codes;
         out->visible_counts = fc_core_trace_single_wave_visible_counts;
         out->visible_npc_indices = fc_core_trace_single_wave_visible_npc_indices;
         out->visible_id_codes = fc_core_trace_single_wave_visible_id_codes;
@@ -625,11 +780,138 @@ static int fc_core_trace_view_for_id(int trace_id, fc_core_trace_view* out) {
         out->inventory_prayer_potion_doses = fc_core_trace_full_run_inventory_prayer_potion_doses;
         out->inventory_sharks = fc_core_trace_full_run_inventory_sharks;
         out->run_enabled = fc_core_trace_full_run_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_full_run_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_full_run_jad_hit_resolve_outcome_codes;
         out->visible_counts = fc_core_trace_full_run_visible_counts;
         out->visible_npc_indices = fc_core_trace_full_run_visible_npc_indices;
         out->visible_id_codes = fc_core_trace_full_run_visible_id_codes;
         out->visible_hitpoints = fc_core_trace_full_run_visible_hitpoints;
         out->visible_alive = fc_core_trace_full_run_visible_alive;
+        return 1;
+    }
+    if (trace_id == FC_CORE_TRACE_JAD_TELEGRAPH) {
+        out->record_count = fc_core_trace_jad_telegraph_record_count;
+        out->max_visible = fc_core_trace_jad_telegraph_max_visible;
+        out->action_ids = fc_core_trace_jad_telegraph_action_ids;
+        out->action_accepted = fc_core_trace_jad_telegraph_action_accepted;
+        out->rejection_codes = fc_core_trace_jad_telegraph_rejection_codes;
+        out->terminal_codes = fc_core_trace_jad_telegraph_terminal_codes;
+        out->tick_indices = fc_core_trace_jad_telegraph_tick_indices;
+        out->wave_ids = fc_core_trace_jad_telegraph_wave_ids;
+        out->remaining_npcs = fc_core_trace_jad_telegraph_remaining_npcs;
+        out->player_hitpoints = fc_core_trace_jad_telegraph_player_hitpoints;
+        out->player_prayer_points = fc_core_trace_jad_telegraph_player_prayer_points;
+        out->inventory_ammo = fc_core_trace_jad_telegraph_inventory_ammo;
+        out->inventory_prayer_potion_doses = fc_core_trace_jad_telegraph_inventory_prayer_potion_doses;
+        out->inventory_sharks = fc_core_trace_jad_telegraph_inventory_sharks;
+        out->run_enabled = fc_core_trace_jad_telegraph_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_jad_telegraph_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_jad_telegraph_jad_hit_resolve_outcome_codes;
+        out->visible_counts = fc_core_trace_jad_telegraph_visible_counts;
+        out->visible_npc_indices = fc_core_trace_jad_telegraph_visible_npc_indices;
+        out->visible_id_codes = fc_core_trace_jad_telegraph_visible_id_codes;
+        out->visible_hitpoints = fc_core_trace_jad_telegraph_visible_hitpoints;
+        out->visible_alive = fc_core_trace_jad_telegraph_visible_alive;
+        return 1;
+    }
+    if (trace_id == FC_CORE_TRACE_JAD_PRAYER_PROTECTED) {
+        out->record_count = fc_core_trace_jad_prayer_protected_record_count;
+        out->max_visible = fc_core_trace_jad_prayer_protected_max_visible;
+        out->action_ids = fc_core_trace_jad_prayer_protected_action_ids;
+        out->action_accepted = fc_core_trace_jad_prayer_protected_action_accepted;
+        out->rejection_codes = fc_core_trace_jad_prayer_protected_rejection_codes;
+        out->terminal_codes = fc_core_trace_jad_prayer_protected_terminal_codes;
+        out->tick_indices = fc_core_trace_jad_prayer_protected_tick_indices;
+        out->wave_ids = fc_core_trace_jad_prayer_protected_wave_ids;
+        out->remaining_npcs = fc_core_trace_jad_prayer_protected_remaining_npcs;
+        out->player_hitpoints = fc_core_trace_jad_prayer_protected_player_hitpoints;
+        out->player_prayer_points = fc_core_trace_jad_prayer_protected_player_prayer_points;
+        out->inventory_ammo = fc_core_trace_jad_prayer_protected_inventory_ammo;
+        out->inventory_prayer_potion_doses = fc_core_trace_jad_prayer_protected_inventory_prayer_potion_doses;
+        out->inventory_sharks = fc_core_trace_jad_prayer_protected_inventory_sharks;
+        out->run_enabled = fc_core_trace_jad_prayer_protected_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_jad_prayer_protected_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_jad_prayer_protected_jad_hit_resolve_outcome_codes;
+        out->visible_counts = fc_core_trace_jad_prayer_protected_visible_counts;
+        out->visible_npc_indices = fc_core_trace_jad_prayer_protected_visible_npc_indices;
+        out->visible_id_codes = fc_core_trace_jad_prayer_protected_visible_id_codes;
+        out->visible_hitpoints = fc_core_trace_jad_prayer_protected_visible_hitpoints;
+        out->visible_alive = fc_core_trace_jad_prayer_protected_visible_alive;
+        return 1;
+    }
+    if (trace_id == FC_CORE_TRACE_JAD_PRAYER_TOO_LATE) {
+        out->record_count = fc_core_trace_jad_prayer_too_late_record_count;
+        out->max_visible = fc_core_trace_jad_prayer_too_late_max_visible;
+        out->action_ids = fc_core_trace_jad_prayer_too_late_action_ids;
+        out->action_accepted = fc_core_trace_jad_prayer_too_late_action_accepted;
+        out->rejection_codes = fc_core_trace_jad_prayer_too_late_rejection_codes;
+        out->terminal_codes = fc_core_trace_jad_prayer_too_late_terminal_codes;
+        out->tick_indices = fc_core_trace_jad_prayer_too_late_tick_indices;
+        out->wave_ids = fc_core_trace_jad_prayer_too_late_wave_ids;
+        out->remaining_npcs = fc_core_trace_jad_prayer_too_late_remaining_npcs;
+        out->player_hitpoints = fc_core_trace_jad_prayer_too_late_player_hitpoints;
+        out->player_prayer_points = fc_core_trace_jad_prayer_too_late_player_prayer_points;
+        out->inventory_ammo = fc_core_trace_jad_prayer_too_late_inventory_ammo;
+        out->inventory_prayer_potion_doses = fc_core_trace_jad_prayer_too_late_inventory_prayer_potion_doses;
+        out->inventory_sharks = fc_core_trace_jad_prayer_too_late_inventory_sharks;
+        out->run_enabled = fc_core_trace_jad_prayer_too_late_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_jad_prayer_too_late_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_jad_prayer_too_late_jad_hit_resolve_outcome_codes;
+        out->visible_counts = fc_core_trace_jad_prayer_too_late_visible_counts;
+        out->visible_npc_indices = fc_core_trace_jad_prayer_too_late_visible_npc_indices;
+        out->visible_id_codes = fc_core_trace_jad_prayer_too_late_visible_id_codes;
+        out->visible_hitpoints = fc_core_trace_jad_prayer_too_late_visible_hitpoints;
+        out->visible_alive = fc_core_trace_jad_prayer_too_late_visible_alive;
+        return 1;
+    }
+    if (trace_id == FC_CORE_TRACE_JAD_HEALER) {
+        out->record_count = fc_core_trace_jad_healer_record_count;
+        out->max_visible = fc_core_trace_jad_healer_max_visible;
+        out->action_ids = fc_core_trace_jad_healer_action_ids;
+        out->action_accepted = fc_core_trace_jad_healer_action_accepted;
+        out->rejection_codes = fc_core_trace_jad_healer_rejection_codes;
+        out->terminal_codes = fc_core_trace_jad_healer_terminal_codes;
+        out->tick_indices = fc_core_trace_jad_healer_tick_indices;
+        out->wave_ids = fc_core_trace_jad_healer_wave_ids;
+        out->remaining_npcs = fc_core_trace_jad_healer_remaining_npcs;
+        out->player_hitpoints = fc_core_trace_jad_healer_player_hitpoints;
+        out->player_prayer_points = fc_core_trace_jad_healer_player_prayer_points;
+        out->inventory_ammo = fc_core_trace_jad_healer_inventory_ammo;
+        out->inventory_prayer_potion_doses = fc_core_trace_jad_healer_inventory_prayer_potion_doses;
+        out->inventory_sharks = fc_core_trace_jad_healer_inventory_sharks;
+        out->run_enabled = fc_core_trace_jad_healer_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_jad_healer_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_jad_healer_jad_hit_resolve_outcome_codes;
+        out->visible_counts = fc_core_trace_jad_healer_visible_counts;
+        out->visible_npc_indices = fc_core_trace_jad_healer_visible_npc_indices;
+        out->visible_id_codes = fc_core_trace_jad_healer_visible_id_codes;
+        out->visible_hitpoints = fc_core_trace_jad_healer_visible_hitpoints;
+        out->visible_alive = fc_core_trace_jad_healer_visible_alive;
+        return 1;
+    }
+    if (trace_id == FC_CORE_TRACE_TZKEK_SPLIT) {
+        out->record_count = fc_core_trace_tzkek_split_record_count;
+        out->max_visible = fc_core_trace_tzkek_split_max_visible;
+        out->action_ids = fc_core_trace_tzkek_split_action_ids;
+        out->action_accepted = fc_core_trace_tzkek_split_action_accepted;
+        out->rejection_codes = fc_core_trace_tzkek_split_rejection_codes;
+        out->terminal_codes = fc_core_trace_tzkek_split_terminal_codes;
+        out->tick_indices = fc_core_trace_tzkek_split_tick_indices;
+        out->wave_ids = fc_core_trace_tzkek_split_wave_ids;
+        out->remaining_npcs = fc_core_trace_tzkek_split_remaining_npcs;
+        out->player_hitpoints = fc_core_trace_tzkek_split_player_hitpoints;
+        out->player_prayer_points = fc_core_trace_tzkek_split_player_prayer_points;
+        out->inventory_ammo = fc_core_trace_tzkek_split_inventory_ammo;
+        out->inventory_prayer_potion_doses = fc_core_trace_tzkek_split_inventory_prayer_potion_doses;
+        out->inventory_sharks = fc_core_trace_tzkek_split_inventory_sharks;
+        out->run_enabled = fc_core_trace_tzkek_split_run_enabled;
+        out->jad_telegraph_states = fc_core_trace_tzkek_split_jad_telegraph_states;
+        out->jad_hit_resolve_outcome_codes = fc_core_trace_tzkek_split_jad_hit_resolve_outcome_codes;
+        out->visible_counts = fc_core_trace_tzkek_split_visible_counts;
+        out->visible_npc_indices = fc_core_trace_tzkek_split_visible_npc_indices;
+        out->visible_id_codes = fc_core_trace_tzkek_split_visible_id_codes;
+        out->visible_hitpoints = fc_core_trace_tzkek_split_visible_hitpoints;
+        out->visible_alive = fc_core_trace_tzkek_split_visible_alive;
         return 1;
     }
     return 0;
@@ -647,6 +929,7 @@ static void fc_apply_core_trace_record(fc_slot_state* slot, const fc_core_trace_
     slot->prayer_potion_dose_count = view->inventory_prayer_potion_doses[record_index];
     slot->sharks = view->inventory_sharks[record_index];
     slot->running = view->run_enabled[record_index];
+    slot->jad_hit_resolve_outcome_code = view->jad_hit_resolve_outcome_codes[record_index];
     slot->terminal_code = view->terminal_codes[record_index];
     fc_terminal_flags_from_code(slot->terminal_code, &slot->terminated, &slot->truncated);
     slot->wave_spawned = 1;
@@ -665,8 +948,112 @@ static void fc_apply_core_trace_record(fc_slot_state* slot, const fc_core_trace_
         target.hitpoints_current = view->visible_hitpoints[offset];
         target.hitpoints_max = view->visible_hitpoints[offset] > 0 ? view->visible_hitpoints[offset] : 1;
         target.dead = view->visible_alive[offset] ? 0 : 1;
+        target.jad_telegraph_state = view->jad_telegraph_states[record_index];
         slot->visible_targets[slot->visible_target_count++] = target;
     }
+}
+
+static void fc_write_flat_observation_row(float* row, const fc_slot_state* slot);
+
+static int fc_slot_jad_telegraph_state(const fc_slot_state* slot) {
+    int state = 0;
+    for (int index = 0; index < slot->visible_target_count; ++index) {
+        if (slot->visible_targets[index].jad_telegraph_state > state) {
+            state = slot->visible_targets[index].jad_telegraph_state;
+        }
+    }
+    return state;
+}
+
+static int fc_positive_delta(int before, int after) {
+    return before > after ? before - after : 0;
+}
+
+static void fc_capture_reward_snapshot(const fc_slot_state* slot, fc_reward_snapshot* out) {
+    memset(out, 0, sizeof(*out));
+    out->player_hitpoints_current = slot->hitpoints_current;
+    out->wave_id = slot->wave;
+    out->remaining_npc_count = slot->remaining;
+    out->sharks = slot->sharks;
+    out->prayer_potion_dose_count = slot->prayer_potion_dose_count;
+    for (int index = 0; index < slot->visible_target_count; ++index) {
+        const fc_visible_target* target = &slot->visible_targets[index];
+        int target_hitpoints = target->hitpoints_current > 0 ? target->hitpoints_current : 0;
+        out->total_npc_hitpoints += target_hitpoints;
+        if (!target->dead && target_hitpoints > 0) {
+            out->alive_npc_count += 1;
+        }
+        if (target->id_code == FC_NPC_ID_TZTOK_JAD) {
+            if (target_hitpoints > out->jad_hitpoints_current) {
+                out->jad_hitpoints_current = target_hitpoints;
+            }
+            if (!target->dead && target_hitpoints > 0) {
+                out->jad_alive = 1;
+            }
+        }
+    }
+}
+
+static void fc_write_reward_feature_row(
+    float* row,
+    const fc_reward_snapshot* before,
+    const fc_reward_snapshot* after,
+    int action_id,
+    int action_accepted,
+    int terminal_code,
+    int jad_hit_resolve_outcome_code
+) {
+    int wave_transitioned = after->wave_id > before->wave_id && before->wave_id > 0;
+    memset(row, 0, sizeof(float) * FC_RESET_REWARD_FEATURE_COUNT);
+    if (wave_transitioned) {
+        row[0] = (float)before->total_npc_hitpoints;
+        row[2] = (float)before->alive_npc_count;
+        row[3] = (float)(after->wave_id - before->wave_id);
+    } else {
+        row[0] = (float)fc_positive_delta(before->total_npc_hitpoints, after->total_npc_hitpoints);
+        row[2] = (float)fc_positive_delta(before->alive_npc_count, after->alive_npc_count);
+        row[3] = (before->remaining_npc_count > 0 && after->remaining_npc_count == 0) ? 1.0f : 0.0f;
+    }
+    row[1] = (float)fc_positive_delta(before->player_hitpoints_current, after->player_hitpoints_current);
+    row[4] = (float)fc_positive_delta(before->jad_hitpoints_current, after->jad_hitpoints_current);
+    row[5] = (before->jad_alive && !after->jad_alive) ? 1.0f : 0.0f;
+    row[6] = terminal_code == FC_TERMINAL_PLAYER_DEATH ? 1.0f : 0.0f;
+    row[7] = terminal_code == FC_TERMINAL_CAVE_COMPLETE ? 1.0f : 0.0f;
+    row[8] = (float)fc_positive_delta(before->sharks, after->sharks);
+    row[9] = (float)fc_positive_delta(before->prayer_potion_dose_count, after->prayer_potion_dose_count);
+    row[12] = action_accepted ? 0.0f : 1.0f;
+    row[13] = action_id == FC_ACTION_WALK_TO_TILE ? 1.0f : 0.0f;
+    row[14] = action_id == FC_ACTION_WAIT ? 1.0f : 0.0f;
+    row[15] = 1.0f;
+    if (jad_hit_resolve_outcome_code == FC_JAD_HIT_RESOLVE_PROTECTED) {
+        row[10] = 1.0f;
+    } else if (jad_hit_resolve_outcome_code == FC_JAD_HIT_RESOLVE_HIT) {
+        row[11] = 1.0f;
+    }
+}
+
+static void fc_write_last_step_row(
+    fc_native_runtime* runtime,
+    int env_index,
+    int action_id,
+    int action_accepted,
+    int rejection_code,
+    int resolved_target_npc_index,
+    const fc_slot_state* slot
+) {
+    float* row = runtime->last_step_flat_observations + ((size_t)env_index * FC_RESET_OBSERVATION_FEATURE_COUNT);
+    fc_write_flat_observation_row(row, slot);
+    runtime->last_step_action_ids[env_index] = action_id;
+    runtime->last_step_action_accepted[env_index] = action_accepted;
+    runtime->last_step_rejection_codes[env_index] = rejection_code;
+    runtime->last_step_resolved_target_npc_indices[env_index] = resolved_target_npc_index;
+    runtime->last_step_jad_telegraph_states[env_index] = fc_slot_jad_telegraph_state(slot);
+    runtime->last_step_jad_hit_resolve_outcome_codes[env_index] = slot->jad_hit_resolve_outcome_code;
+    runtime->last_step_terminal_codes[env_index] = slot->terminal_code;
+    runtime->last_step_terminated[env_index] = slot->terminated;
+    runtime->last_step_truncated[env_index] = slot->truncated;
+    runtime->last_step_episode_ticks[env_index] = slot->tick;
+    runtime->last_step_episode_steps[env_index] = slot->steps;
 }
 
 static void fc_write_flat_observation_row(float* row, const fc_slot_state* slot) {
@@ -746,6 +1133,7 @@ static void fc_initialize_slot(fc_slot_state* slot, const fc_episode_config* con
     slot->last_action_tick = -2147483647;
     slot->tick_cap = FC_GENERIC_DEFAULT_TICK_CAP;
     slot->slot_mode = FC_SLOT_MODE_GENERIC;
+    slot->jad_hit_resolve_outcome_code = FC_JAD_HIT_RESOLVE_NONE;
     slot->next_npc_index = 1;
 }
 
@@ -792,6 +1180,8 @@ static int fc_allocate_last_step(fc_native_runtime* runtime, int env_count) {
     runtime->last_step_action_accepted = (int*)calloc(env_count_size, sizeof(int));
     runtime->last_step_rejection_codes = (int*)calloc(env_count_size, sizeof(int));
     runtime->last_step_resolved_target_npc_indices = (int*)calloc(env_count_size, sizeof(int));
+    runtime->last_step_jad_telegraph_states = (int*)calloc(env_count_size, sizeof(int));
+    runtime->last_step_jad_hit_resolve_outcome_codes = (int*)calloc(env_count_size, sizeof(int));
     runtime->last_step_flat_observations = (float*)calloc(observation_count, sizeof(float));
     runtime->last_step_reward_features = (float*)calloc(reward_count, sizeof(float));
     runtime->last_step_terminal_codes = (int*)calloc(env_count_size, sizeof(int));
@@ -804,6 +1194,8 @@ static int fc_allocate_last_step(fc_native_runtime* runtime, int env_count) {
         runtime->last_step_action_accepted != NULL &&
         runtime->last_step_rejection_codes != NULL &&
         runtime->last_step_resolved_target_npc_indices != NULL &&
+        runtime->last_step_jad_telegraph_states != NULL &&
+        runtime->last_step_jad_hit_resolve_outcome_codes != NULL &&
         runtime->last_step_flat_observations != NULL &&
         runtime->last_step_reward_features != NULL &&
         runtime->last_step_terminal_codes != NULL &&
@@ -996,7 +1388,7 @@ int fc_native_abi_version(void) {
 }
 
 const char* fc_native_runtime_version_string(void) {
-    return "pr5a_core_combat_terminal_v1";
+    return "pr6_flat_obs_reward_features_v1";
 }
 
 fc_native_runtime* fc_native_runtime_open(void) {
@@ -1341,6 +1733,69 @@ int fc_native_runtime_debug_load_core_trace(
     return 1;
 }
 
+int fc_native_runtime_debug_snapshot_slots(
+    fc_native_runtime* runtime,
+    const int* slot_indices,
+    int env_count
+) {
+    if (!fc_runtime_has_slots(runtime)) {
+        return 0;
+    }
+    if (env_count < 0) {
+        fc_set_error("snapshot env_count cannot be negative");
+        return 0;
+    }
+    fc_release_last_step(runtime);
+    runtime->last_step_env_count = env_count;
+    if (env_count == 0) {
+        fc_last_error[0] = '\0';
+        return 1;
+    }
+    if (!fc_allocate_last_step(runtime, env_count)) {
+        fc_release_last_step(runtime);
+        fc_set_error("Failed to allocate snapshot buffers.");
+        return 0;
+    }
+    for (int env_index = 0; env_index < env_count; ++env_index) {
+        int slot_index = slot_indices == NULL ? env_index : slot_indices[env_index];
+        fc_slot_state* slot;
+        int action_id = FC_ACTION_WAIT;
+        int action_accepted = 1;
+        int rejection_code = FC_REJECTION_NONE;
+        int resolved_target_npc_index = -1;
+
+        if (!fc_validate_slot_index(runtime, slot_index)) {
+            fc_release_last_step(runtime);
+            return 0;
+        }
+        slot = &runtime->slots[slot_index];
+        runtime->last_step_slot_indices[env_index] = slot_index;
+        if (slot->slot_mode == FC_SLOT_MODE_CORE_TRACE) {
+            fc_core_trace_view view;
+            int record_index = slot->core_trace_record_index;
+            if (!fc_core_trace_view_for_id(slot->core_trace_id, &view) || view.record_count == 0) {
+                fc_release_last_step(runtime);
+                fc_set_error("core trace snapshot requested for unsupported trace");
+                return 0;
+            }
+            action_id = view.action_ids[record_index];
+            action_accepted = view.action_accepted[record_index];
+            rejection_code = view.rejection_codes[record_index];
+        }
+        fc_write_last_step_row(
+            runtime,
+            env_index,
+            action_id,
+            action_accepted,
+            rejection_code,
+            resolved_target_npc_index,
+            slot
+        );
+    }
+    fc_last_error[0] = '\0';
+    return 1;
+}
+
 int fc_native_runtime_step_batch(
     fc_native_runtime* runtime,
     const int* slot_indices,
@@ -1376,9 +1831,12 @@ int fc_native_runtime_step_batch(
     }
 
     int* touched_generic = (int*)calloc((size_t)runtime->slot_count, sizeof(int));
-    if (touched_generic == NULL) {
+    fc_reward_snapshot* before_snapshots = (fc_reward_snapshot*)calloc((size_t)env_count, sizeof(fc_reward_snapshot));
+    if (touched_generic == NULL || before_snapshots == NULL) {
+        free(touched_generic);
+        free(before_snapshots);
         fc_release_last_step(runtime);
-        fc_set_error("Failed to allocate step touched-slot tracker.");
+        fc_set_error("Failed to allocate step bookkeeping buffers.");
         return 0;
     }
 
@@ -1395,12 +1853,14 @@ int fc_native_runtime_step_batch(
 
         if (!fc_validate_slot_index(runtime, slot_index)) {
             free(touched_generic);
+            free(before_snapshots);
             fc_release_last_step(runtime);
             return 0;
         }
         slot = &runtime->slots[slot_index];
         runtime->last_step_slot_indices[env_index] = slot_index;
         runtime->last_step_action_ids[env_index] = action_id;
+        fc_capture_reward_snapshot(slot, &before_snapshots[env_index]);
 
         if (slot->slot_mode == FC_SLOT_MODE_CORE_TRACE) {
             rejection_code = fc_step_core_trace_slot(slot, action_id, arg0, &resolved_target_npc_index);
@@ -1437,14 +1897,29 @@ int fc_native_runtime_step_batch(
     for (int env_index = 0; env_index < env_count; ++env_index) {
         int slot_index = runtime->last_step_slot_indices[env_index];
         fc_slot_state* slot = &runtime->slots[slot_index];
-        float* row = runtime->last_step_flat_observations + ((size_t)env_index * FC_RESET_OBSERVATION_FEATURE_COUNT);
-        fc_write_flat_observation_row(row, slot);
-        runtime->last_step_terminal_codes[env_index] = slot->terminal_code;
-        runtime->last_step_terminated[env_index] = slot->terminated;
-        runtime->last_step_truncated[env_index] = slot->truncated;
-        runtime->last_step_episode_ticks[env_index] = slot->tick;
-        runtime->last_step_episode_steps[env_index] = slot->steps;
+        float* reward_row = runtime->last_step_reward_features + ((size_t)env_index * FC_RESET_REWARD_FEATURE_COUNT);
+        fc_reward_snapshot after_snapshot;
+        fc_capture_reward_snapshot(slot, &after_snapshot);
+        fc_write_last_step_row(
+            runtime,
+            env_index,
+            runtime->last_step_action_ids[env_index],
+            runtime->last_step_action_accepted[env_index],
+            runtime->last_step_rejection_codes[env_index],
+            runtime->last_step_resolved_target_npc_indices[env_index],
+            slot
+        );
+        fc_write_reward_feature_row(
+            reward_row,
+            &before_snapshots[env_index],
+            &after_snapshot,
+            runtime->last_step_action_ids[env_index],
+            runtime->last_step_action_accepted[env_index],
+            slot->terminal_code,
+            slot->jad_hit_resolve_outcome_code
+        );
     }
+    free(before_snapshots);
 
     fc_last_error[0] = '\0';
     return 1;
@@ -1490,6 +1965,20 @@ const int* fc_native_runtime_last_step_resolved_target_npc_indices(const fc_nati
         return NULL;
     }
     return runtime->last_step_resolved_target_npc_indices;
+}
+
+const int* fc_native_runtime_last_step_jad_telegraph_states(const fc_native_runtime* runtime) {
+    if (!fc_runtime_has_step_buffers(runtime)) {
+        return NULL;
+    }
+    return runtime->last_step_jad_telegraph_states;
+}
+
+const int* fc_native_runtime_last_step_jad_hit_resolve_outcome_codes(const fc_native_runtime* runtime) {
+    if (!fc_runtime_has_step_buffers(runtime)) {
+        return NULL;
+    }
+    return runtime->last_step_jad_hit_resolve_outcome_codes;
 }
 
 const float* fc_native_runtime_last_step_flat_observations(const fc_native_runtime* runtime) {

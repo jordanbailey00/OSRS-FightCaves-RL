@@ -12,6 +12,13 @@ from fight_caves_rl.envs.puffer_encoding import POLICY_MAX_VISIBLE_NPCS, POLICY_
 from fight_caves_rl.native_runtime.contracts import expected_descriptor_bundle
 from fight_caves_rl.utils.paths import repo_root, workspace_root
 
+JAD_HIT_RESOLVE_OUTCOME_TO_CODE = {
+    "none": 0,
+    "pending": 1,
+    "protected": 2,
+    "hit": 3,
+}
+
 
 @dataclass(frozen=True)
 class NativeRuntimeBuildConfig:
@@ -130,7 +137,7 @@ def _build_fingerprint(*, descriptor_bundle: dict[str, object]) -> str:
     hasher.update(fight_cave_waves_path().read_bytes())
     for fixture_path in sorted(reset_fixtures_dir().glob("*.json")):
         hasher.update(fixture_path.read_bytes())
-    for fixture_path in _core_parity_fixture_paths():
+    for fixture_path in _trace_parity_fixture_paths():
         hasher.update(fixture_path.read_bytes())
     return hasher.hexdigest()
 
@@ -153,9 +160,9 @@ def _render_generated_descriptor_source(descriptor_bundle: dict[str, object]) ->
     override_waves = ", ".join(str(wave) for _, wave, _ in rotation_overrides) or "0"
     override_values = ", ".join(str(rotation) for _, _, rotation in rotation_overrides) or "0"
     override_count = len(rotation_overrides)
-    core_trace_source = "".join(
-        _render_core_trace_scenario_source(name, payload)
-        for name, payload in _core_trace_scenarios().items()
+    trace_source = "".join(
+        _render_trace_scenario_source(name, payload)
+        for name, payload in _trace_scenarios().items()
     )
     return (
         "#include <stddef.h>\n"
@@ -173,7 +180,7 @@ def _render_generated_descriptor_source(descriptor_bundle: dict[str, object]) ->
         f"const int fc_reset_rotation_override_waves[] = {{{override_waves}}};\n"
         f"const int fc_reset_rotation_override_values[] = {{{override_values}}};\n"
         f"const size_t fc_reset_rotation_override_count = {override_count};\n"
-        f"{core_trace_source}"
+        f"{trace_source}"
     )
 
 
@@ -217,14 +224,19 @@ def _fixture_rotation_overrides() -> tuple[tuple[int, int, int], ...]:
     return tuple(overrides)
 
 
-def _core_parity_fixture_paths() -> tuple[Path, ...]:
+def _trace_parity_fixture_paths() -> tuple[Path, ...]:
     return (
         parity_fixtures_dir() / "oracle_single_wave.json",
         parity_fixtures_dir() / "oracle_full_run.json",
+        parity_fixtures_dir() / "oracle_jad_telegraph.json",
+        parity_fixtures_dir() / "oracle_jad_prayer_protected.json",
+        parity_fixtures_dir() / "oracle_jad_prayer_too_late.json",
+        parity_fixtures_dir() / "oracle_jad_healer.json",
+        parity_fixtures_dir() / "oracle_tzkek_split.json",
     )
 
 
-def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
+def _trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
     action_name_to_id = {
         "reset": 0,
         "wait": 0,
@@ -236,7 +248,7 @@ def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
         "toggle_run": 6,
     }
     scenarios: dict[str, dict[str, tuple[int, ...]]] = {}
-    for path in _core_parity_fixture_paths():
+    for path in _trace_parity_fixture_paths():
         payload = json.loads(path.read_text(encoding="utf-8"))["payload"]
         records = payload["records"]
         action_ids: list[int] = []
@@ -257,6 +269,8 @@ def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
         visible_id_codes: list[int] = []
         visible_hitpoints: list[int] = []
         visible_alive: list[int] = []
+        jad_telegraph_states: list[int] = []
+        jad_hit_resolve_outcome_codes: list[int] = []
         for record in records:
             action_ids.append(int(action_name_to_id[str(record["action_name"])]))
             action_accepted.append(int(bool(record["action_accepted"])))
@@ -271,6 +285,10 @@ def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
             inventory_prayer_potion_doses.append(int(record["inventory_prayer_potions"]))
             inventory_sharks.append(int(record["inventory_sharks"]))
             run_enabled.append(int(bool(record["run_enabled"])))
+            jad_telegraph_states.append(int(record["jad_telegraph_state"]))
+            jad_hit_resolve_outcome_codes.append(
+                int(JAD_HIT_RESOLVE_OUTCOME_TO_CODE[str(record["jad_hit_resolve_outcome"])])
+            )
             visible_types = tuple(str(value) for value in record["visible_npc_type"])
             visible_hitpoints_row = tuple(int(value) for value in record["visible_npc_hitpoints"])
             visible_alive_row = tuple(int(bool(value)) for value in record["visible_npc_alive"])
@@ -303,6 +321,8 @@ def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
             "inventory_prayer_potion_doses": tuple(inventory_prayer_potion_doses),
             "inventory_sharks": tuple(inventory_sharks),
             "run_enabled": tuple(run_enabled),
+            "jad_telegraph_states": tuple(jad_telegraph_states),
+            "jad_hit_resolve_outcome_codes": tuple(jad_hit_resolve_outcome_codes),
             "visible_counts": tuple(visible_counts),
             "visible_npc_indices": tuple(visible_npc_indices),
             "visible_id_codes": tuple(visible_id_codes),
@@ -312,9 +332,10 @@ def _core_trace_scenarios() -> dict[str, dict[str, tuple[int, ...]]]:
     return scenarios
 
 
-def _render_core_trace_scenario_source(name: str, payload: dict[str, tuple[int, ...]]) -> str:
+def _render_trace_scenario_source(name: str, payload: dict[str, tuple[int, ...]]) -> str:
     record_count = len(payload["action_ids"])
     max_visible = POLICY_MAX_VISIBLE_NPCS
+
     def render(key: str) -> str:
         values = payload[key]
         return ", ".join(str(int(value)) for value in values) or "0"
@@ -335,6 +356,8 @@ def _render_core_trace_scenario_source(name: str, payload: dict[str, tuple[int, 
         f"const int fc_core_trace_{name}_inventory_prayer_potion_doses[] = {{{render('inventory_prayer_potion_doses')}}};\n"
         f"const int fc_core_trace_{name}_inventory_sharks[] = {{{render('inventory_sharks')}}};\n"
         f"const int fc_core_trace_{name}_run_enabled[] = {{{render('run_enabled')}}};\n"
+        f"const int fc_core_trace_{name}_jad_telegraph_states[] = {{{render('jad_telegraph_states')}}};\n"
+        f"const int fc_core_trace_{name}_jad_hit_resolve_outcome_codes[] = {{{render('jad_hit_resolve_outcome_codes')}}};\n"
         f"const int fc_core_trace_{name}_visible_counts[] = {{{render('visible_counts')}}};\n"
         f"const int fc_core_trace_{name}_visible_npc_indices[] = {{{render('visible_npc_indices')}}};\n"
         f"const int fc_core_trace_{name}_visible_id_codes[] = {{{render('visible_id_codes')}}};\n"
