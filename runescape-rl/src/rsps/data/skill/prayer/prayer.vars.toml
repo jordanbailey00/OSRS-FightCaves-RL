@@ -1,6 +1,0 @@
-[bone_delay]
-format = "int"
-
-[prayer_drain_counter]
-format = "int"
-persist = true

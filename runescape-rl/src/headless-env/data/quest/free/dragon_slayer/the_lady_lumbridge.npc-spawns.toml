@@ -1,3 +1,0 @@
-spawns = [
-  { id = "cabin_boy_jenkins", x = 2064, y = 5516, level = 1, members = true },
-]

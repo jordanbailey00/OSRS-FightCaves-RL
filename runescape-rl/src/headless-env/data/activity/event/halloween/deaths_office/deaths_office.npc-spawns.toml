@@ -1,3 +1,0 @@
-spawns = [
-  { id = "muncher_deaths_office", x = 1976, y = 5307, direction = "NORTH_WEST" },
-]

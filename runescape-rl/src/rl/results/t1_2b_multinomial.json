@@ -1,8 +1,0 @@
-{
-  "method": "multinomial",
-  "sps": 258.7523582140963,
-  "evaluate_seconds": 32.20481758202004,
-  "train_seconds": 31.11335941598736,
-  "global_step": 16384,
-  "elapsed_nanos": 63319229680
-}

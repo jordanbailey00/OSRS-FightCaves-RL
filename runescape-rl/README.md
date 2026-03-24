@@ -1,49 +1,28 @@
-# Runescape RL Workspace
+# Fight Caves RL
 
-This repository is the canonical source root for the Fight Caves RL system.
+Reinforcement learning agent for Old School RuneScape Fight Caves.
 
-## What this project is
+## Architecture
 
-The workspace delivers:
+- **training-env/** — Shared C backend: all Fight Caves mechanics, state, tick simulation. Also owns the headless batched training kernel and Python C extension.
+- **demo-env/** — Raylib viewer shell: rendering, HUD, input, replay. Links against the same C backend — no separate gameplay logic.
+- **RL/** — Python RL stack: PufferLib integration, policies, training scripts, evaluation, W&B logging.
+- **docs/** — `plan.md` and `pr_plan.md` only.
 
-- high-throughput **headless training** in `training-env/`
-- trusted **headed demo/replay** in `rsps/`
-- preserved **fallback headed reference** in `demo-env/`
-
-Training and generated runtime outputs are intentionally separated:
-
-- source root: `/home/jordan/code/runescape-rl`
-- runtime root: `/home/jordan/code/runescape-rl-runtime`
-
-## Top-level module map
-
-- `rsps/`: active headed RSPS-backed demo/runtime owner
-- `training-env/`: headless sim + RL trainer/eval/replay owner
-- `demo-env/`: frozen lite-demo fallback/reference owner
-- `docs/`: canonical project docs and non-canonical reports
-- `scripts/`: root bootstrap/smoke helpers
-
-## Canonical docs (read these first)
-
-- current plan: `docs/active-reference/plan.md`
-- current performance truth: `docs/active-reference/performance.md`
-- current testing truth: `docs/active-reference/testing.md`
-- rolling 14-day history: `docs/active-reference/changelog.md`
-- architecture source of truth: `docs/source-of-truth/architecture.md`
-- contract source of truth: `docs/source-of-truth/contracts.md`
-- documentation routing map: `docs/source-of-truth/project_tree.md`
-
-## Quick start
+## Build
 
 ```bash
-source /home/jordan/code/.workspace-env.sh
-cd /home/jordan/code/runescape-rl
-./scripts/bootstrap.sh
-./scripts/validate_smoke.sh
+# C backend + viewer
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+# Python RL
+cd RL && uv sync
 ```
 
-## Documentation policy
+## Key constraints
 
-Permanent truth belongs in canonical docs listed above.
-
-One-off analysis, audits, and packets belong in `docs/reports/` and are not canonical by default.
+- Single gameplay/mechanics owner in C (training-env/fc_core)
+- Headless training and viewer share the same backend
+- Flat contiguous observation/action/reward/debug contracts
+- Determinism and replay are first-class

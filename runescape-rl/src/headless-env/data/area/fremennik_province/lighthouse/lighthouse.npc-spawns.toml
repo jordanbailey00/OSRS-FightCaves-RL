@@ -1,5 +1,0 @@
-spawns = [
-  { id = "jossik", x = 2509, y = 3639, level = 1 },
-  { id = "larrissa", x = 2508, y = 3635 },
-  { id = "jossik_dungeon", x = 2518, y = 4633 },
-]

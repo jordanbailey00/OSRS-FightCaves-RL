@@ -1,8 +1,0 @@
-[clan_rank]
-id = 1447
-format = "int"
-
-[private_chat_colour]
-id = 287
-persist = true
-format = "int"

@@ -1,7 +1,0 @@
-[skull]
-format = "int"
-persist = true
-
-[skull_duration]
-format = "int"
-persist = true

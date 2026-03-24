@@ -1,2 +1,0 @@
-[fruit] apple = "red"
-[fruit] orange = "orange"

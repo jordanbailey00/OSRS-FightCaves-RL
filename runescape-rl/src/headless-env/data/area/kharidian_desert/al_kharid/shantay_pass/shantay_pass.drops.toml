@@ -1,6 +1,0 @@
-[ugthanki_drop_table]
-type = "all"
-drops = [
-    { id = "bones" },
-    { id = "raw_ugthanki_meat" },
-]

@@ -1,7 +1,0 @@
-[pie_task]
-format = "string"
-persist = true
-
-[pie_task_amount]
-format = "int"
-persist = true

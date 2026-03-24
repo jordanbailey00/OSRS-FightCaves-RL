@@ -1,4 +1,0 @@
-[recipe_for_disaster]
-id = 1850
-format = "list"
-values = ["unstarted", "started", "stage2", "stage3", "stage4", "completed"]

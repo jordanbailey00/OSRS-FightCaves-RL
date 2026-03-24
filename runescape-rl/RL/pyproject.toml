@@ -1,0 +1,28 @@
+[project]
+name = "fight-caves-rl"
+version = "0.1.0"
+description = "Fight Caves RL training, evaluation, and replay — Python stack over C backend"
+requires-python = ">=3.11"
+dependencies = [
+    "pufferlib",
+    "torch",
+    "wandb",
+    "numpy",
+    "gymnasium",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,5 +1,0 @@
-[human_pickpocket]
-type = "all"
-drops = [
-    { id = "coins", amount = 3 }
-]

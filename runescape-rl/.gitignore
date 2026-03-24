@@ -1,34 +1,32 @@
-# Root hygiene: source-only repo layout
+# Build outputs
+build/
+cmake-build-*/
+compile_commands.json
 
-# runtime roots and scratch
-/.cache/
-/.config/
-/.gradle/
-/.tmp/
-/.tmp-build/
-/.workspace-tools/
-/.artifacts/
-/.grade/
+# C artifacts
+*.o
+*.so
+*.dylib
+*.a
 
-# common transient files
-*.log
-*.tmp
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
+
+# OS
 .DS_Store
 Thumbs.db
 
-# python
-__pycache__/
-*.pyc
-
-# gradle/java build outputs
-**/build/
-**/.gradle/
-**/.kotlin/
-**/.run/
-
-# runtime outputs that must stay out of source
+# Runtime outputs (not source)
 **/artifacts/
 **/session-logs/
 **/logs/
@@ -36,3 +34,4 @@ __pycache__/
 **/replays/
 **/videos/
 **/checkpoints/
+**/wandb/

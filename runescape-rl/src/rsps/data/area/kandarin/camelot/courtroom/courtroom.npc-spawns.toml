@@ -1,4 +1,0 @@
-spawns = [
-  { id = "jury_courtroom", x = 1815, y = 4243, members = true },
-  { id = "jury_courtroom", x = 1815, y = 4272, members = true },
-]

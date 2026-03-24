@@ -1,5 +1,0 @@
-[locust_drop_table]
-type = "all"
-drops = [
-    { id = "locust_meat" },
-]

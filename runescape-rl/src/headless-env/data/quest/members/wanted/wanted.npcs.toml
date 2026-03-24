@@ -1,8 +1,0 @@
-[solus_dellagar]
-id = 2780
-hitpoints = 400
-attack_speed = 3
-style = "melee"
-max_hit_melee = 40
-hunt_mode = "cowardly"
-examine = "A powerful warrior mage."

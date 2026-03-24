@@ -1,7 +1,0 @@
-[safety_rope_climbed]
-format = "boolean"
-persist = true
-
-[safety_prison_guard_talked]
-format = "boolean"
-persist = true
