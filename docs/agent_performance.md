@@ -134,8 +134,8 @@
 
 - Do not resume the narrow performance track as the immediate next move.
 - Training behavior work is temporarily paused while the native viewer is brought up to the required manual-debug and demo-readability standard.
-- The immediate implementation priority is the viewer-completion sequence, with DV4b now complete and DV5 next.
-- DV5 and DV6 remain the remaining viewer-completion steps before training behavior work resumes.
+- The immediate implementation priority is the viewer-completion sequence, with DV4c now complete and DV4d next before DV5.
+- DV4d, DV5, and DV6 remain the viewer-completion sequence before training behavior work resumes.
 - When training work resumes, the next behavior-focused pass should still target reset-step sequencing rather than consumable spam:
   - inspect whether the policy should be guided or masked away from `attack_visible_npc` while `visible_target_count == 0`,
   - audit the reset-state observation and curriculum assumptions around the first productive action,

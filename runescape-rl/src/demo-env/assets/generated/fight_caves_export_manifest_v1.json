@@ -1,6 +1,9 @@
 {
   "bundle_path": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/fight_caves_scene_slice_v1.json",
   "cache_input": "/home/joe/projects/runescape-rl/codex2/reference/legacy-headless-env/data/cache",
-  "fingerprint": "baa14eccec7da1ed23f63ccd95dd948d7e6deeaac11a25bd3a3bdbb9877c9878",
-  "sprites_root": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/sprites"
+  "fingerprint": "0b596d7e97030c36593cd3e3eb619d04e6b829d8e6c126b5cb1815078d31a4ae",
+  "models_root": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/models",
+  "npc_models_bundle_path": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/fight_caves_npc_models_v1.mdl2",
+  "sprites_root": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/sprites",
+  "terrain_bundle_path": "/home/joe/projects/runescape-rl/codex2/runescape-rl/src/demo-env/assets/generated/fight_caves_terrain_slice_v1.terr"
 }

@@ -2,29 +2,41 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
+import sys
 import tempfile
 import textwrap
 import tomllib
+import zlib
 
+from fight_caves_rl.native_runtime.osrs_cache_dat2 import Dat2CacheReader, djb2
 from fight_caves_rl.utils.paths import legacy_headless_env_root, legacy_rsps_root, workspace_root
 
 
-FIGHT_CAVES_REGION_WORLD_MIN_X = 2396 - 24
-FIGHT_CAVES_REGION_WORLD_MAX_X = 2396 + 24
-FIGHT_CAVES_REGION_WORLD_MIN_Y = 5088 - 24
-FIGHT_CAVES_REGION_WORLD_MAX_Y = 5088 + 80
 FIGHT_CAVES_CACHE_REGIONS: tuple[tuple[int, int], ...] = (
     (37, 79),
     (37, 80),
+    (38, 80),
+    (39, 80),
 )
 
 VIEWER_ASSET_BUNDLE_ID = "fight_caves_scene_slice_v1"
 VIEWER_CACHE_INPUT_RELATIVE = Path("reference/legacy-headless-env/data/cache")
 VIEWER_EMPTY_RSPS_CACHE_RELATIVE = Path("reference/legacy-rsps/data/cache")
+VIEWER_XTEA_TEST_INPUTS: tuple[Path, ...] = (
+    Path("reference/legacy-rsps/tools/src/test/resources/xteas/xteas.json"),
+    Path("reference/legacy-rsps/tools/src/test/resources/xteas/xteas-default.json"),
+)
+FIGHT_CAVES_OBJECT_ARCHIVE_REGIONS: tuple[int, ...] = (
+    9551,
+    9552,
+)
 
 SPRITE_EXPORTS: tuple[tuple[str, int], ...] = (
     ("pray_magic", 127),
@@ -54,20 +66,32 @@ SPRITE_EXPORTS: tuple[tuple[str, int], ...] = (
 )
 
 FIGHT_CAVES_ITEM_EXPORTS: tuple[tuple[str, int], ...] = (
+    ("vial", 229),
     ("shark", 385),
     ("prayer_potion_4", 2434),
+    ("coif", 1169),
+    ("black_dragonhide_vambraces", 2491),
+    ("black_dragonhide_chaps", 2497),
+    ("black_dragonhide_body", 2503),
+    ("snakeskin_boots", 6328),
     ("adamant_bolts", 9143),
     ("rune_crossbow", 9185),
 )
 
 FIGHT_CAVES_NPC_EXPORTS: tuple[tuple[str, int], ...] = (
     ("tz_kih", 2734),
-    ("tz_kih_spawn", 2735),
+    ("tz_kih_spawn_point", 2735),
     ("tz_kek", 2736),
+    ("tz_kek_spawn_point", 2737),
     ("tz_kek_spawn", 2738),
-    ("yt_mejkot", 2741),
+    ("tok_xil", 2739),
+    ("tok_xil_spawn_point", 2740),
+    ("yt_mej_kot", 2741),
+    ("yt_mej_kot_spawn_point", 2742),
     ("ket_zek", 2743),
+    ("ket_zek_spawn_point", 2744),
     ("tztok_jad", 2745),
+    ("yt_hur_kot", 2746),
 )
 
 FIGHT_CAVES_INTERFACE_EXPORTS: tuple[int, ...] = (
@@ -77,6 +101,15 @@ FIGHT_CAVES_INTERFACE_EXPORTS: tuple[int, ...] = (
     387,
     541,
     749,
+)
+
+FIGHT_CAVES_OBJECT_EXPORTS: tuple[tuple[str, int], ...] = (
+    ("lava_forge", 9390),
+    ("cave_entrance_fight_cave", 9356),
+    ("cave_exit_fight_cave", 9357),
+    ("cave_entrance_tzhaar_city", 31284),
+    ("cave_entrance_library", 31292),
+    ("cave_exit_tzhaar_city", 9359),
 )
 
 
@@ -92,8 +125,20 @@ def generated_viewer_manifest_path() -> Path:
     return generated_viewer_assets_root() / "fight_caves_export_manifest_v1.json"
 
 
+def generated_viewer_terrain_bundle_path() -> Path:
+    return generated_viewer_assets_root() / "fight_caves_terrain_slice_v1.terr"
+
+
+def generated_viewer_npc_models_bundle_path() -> Path:
+    return generated_viewer_assets_root() / "fight_caves_npc_models_v1.mdl2"
+
+
 def generated_viewer_sprites_root() -> Path:
     return generated_viewer_assets_root() / "sprites"
+
+
+def generated_viewer_models_root() -> Path:
+    return generated_viewer_assets_root() / "models"
 
 
 def validated_viewer_cache_input_path() -> Path:
@@ -104,13 +149,117 @@ def empty_rsps_cache_input_path() -> Path:
     return (legacy_rsps_root() / "data" / "cache").resolve()
 
 
+def _fight_caves_demo_save_path() -> Path:
+    return legacy_rsps_root() / "data" / "fight_caves_demo" / "saves" / "fcdemo01.toml"
+
+
+def _fight_caves_region_world_bounds() -> tuple[int, int, int, int]:
+    region_min_x = min(region_x for region_x, _region_y in FIGHT_CAVES_CACHE_REGIONS)
+    region_max_x = max(region_x for region_x, _region_y in FIGHT_CAVES_CACHE_REGIONS)
+    region_min_y = min(region_y for _region_x, region_y in FIGHT_CAVES_CACHE_REGIONS)
+    region_max_y = max(region_y for _region_x, region_y in FIGHT_CAVES_CACHE_REGIONS)
+    min_x = region_min_x * 64
+    max_x = region_max_x * 64 + 63
+    min_y = region_min_y * 64
+    max_y = region_max_y * 64 + 63
+    return min_x, max_x, min_y, max_y
+
+
+def _ocean_osrs_pvp_scripts_root() -> Path:
+    return workspace_root().parent.parent / "pufferlib" / "pufferlib" / "ocean" / "osrs_pvp" / "scripts"
+
+
+def _load_ocean_script_module(module_name: str):
+    scripts_root = _ocean_osrs_pvp_scripts_root()
+    module_path = scripts_root / f"{module_name}.py"
+    if not module_path.is_file():
+        raise RuntimeError(f"Missing local Ocean reference script: {module_path}")
+    if str(scripts_root) not in sys.path:
+        sys.path.insert(0, str(scripts_root))
+    spec = importlib.util.spec_from_file_location(f"fc_ocean_{module_name}", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load Ocean reference script: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_fight_caves_demo_save() -> tuple[str, dict[str, object]]:
+    path = _fight_caves_demo_save_path()
+    text = path.read_text(encoding="utf-8")
+    return text, tomllib.loads(text)
+
+
+def _viewer_xtea_candidate_payloads() -> list[dict[str, object]]:
+    payloads: list[dict[str, object]] = []
+    repo_workspace_root = workspace_root().parent.parent
+    for relative_path in VIEWER_XTEA_TEST_INPUTS:
+        path = repo_workspace_root / relative_path
+        present = path.is_file()
+        contains_fight_caves_regions = False
+        regions: list[int] = []
+        if present:
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(raw, list):
+                    for entry in raw:
+                        if not isinstance(entry, dict):
+                            continue
+                        region_id = entry.get("mapsquare", entry.get("id"))
+                        if isinstance(region_id, int):
+                            regions.append(region_id)
+                contains_fight_caves_regions = all(
+                    region_id in regions for region_id in FIGHT_CAVES_OBJECT_ARCHIVE_REGIONS
+                )
+            except json.JSONDecodeError:
+                contains_fight_caves_regions = False
+        payloads.append(
+            {
+                "path": str(relative_path),
+                "present": present,
+                "contains_fight_caves_regions": contains_fight_caves_regions,
+                "region_count": len(regions),
+            }
+        )
+    return payloads
+
+
+def _demo_loadout_specs() -> list[dict[str, object]]:
+    _text, payload = _load_fight_caves_demo_save()
+    inventories = payload.get("inventories", {})
+    worn_equipment = inventories.get("worn_equipment", []) if isinstance(inventories, dict) else []
+    item_lookup = {label: item_id for label, item_id in FIGHT_CAVES_ITEM_EXPORTS}
+    specs: list[dict[str, object]] = []
+    for slot_index, entry in enumerate(worn_equipment):
+        if not isinstance(entry, dict):
+            continue
+        label = entry.get("id")
+        if not isinstance(label, str):
+            continue
+        item_id = item_lookup.get(label)
+        if item_id is None:
+            continue
+        specs.append(
+            {
+                "slot_index": slot_index,
+                "label": label,
+                "item_id": item_id,
+            }
+        )
+    return specs
+
+
 def ensure_native_viewer_asset_bundle(*, force_rebuild: bool = False) -> Path:
     generated_root = generated_viewer_assets_root()
     bundle_path = generated_viewer_bundle_path()
     manifest_path = generated_viewer_manifest_path()
+    terrain_bundle_path = generated_viewer_terrain_bundle_path()
+    npc_models_bundle_path = generated_viewer_npc_models_bundle_path()
     sprites_root = generated_viewer_sprites_root()
+    models_root = generated_viewer_models_root()
     generated_root.mkdir(parents=True, exist_ok=True)
     sprites_root.mkdir(parents=True, exist_ok=True)
+    models_root.mkdir(parents=True, exist_ok=True)
 
     cache_path = validated_viewer_cache_input_path()
     _validate_cache_input(cache_path)
@@ -120,6 +269,8 @@ def ensure_native_viewer_asset_bundle(*, force_rebuild: bool = False) -> Path:
         not force_rebuild
         and bundle_path.is_file()
         and manifest_path.is_file()
+        and terrain_bundle_path.is_file()
+        and npc_models_bundle_path.is_file()
         and _manifest_matches(manifest_path, fingerprint)
     ):
         return bundle_path
@@ -129,7 +280,8 @@ def ensure_native_viewer_asset_bundle(*, force_rebuild: bool = False) -> Path:
         raw_dir = temp_dir / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
         _run_java_exporter(cache_path=cache_path, output_dir=raw_dir)
-        bundle = _assemble_bundle(raw_dir)
+        dat2_export = _export_dat2_scene_assets(cache_path=cache_path, raw_dir=raw_dir)
+        bundle = _assemble_bundle(raw_dir, dat2_export)
         _write_generated_assets(bundle, raw_dir, generated_root)
 
     manifest_path.write_text(
@@ -137,7 +289,10 @@ def ensure_native_viewer_asset_bundle(*, force_rebuild: bool = False) -> Path:
             {
                 "fingerprint": fingerprint,
                 "bundle_path": str(bundle_path),
+                "terrain_bundle_path": str(terrain_bundle_path),
+                "npc_models_bundle_path": str(npc_models_bundle_path),
                 "sprites_root": str(sprites_root),
+                "models_root": str(models_root),
                 "cache_input": str(cache_path),
             },
             indent=2,
@@ -177,15 +332,32 @@ def _asset_export_fingerprint(cache_path: Path) -> str:
     hasher = hashlib.sha256()
     for path in (
         Path(__file__),
+        Path(__file__).with_name("osrs_cache_dat2.py"),
+        legacy_headless_env_root() / "config" / "headless_manifest.toml",
         legacy_rsps_root() / "data" / "minigame" / "tzhaar_fight_cave" / "tzhaar_fight_cave.areas.toml",
         legacy_rsps_root() / "data" / "minigame" / "tzhaar_fight_cave" / "tzhaar_fight_cave.ifaces.toml",
+        legacy_rsps_root() / "data" / "area" / "karamja" / "tzhaar_city" / "tzhaar_city.objs.toml",
         legacy_rsps_root() / "data" / "entity" / "player" / "inventory" / "inventory.ifaces.toml",
         legacy_rsps_root() / "data" / "entity" / "player" / "inventory" / "inventory_side.ifaces.toml",
         legacy_rsps_root() / "data" / "entity" / "player" / "modal" / "icon.items.toml",
+        legacy_rsps_root() / "data" / "skill" / "range" / "crossbow.items.toml",
+        legacy_rsps_root() / "data" / "skill" / "range" / "bolt.items.toml",
+        legacy_rsps_root() / "data" / "skill" / "range" / "ranged_armour.items.toml",
+        legacy_rsps_root() / "data" / "minigame" / "tai_bwo_wannai_cleanup" / "tai_bwo_wannai_cleanup.items.toml",
+        legacy_rsps_root() / "data" / "skill" / "herblore" / "potion.items.toml",
+        legacy_rsps_root() / "data" / "skill" / "herblore" / "herblore.items.toml",
+        legacy_rsps_root() / "tools" / "src" / "main" / "kotlin" / "world" / "gregs" / "voidps" / "tools" / "cache" / "Xteas.kt",
         legacy_rsps_root() / "data" / "fight_caves_demo" / "saves" / "fcdemo01.toml",
         legacy_headless_env_root() / "assets" / "fight-caves-header.png",
+        _ocean_osrs_pvp_scripts_root() / "export_terrain.py",
+        _ocean_osrs_pvp_scripts_root() / "export_models.py",
+        _ocean_osrs_pvp_scripts_root() / "export_sprites_modern.py",
     ):
         hasher.update(path.read_bytes())
+    for relative_path in VIEWER_XTEA_TEST_INPUTS:
+        path = workspace_root().parent.parent / relative_path
+        if path.is_file():
+            hasher.update(path.read_bytes())
     main_dat = cache_path / "main_file_cache.dat2"
     hasher.update(str(main_dat.stat().st_size).encode("utf-8"))
     hasher.update(str(int(main_dat.stat().st_mtime)).encode("utf-8"))
@@ -258,10 +430,402 @@ def _find_gradle_jar(pattern: str) -> Path:
     return matches[-1]
 
 
-def _assemble_bundle(raw_dir: Path) -> dict[str, object]:
+def _export_dat2_scene_assets(*, cache_path: Path, raw_dir: Path) -> dict[str, object]:
+    reader = Dat2CacheReader(cache_path)
+    terrain_module = _load_ocean_script_module("export_terrain")
+    model_module = _load_ocean_script_module("export_models")
+    sprite_module = _load_ocean_script_module("export_sprites_modern")
+
+    terrain_summary = _export_dat2_terrain_bundle(reader, terrain_module, raw_dir)
+    sprite_summary = _export_dat2_sprite_subset(reader, sprite_module, raw_dir)
+    npc_summary = _export_dat2_npc_model_bundle(reader, model_module, raw_dir)
+
+    export_summary = {
+        "terrain_bundle": terrain_summary,
+        "sprite_bundle": sprite_summary,
+        "npc_model_bundle": npc_summary,
+    }
+    (raw_dir / "dv4c_export_summary.json").write_text(
+        json.dumps(export_summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return export_summary
+
+
+def _export_dat2_terrain_bundle(reader: Dat2CacheReader, terrain_module, raw_dir: Path) -> dict[str, object]:
+    underlays, overlays = _decode_floor_definitions_dat2(reader, terrain_module)
+    texture_colors = terrain_module.load_texture_average_colors_modern(reader)
+    map_groups = terrain_module.find_map_groups(reader)
+    parsed_regions: dict[tuple[int, int], object] = {}
+
+    for region_x, region_y in FIGHT_CAVES_CACHE_REGIONS:
+        mapsquare = (region_x << 8) | region_y
+        terrain_group, _object_group = map_groups.get(mapsquare, (None, None))
+        if terrain_group is None:
+            raise RuntimeError(
+                f"DV4c terrain group is missing for Fight Caves region ({region_x},{region_y})."
+            )
+        terrain_data = reader.read_container(5, terrain_group)
+        if terrain_data is None:
+            raise RuntimeError(
+                "DV4c terrain export could not read cache index 5 group "
+                f"{terrain_group} for region ({region_x},{region_y})."
+            )
+        parsed_regions[(region_x, region_y)] = terrain_module.parse_terrain_full(
+            terrain_data,
+            region_x * 64,
+            region_y * 64,
+        )
+
+    terrain_module.stitch_region_edges(parsed_regions)
+    vertices, colors = terrain_module.build_terrain_mesh(
+        parsed_regions,
+        underlays,
+        overlays,
+        tex_colors=texture_colors,
+    )
+    heightmap = terrain_module.build_heightmap(parsed_regions)
+    output_path = raw_dir / generated_viewer_terrain_bundle_path().name
+    terrain_module.write_terrain_binary(output_path, vertices, colors, parsed_regions, heightmap)
+    return {
+        "filename": output_path.name,
+        "vertex_count": len(vertices) // 3,
+        "region_count": len(parsed_regions),
+        "regions": [f"{region_x}_{region_y}" for region_x, region_y in FIGHT_CAVES_CACHE_REGIONS],
+        "floor_definition_index": 2,
+        "terrain_index": 5,
+    }
+
+
+def _export_dat2_sprite_subset(reader: Dat2CacheReader, sprite_module, raw_dir: Path) -> dict[str, object]:
+    sprites_root = raw_dir / "sprites"
+    sprites_root.mkdir(parents=True, exist_ok=True)
+
+    exported: list[dict[str, object]] = []
+    for name, sprite_id in SPRITE_EXPORTS:
+        sprite_data = reader.read_container(8, sprite_id)
+        if sprite_data is None:
+            raise RuntimeError(
+                f"DV4c sprite export could not read cache index 8 group {sprite_id} ({name})."
+            )
+        frames = sprite_module.decode_sprites(sprite_id, sprite_data)
+        if not frames:
+            raise RuntimeError(
+                f"DV4c sprite export decoded no frames for cache index 8 group {sprite_id} ({name})."
+            )
+        filename = f"{name}_{sprite_id}_0.png"
+        _write_sprite_frame_png(frames[0], sprites_root / filename)
+        exported.append(
+            {
+                "name": name,
+                "sprite_id": sprite_id,
+                "filename": filename,
+                "width": int(frames[0].width),
+                "height": int(frames[0].height),
+            }
+        )
+
+    return {
+        "count": len(exported),
+        "sprite_index": 8,
+        "sprites": exported,
+    }
+
+
+def _read_string(buf: io.BytesIO) -> str:
+    parts: list[str] = []
+    while True:
+        data = buf.read(1)
+        if not data or data[0] == 0:
+            break
+        parts.append(chr(data[0]))
+    return "".join(parts)
+
+
+def _write_sprite_frame_png(frame, output_path: Path) -> None:
+    width = int(frame.width)
+    height = int(frame.height)
+    raw = bytearray()
+    for row in range(height):
+        raw.append(0)
+        for column in range(width):
+            argb = int(frame.pixels[row * width + column])
+            raw.extend(
+                (
+                    (argb >> 16) & 0xFF,
+                    (argb >> 8) & 0xFF,
+                    argb & 0xFF,
+                    (argb >> 24) & 0xFF,
+                )
+            )
+
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+        )
+
+    png = bytearray(b"\x89PNG\r\n\x1a\n")
+    png.extend(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)))
+    png.extend(chunk(b"IDAT", zlib.compress(bytes(raw), level=9)))
+    png.extend(chunk(b"IEND", b""))
+    output_path.write_bytes(bytes(png))
+
+
+def _read_u16_be(buf: io.BytesIO) -> int:
+    data = buf.read(2)
+    return int.from_bytes(data, "big", signed=False) if len(data) == 2 else 0
+
+
+def _read_u24_be(buf: io.BytesIO) -> int:
+    data = buf.read(3)
+    return int.from_bytes(data, "big", signed=False) if len(data) == 3 else 0
+
+
+def _decode_floor_definitions_dat2(reader: Dat2CacheReader, terrain_module):
+    underlays: dict[int, object] = {}
+    overlays: dict[int, object] = {}
+
+    underlay_files = reader.read_group(2, 1)
+    for definition_id, data in underlay_files.items():
+        floor = terrain_module.FloorDef(floor_id=definition_id)
+        buf = io.BytesIO(data)
+        while True:
+            opcode_data = buf.read(1)
+            if not opcode_data or opcode_data[0] == 0:
+                break
+            opcode = opcode_data[0]
+            if opcode == 1:
+                floor.rgb = _read_u24_be(buf)
+            elif opcode == 2:
+                texture = _read_u16_be(buf)
+                floor.texture = -1 if texture == 65535 else texture
+            elif opcode == 3:
+                _read_u16_be(buf)
+            elif opcode == 4 or opcode == 5:
+                continue
+            else:
+                raise RuntimeError(f"DV4c encountered unsupported underlay opcode {opcode} for floor {definition_id}.")
+        if floor.secondary_rgb != -1:
+            terrain_module._rgb_to_hsl(floor.secondary_rgb, floor)
+        terrain_module._rgb_to_hsl(floor.rgb, floor)
+        underlays[definition_id] = floor
+
+    overlay_files = reader.read_group(2, 4)
+    for definition_id, data in overlay_files.items():
+        floor = terrain_module.FloorDef(floor_id=definition_id)
+        buf = io.BytesIO(data)
+        while True:
+            opcode_data = buf.read(1)
+            if not opcode_data or opcode_data[0] == 0:
+                break
+            opcode = opcode_data[0]
+            if opcode == 1:
+                floor.rgb = _read_u24_be(buf)
+            elif opcode == 2:
+                floor.texture = buf.read(1)[0]
+            elif opcode == 3:
+                texture = _read_u16_be(buf)
+                floor.texture = -1 if texture == 65535 else texture
+            elif opcode == 5:
+                floor.hide_underlay = False
+            elif opcode == 7:
+                floor.secondary_rgb = _read_u24_be(buf)
+            elif opcode == 8:
+                continue
+            elif opcode == 9:
+                _read_u16_be(buf)
+            elif opcode == 10:
+                continue
+            elif opcode == 11:
+                buf.read(1)
+            elif opcode == 12:
+                continue
+            elif opcode == 13:
+                _read_u24_be(buf)
+            elif opcode == 14:
+                buf.read(1)
+            elif opcode == 16:
+                buf.read(1)
+            else:
+                raise RuntimeError(f"DV4c encountered unsupported overlay opcode {opcode} for floor {definition_id}.")
+        if floor.secondary_rgb != -1:
+            terrain_module._rgb_to_hsl(floor.secondary_rgb, floor)
+            floor.secondary_hue = floor.hue
+            floor.secondary_saturation = floor.saturation
+            floor.secondary_lightness = floor.lightness
+        terrain_module._rgb_to_hsl(floor.rgb, floor)
+        overlays[definition_id] = floor
+
+    return underlays, overlays
+
+
+def _read_sharded_index_entry(reader: Dat2CacheReader, index_id: int, entry_id: int) -> bytes | None:
+    group_id = entry_id >> 7
+    file_id = entry_id & 0x7F
+    try:
+        files = reader.read_group(index_id, group_id)
+    except (FileNotFoundError, KeyError):
+        return None
+    return files.get(file_id)
+
+
+def _parse_modern_npc_def(npc_id: int, data: bytes) -> dict[str, object]:
+    buf = io.BytesIO(data)
+    result: dict[str, object] = {
+        "npc_id": npc_id,
+        "name": "",
+        "model_ids": [],
+        "size": 1,
+        "width_scale": 128,
+        "height_scale": 128,
+    }
+    while True:
+        opcode_data = buf.read(1)
+        if not opcode_data:
+            break
+        opcode = opcode_data[0]
+        if opcode == 0:
+            break
+        if opcode == 1:
+            count = buf.read(1)[0]
+            result["model_ids"] = [int.from_bytes(buf.read(2), "big", signed=False) for _ in range(count)]
+        elif opcode == 2:
+            result["name"] = _read_string(buf)
+        elif opcode == 12:
+            result["size"] = buf.read(1)[0]
+        elif opcode in (13, 14, 15, 16, 18, 95, 97, 98, 102, 103, 114, 122, 123, 127, 137, 138, 139, 142):
+            buf.read(2)
+        elif opcode == 17:
+            buf.read(8)
+        elif 30 <= opcode <= 34:
+            _read_string(buf)
+        elif opcode in (40, 41):
+            count = buf.read(1)[0]
+            buf.read(count * 4)
+        elif opcode == 42:
+            count = buf.read(1)[0]
+            buf.read(count)
+        elif opcode == 60:
+            count = buf.read(1)[0]
+            buf.read(count * 2)
+        elif opcode == 93 or opcode == 99 or opcode == 107 or opcode == 109 or opcode == 111 or opcode == 141 or opcode == 143 or opcode == 158 or opcode == 159 or opcode == 162:
+            continue
+        elif opcode == 97:
+            result["width_scale"] = int.from_bytes(buf.read(2), "big", signed=False)
+        elif opcode == 98:
+            result["height_scale"] = int.from_bytes(buf.read(2), "big", signed=False)
+        elif opcode in (100, 101, 119, 125, 128, 140, 163, 165, 168):
+            buf.read(1)
+        elif opcode == 106 or opcode == 118:
+            buf.read(2)
+            buf.read(2)
+            extra = 1 if opcode == 118 else 0
+            if opcode == 118:
+                buf.read(2)
+            count = buf.read(1)[0]
+            buf.read((count + 2 + extra) * 2)
+        elif opcode == 115:
+            buf.read(4)
+        elif opcode == 113 or opcode == 155 or opcode == 164:
+            buf.read(4)
+        elif opcode == 116:
+            buf.read(2)
+        elif opcode == 117:
+            buf.read(8)
+        elif opcode == 121:
+            translation_count = buf.read(1)[0]
+            for _ in range(translation_count):
+                buf.read(1)
+                buf.read(3)
+        elif opcode == 134:
+            buf.read(2)
+            buf.read(2)
+            buf.read(2)
+            buf.read(2)
+            buf.read(1)
+        elif opcode == 135 or opcode == 136:
+            buf.read(1)
+            buf.read(2)
+        elif opcode == 160:
+            count = buf.read(1)[0]
+            buf.read(count * 2)
+        elif opcode == 249:
+            param_count = buf.read(1)[0]
+            for _ in range(param_count):
+                is_string = buf.read(1)[0]
+                buf.read(3)
+                if is_string:
+                    _read_string(buf)
+                else:
+                    buf.read(4)
+        else:
+            raise RuntimeError(
+                f"DV4c encountered unsupported NPC opcode {opcode} while parsing npc {npc_id}."
+            )
+    return result
+
+
+def _export_dat2_npc_model_bundle(reader: Dat2CacheReader, model_module, raw_dir: Path) -> dict[str, object]:
+    output_path = raw_dir / generated_viewer_npc_models_bundle_path().name
+    decoded_models: list[object] = []
+    npc_entries: list[dict[str, object]] = []
+
+    for label, npc_id in FIGHT_CAVES_NPC_EXPORTS:
+        npc_data = _read_sharded_index_entry(reader, 18, npc_id)
+        if npc_data is None:
+            raise RuntimeError(
+                f"DV4c NPC export could not read cache index 18 group {npc_id} ({label})."
+            )
+        npc_def = _parse_modern_npc_def(npc_id, npc_data)
+        model_ids = list(npc_def.get("model_ids", []))
+        if not model_ids:
+            raise RuntimeError(
+                f"DV4c NPC export found no model IDs for cache index 18 group {npc_id} ({label})."
+            )
+        model_id = int(model_ids[0])
+        model_data = reader.read_container(7, model_id)
+        if model_data is None:
+            raise RuntimeError(
+                f"DV4c NPC export could not read cache index 7 group {model_id} for npc {label}."
+            )
+        decoded_model = model_module.decode_model(model_id, model_data)
+        if decoded_model is None:
+            raise RuntimeError(
+                f"DV4c NPC export could not decode model {model_id} for npc {label}."
+            )
+        decoded_models.append(decoded_model)
+        npc_entries.append(
+            {
+                "label": label,
+                "npc_id": npc_id,
+                "model_id": model_id,
+                "width_scale": int(npc_def.get("width_scale", 128)),
+                "height_scale": int(npc_def.get("height_scale", 128)),
+                "size": int(npc_def.get("size", 1)),
+            }
+        )
+
+    model_module.write_models_binary(output_path, decoded_models)
+    return {
+        "filename": output_path.name,
+        "count": len(npc_entries),
+        "npc_definition_index": 18,
+        "model_index": 7,
+        "npcs": npc_entries,
+    }
+
+
+def _assemble_bundle(raw_dir: Path, dat2_export: dict[str, object]) -> dict[str, object]:
     metadata = json.loads((raw_dir / "metadata.json").read_text(encoding="utf-8"))
     terrain_tiles = _load_terrain_tiles(raw_dir / "terrain_tiles.csv")
     palette = _build_palette(terrain_tiles)
+    terrain_summary = dat2_export["terrain_bundle"]
+    sprite_summary = dat2_export["sprite_bundle"]
+    npc_model_summary = dat2_export["npc_model_bundle"]
+    world_min_x, world_max_x, world_min_y, world_max_y = _fight_caves_region_world_bounds()
 
     fight_caves_ifaces = _load_legacy_semantic_table(
         legacy_rsps_root() / "data" / "minigame" / "tzhaar_fight_cave" / "tzhaar_fight_cave.ifaces.toml"
@@ -272,33 +836,89 @@ def _assemble_bundle(raw_dir: Path) -> dict[str, object]:
     inventory_side_ifaces = _load_legacy_semantic_table(
         legacy_rsps_root() / "data" / "entity" / "player" / "inventory" / "inventory_side.ifaces.toml"
     )
+    tzhaar_city_objects = _load_legacy_semantic_table(
+        legacy_rsps_root() / "data" / "area" / "karamja" / "tzhaar_city" / "tzhaar_city.objs.toml"
+    )
     icon_items = tomllib.loads(
         (legacy_rsps_root() / "data" / "entity" / "player" / "modal" / "icon.items.toml").read_text(encoding="utf-8")
     )
-    demo_save_text = (legacy_rsps_root() / "data" / "fight_caves_demo" / "saves" / "fcdemo01.toml").read_text(
-        encoding="utf-8"
+    demo_save_text, demo_save = _load_fight_caves_demo_save()
+    xtea_candidates = _viewer_xtea_candidate_payloads()
+    model_exports = list(metadata.get("model_exports", []))
+    item_export_count = sum(
+        1 for export in model_exports
+        if str(export.get("owner_kind", "")).startswith("item_")
+    )
+    npc_export_count = sum(
+        1 for export in model_exports
+        if str(export.get("owner_kind", "")) == "npc"
+    )
+    player_export_count = sum(
+        1 for export in model_exports
+        if str(export.get("owner_kind", "")).startswith("player_")
+    )
+    object_export_count = sum(
+        1 for export in model_exports
+        if str(export.get("owner_kind", "")) == "object"
+    )
+    player_items = {
+        str(entry.get("label")): entry
+        for entry in metadata.get("items", [])
+        if isinstance(entry, dict) and entry.get("label") is not None
+    }
+    player_appearance = {
+        "source_path": "reference/legacy-rsps/data/fight_caves_demo/saves/fcdemo01.toml",
+        "male": bool(demo_save.get("male", True)),
+        "looks": list(demo_save.get("looks", [])),
+        "colours": list(demo_save.get("colours", [])),
+        "tile": dict(demo_save.get("tile", {})) if isinstance(demo_save.get("tile"), dict) else {},
+        "worn_equipment": [
+            {
+                **spec,
+                "name": str(player_items.get(str(spec["label"]), {}).get("name", spec["label"])),
+                "item_present_in_export": str(spec["label"]) in player_items,
+            }
+            for spec in _demo_loadout_specs()
+        ],
+        "equipment_model_mode": "demo_save_and_cache_definition_recipe",
+    }
+    blocked_categories: list[str] = []
+    blocked_notes: list[str] = []
+    if not bool(metadata["cache_validation"]["object_archive_accessible"]):
+        blocked_categories.append("fight_caves_map_object_archive_props")
+        blocked_notes.append(str(metadata["cache_validation"]["object_archive_blocker"]))
+    blocked_categories.append("inventory_item_icons_from_item_models")
+    blocked_notes.append(
+        "Fight Caves item icon rasterization is still not committed in this checkout. "
+        "ARCH-VIEW2 exports real item model inputs and icon camera recipes, but not final raster item icons yet."
     )
 
     bundle = {
         "asset_id": VIEWER_ASSET_BUNDLE_ID,
         "description": (
-            "First legacy-asset-derived Fight Caves scene slice for the native viewer. "
-            "Terrain and HUD sprites come from the validated headless cache plus RSPS semantic tables."
+            "Legacy-asset-derived Fight Caves scene slice and render-input bundle for the native viewer. "
+            "Terrain comes from cache-derived TERR export, Fight Caves NPC visuals come from cache-derived MDL2 export, "
+            "and HUD sprites come from cache-derived PNG export plus RSPS semantic tables."
         ),
         "source_refs": [
             str(VIEWER_CACHE_INPUT_RELATIVE),
+            "reference/legacy-headless-env/config/headless_manifest.toml",
             "reference/legacy-rsps/data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.areas.toml",
             "reference/legacy-rsps/data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.ifaces.toml",
+            "reference/legacy-rsps/data/area/karamja/tzhaar_city/tzhaar_city.objs.toml",
             "reference/legacy-rsps/data/entity/player/inventory/inventory.ifaces.toml",
             "reference/legacy-rsps/data/entity/player/inventory/inventory_side.ifaces.toml",
             "reference/legacy-rsps/data/entity/player/modal/icon.items.toml",
             "reference/legacy-rsps/data/fight_caves_demo/saves/fcdemo01.toml",
+            *[str(path) for path in VIEWER_XTEA_TEST_INPUTS],
         ],
         "cache_validation": {
             "preferred_input": str(VIEWER_CACHE_INPUT_RELATIVE),
             "preferred_input_valid": True,
             "rsps_cache_input": str(VIEWER_EMPTY_RSPS_CACHE_RELATIVE),
             "rsps_cache_empty": _directory_is_effectively_empty(empty_rsps_cache_input_path()),
+            "required_object_archive_regions": list(FIGHT_CAVES_OBJECT_ARCHIVE_REGIONS),
+            "xtea_candidates": xtea_candidates,
             "map_archive_names": list(metadata["cache_validation"]["map_archive_names"]),
             "map_archive_accessible": bool(metadata["cache_validation"]["map_archive_accessible"]),
             "object_archive_names": list(metadata["cache_validation"]["object_archive_names"]),
@@ -313,12 +933,17 @@ def _assemble_bundle(raw_dir: Path) -> dict[str, object]:
         },
         "terrain": {
             "tile_count": len(terrain_tiles),
-            "regions": [f"{region_x}_{region_y}" for region_x, region_y in FIGHT_CAVES_CACHE_REGIONS],
+            "region_count": int(terrain_summary["region_count"]),
+            "regions": list(terrain_summary["regions"]),
+            "terrain_bundle_filename": str(terrain_summary["filename"]),
+            "vertex_count": int(terrain_summary["vertex_count"]),
+            "floor_definition_index": int(terrain_summary["floor_definition_index"]),
+            "terrain_index": int(terrain_summary["terrain_index"]),
             "world_bounds": {
-                "min_x": FIGHT_CAVES_REGION_WORLD_MIN_X,
-                "max_x": FIGHT_CAVES_REGION_WORLD_MAX_X,
-                "min_y": FIGHT_CAVES_REGION_WORLD_MIN_Y,
-                "max_y": FIGHT_CAVES_REGION_WORLD_MAX_Y,
+                "min_x": world_min_x,
+                "max_x": world_max_x,
+                "min_y": world_min_y,
+                "max_y": world_max_y,
             },
             "tiles": terrain_tiles,
             "palette": palette,
@@ -337,21 +962,54 @@ def _assemble_bundle(raw_dir: Path) -> dict[str, object]:
                 "cache": _find_interface(metadata["interfaces"], 387),
             },
         },
-        "sprites": metadata["sprites"],
-        "hud_sprite_files": _hud_sprite_file_map(metadata["sprites"]),
+        "sprites": sprite_summary["sprites"],
+        "hud_sprite_files": _hud_sprite_file_map(sprite_summary["sprites"]),
         "items": metadata["items"],
         "npcs": metadata["npcs"],
-        "blocked_categories": [
-            "fight_caves_map_object_archive_props",
-            "inventory_item_icons_from_item_models",
-            "npc_model_renderables",
-            "player_model_renderables",
-        ],
-        "blocked_notes": [
-            metadata["cache_validation"]["object_archive_blocker"],
-            "The validated cache exposes real item and NPC model metadata, but this checkout does not include a committed offline item- or model-render pipeline for those visuals.",
-            "DV4b therefore exports real terrain, real HUD sprites, and real entity metadata while leaving richer item and model art explicit for the follow-on viewer passes.",
-        ],
+        "npc_model_bundle": npc_model_summary,
+        "objects": metadata.get("objects", []),
+        "object_semantics": tzhaar_city_objects,
+        "identity_kits": metadata.get("identity_kits", []),
+        "player_default_appearance": player_appearance,
+        "model_exports": model_exports,
+        "render_export_status": {
+            "terrain_bundle": {
+                "status": "exported",
+                "vertex_count": int(terrain_summary["vertex_count"]),
+                "region_count": int(terrain_summary["region_count"]),
+            },
+            "sprite_bundle": {
+                "status": "exported",
+                "sprite_count": int(sprite_summary["count"]),
+            },
+            "npc_model_bundle": {
+                "status": "exported",
+                "exported_model_count": int(npc_model_summary["count"]),
+            },
+            "object_archive_props": {
+                "status": "blocked" if not bool(metadata["cache_validation"]["object_archive_accessible"]) else "exported",
+                "required_regions": list(FIGHT_CAVES_OBJECT_ARCHIVE_REGIONS),
+                "exported_model_file_count": object_export_count,
+            },
+            "item_render_inputs": {
+                "status": "exported",
+                "exported_model_file_count": item_export_count,
+            },
+            "npc_render_inputs": {
+                "status": "exported",
+                "exported_model_file_count": npc_export_count,
+            },
+            "player_render_inputs": {
+                "status": "exported",
+                "exported_model_file_count": player_export_count,
+            },
+            "item_icon_rasterization": {
+                "status": "blocked",
+                "reason": "no committed offline item-icon rasterizer in this checkout",
+            },
+        },
+        "blocked_categories": blocked_categories,
+        "blocked_notes": blocked_notes,
         "fight_caves_demo_inventory_source": demo_save_text.strip().splitlines()[-2:],
         "icon_items_excerpt": {key: icon_items[key] for key in ("prayer_icon", "number_zero", "number_one", "number_two") if key in icon_items},
     }
@@ -529,15 +1187,34 @@ def _write_generated_assets(bundle: dict[str, object], raw_dir: Path, generated_
     bundle_path = generated_viewer_bundle_path()
     bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    terrain_bundle_path = generated_viewer_terrain_bundle_path()
+    shutil.copy2(raw_dir / terrain_bundle_path.name, terrain_bundle_path)
+
+    npc_models_bundle_path = generated_viewer_npc_models_bundle_path()
+    shutil.copy2(raw_dir / npc_models_bundle_path.name, npc_models_bundle_path)
+
     sprites_root = generated_viewer_sprites_root()
     if sprites_root.exists():
         shutil.rmtree(sprites_root)
     shutil.copytree(raw_dir / "sprites", sprites_root)
 
+    models_root = generated_viewer_models_root()
+    if models_root.exists():
+        shutil.rmtree(models_root)
+    raw_models_root = raw_dir / "models"
+    if raw_models_root.is_dir():
+        shutil.copytree(raw_models_root, models_root)
+    else:
+        models_root.mkdir(parents=True, exist_ok=True)
+
 
 def _java_exporter_source() -> str:
+    demo_save = _load_fight_caves_demo_save()[1]
+    world_min_x, world_max_x, world_min_y, world_max_y = _fight_caves_region_world_bounds()
+    player_look_ids = tuple(int(value) for value in demo_save.get("looks", []))
+    player_loadout_specs = _demo_loadout_specs()
     sprite_entries = ",\n".join(
-        f'        new SpriteSpec("{name}", {sprite_id})'
+        f"        new SpriteSpec({json.dumps(name)}, {sprite_id})"
         for name, sprite_id in SPRITE_EXPORTS
     )
     region_entries = ",\n".join(
@@ -545,21 +1222,32 @@ def _java_exporter_source() -> str:
         for region_x, region_y in FIGHT_CAVES_CACHE_REGIONS
     )
     item_entries = ",\n".join(
-        f'        new IdLabel("{name}", {item_id})'
+        f"        new IdLabel({json.dumps(name)}, {item_id})"
         for name, item_id in FIGHT_CAVES_ITEM_EXPORTS
     )
     npc_entries = ",\n".join(
-        f'        new IdLabel("{name}", {npc_id})'
+        f"        new IdLabel({json.dumps(name)}, {npc_id})"
         for name, npc_id in FIGHT_CAVES_NPC_EXPORTS
     )
+    object_entries = ",\n".join(
+        f"        new IdLabel({json.dumps(name)}, {object_id})"
+        for name, object_id in FIGHT_CAVES_OBJECT_EXPORTS
+    )
     interface_entries = ", ".join(str(interface_id) for interface_id in FIGHT_CAVES_INTERFACE_EXPORTS)
+    player_look_entries = ", ".join(str(value) for value in player_look_ids) or "0"
+    player_loadout_entries = ",\n".join(
+        f"        new PlayerLoadoutSpec({int(spec['slot_index'])}, {json.dumps(str(spec['label']))}, {int(spec['item_id'])})"
+        for spec in player_loadout_specs
+    ) or '        new PlayerLoadoutSpec(0, "", -1)'
     return textwrap.dedent(
         f"""
         import sim.cache.Cache;
         import sim.cache.FileCache;
         import sim.cache.Index;
+        import sim.cache.config.data.IdentityKitDefinition;
         import sim.cache.config.data.OverlayDefinition;
         import sim.cache.config.data.UnderlayDefinition;
+        import sim.cache.config.decoder.IdentityKitDecoder;
         import sim.cache.config.decoder.OverlayDecoder;
         import sim.cache.config.decoder.UnderlayDecoder;
         import sim.cache.definition.data.IndexedSprite;
@@ -567,10 +1255,12 @@ def _java_exporter_source() -> str:
         import sim.cache.definition.data.InterfaceDefinitionFull;
         import sim.cache.definition.data.ItemDefinitionFull;
         import sim.cache.definition.data.NPCDefinitionFull;
+        import sim.cache.definition.data.ObjectDefinitionFull;
         import sim.cache.definition.data.SpriteDefinition;
         import sim.cache.definition.decoder.InterfaceDecoderFull;
         import sim.cache.definition.decoder.ItemDecoderFull;
         import sim.cache.definition.decoder.NPCDecoderFull;
+        import sim.cache.definition.decoder.ObjectDecoderFull;
         import sim.cache.definition.decoder.SpriteDecoder;
 
         import java.io.BufferedWriter;
@@ -579,14 +1269,16 @@ def _java_exporter_source() -> str:
         import java.nio.file.Files;
         import java.nio.file.Path;
         import java.util.ArrayList;
+        import java.util.LinkedHashSet;
         import java.util.List;
+        import java.util.Set;
         import javax.imageio.ImageIO;
 
         public final class FightCavesAssetExporter {{
-            private static final int WORLD_MIN_X = {FIGHT_CAVES_REGION_WORLD_MIN_X};
-            private static final int WORLD_MAX_X = {FIGHT_CAVES_REGION_WORLD_MAX_X};
-            private static final int WORLD_MIN_Y = {FIGHT_CAVES_REGION_WORLD_MIN_Y};
-            private static final int WORLD_MAX_Y = {FIGHT_CAVES_REGION_WORLD_MAX_Y};
+            private static final int WORLD_MIN_X = {world_min_x};
+            private static final int WORLD_MAX_X = {world_max_x};
+            private static final int WORLD_MIN_Y = {world_min_y};
+            private static final int WORLD_MAX_Y = {world_max_y};
             private static final int RUNTIME_ORIGIN_X = 2396;
             private static final int RUNTIME_ORIGIN_Y = 5088;
             private static final RegionSpec[] REGIONS = new RegionSpec[] {{
@@ -602,11 +1294,20 @@ def _java_exporter_source() -> str:
             private static final IdLabel[] NPCS = new IdLabel[] {{
         {npc_entries}
             }};
+            private static final IdLabel[] OBJECTS = new IdLabel[] {{
+        {object_entries}
+            }};
+            private static final int[] PLAYER_LOOK_KIT_IDS = new int[]{{ {player_look_entries} }};
+            private static final PlayerLoadoutSpec[] PLAYER_LOADOUT = new PlayerLoadoutSpec[] {{
+        {player_loadout_entries}
+            }};
 
             private record RegionSpec(int x, int y) {{}}
             private record SpriteSpec(String name, int id) {{}}
             private record IdLabel(String name, int id) {{}}
+            private record PlayerLoadoutSpec(int slotIndex, String label, int id) {{}}
             private record ExportedSprite(String name, int id, String filename, int width, int height) {{}}
+            private record ExportedModel(String ownerKind, String ownerLabel, int ownerId, String usage, int modelId, String filename, int byteLength) {{}}
 
             public static void main(String[] args) throws Exception {{
                 if (args.length != 2) {{
@@ -624,15 +1325,28 @@ def _java_exporter_source() -> str:
                 InterfaceDefinitionFull[] interfaces = new InterfaceDecoderFull().load(cache);
                 ItemDefinitionFull[] items = new ItemDecoderFull().load(cache);
                 NPCDefinitionFull[] npcs = new NPCDecoderFull().load(cache);
+                ObjectDefinitionFull[] objects = new ObjectDecoderFull(true, false).load(cache);
+                IdentityKitDefinition[] identityKits = new IdentityKitDecoder().load(cache);
                 SpriteDefinition[] sprites = new SpriteDecoder().load(cache);
 
                 List<ExportedSprite> exportedSprites = exportSprites(sprites, out.resolve("sprites"));
+                List<ExportedModel> exportedModels = exportModels(
+                    cache,
+                    items,
+                    npcs,
+                    objects,
+                    identityKits,
+                    out.resolve("models")
+                );
                 writeMetadataJson(
                     out.resolve("metadata.json"),
                     interfaces,
                     items,
                     npcs,
+                    objects,
+                    identityKits,
                     exportedSprites,
+                    exportedModels,
                     probe
                 );
             }}
@@ -757,12 +1471,153 @@ def _java_exporter_source() -> str:
                 return exported;
             }}
 
+            private static List<ExportedModel> exportModels(
+                Cache cache,
+                ItemDefinitionFull[] items,
+                NPCDefinitionFull[] npcs,
+                ObjectDefinitionFull[] objects,
+                IdentityKitDefinition[] identityKits,
+                Path outputDir
+            ) throws IOException {{
+                Files.createDirectories(outputDir);
+                List<ExportedModel> exported = new ArrayList<>();
+                Set<String> seen = new LinkedHashSet<>();
+
+                for (IdLabel entry : ITEMS) {{
+                    ItemDefinitionFull item = entry.id() >= 0 && entry.id() < items.length ? items[entry.id()] : null;
+                    if (item == null) {{
+                        continue;
+                    }}
+                    exportModel(cache, outputDir, exported, seen, "item_inventory", entry.name(), entry.id(), "inventory_model", item.getModelId());
+                    for (int modelId : compactModelIds(new int[]{{item.getPrimaryMaleModel(), item.getSecondaryMaleModel(), item.getTertiaryMaleModel()}})) {{
+                        exportModel(cache, outputDir, exported, seen, "item_male_wield", entry.name(), entry.id(), "male_wield_model", modelId);
+                    }}
+                    for (int modelId : compactModelIds(new int[]{{item.getPrimaryFemaleModel(), item.getSecondaryFemaleModel(), item.getTertiaryFemaleModel()}})) {{
+                        exportModel(cache, outputDir, exported, seen, "item_female_wield", entry.name(), entry.id(), "female_wield_model", modelId);
+                    }}
+                }}
+
+                for (IdLabel entry : NPCS) {{
+                    NPCDefinitionFull npc = entry.id() >= 0 && entry.id() < npcs.length ? npcs[entry.id()] : null;
+                    if (npc == null || npc.getModelIds() == null) {{
+                        continue;
+                    }}
+                    for (int modelId : compactModelIds(npc.getModelIds())) {{
+                        exportModel(cache, outputDir, exported, seen, "npc", entry.name(), entry.id(), "npc_model", modelId);
+                    }}
+                }}
+
+                for (IdLabel entry : OBJECTS) {{
+                    ObjectDefinitionFull object = entry.id() >= 0 && entry.id() < objects.length ? objects[entry.id()] : null;
+                    if (object == null) {{
+                        continue;
+                    }}
+                    for (int modelId : flattenObjectModelIds(object.getModelIds())) {{
+                        exportModel(cache, outputDir, exported, seen, "object", entry.name(), entry.id(), "object_model", modelId);
+                    }}
+                }}
+
+                for (int kitId : PLAYER_LOOK_KIT_IDS) {{
+                    IdentityKitDefinition kit = kitId >= 0 && kitId < identityKits.length ? identityKits[kitId] : null;
+                    if (kit == null || kit.getModelIds() == null) {{
+                        continue;
+                    }}
+                    for (int modelId : compactModelIds(kit.getModelIds())) {{
+                        exportModel(cache, outputDir, exported, seen, "player_identity_kit", "kit_" + kitId, kitId, "identity_model", modelId);
+                    }}
+                }}
+
+                for (PlayerLoadoutSpec spec : PLAYER_LOADOUT) {{
+                    ItemDefinitionFull item = spec.id() >= 0 && spec.id() < items.length ? items[spec.id()] : null;
+                    if (item == null) {{
+                        continue;
+                    }}
+                    for (int modelId : compactModelIds(new int[]{{item.getPrimaryMaleModel(), item.getSecondaryMaleModel(), item.getTertiaryMaleModel()}})) {{
+                        exportModel(cache, outputDir, exported, seen, "player_worn_item", spec.label(), spec.id(), "male_wield_model", modelId);
+                    }}
+                }}
+
+                return exported;
+            }}
+
+            private static void exportModel(
+                Cache cache,
+                Path outputDir,
+                List<ExportedModel> exported,
+                Set<String> seen,
+                String ownerKind,
+                String ownerLabel,
+                int ownerId,
+                String usage,
+                int modelId
+            ) throws IOException {{
+                if (modelId < 0) {{
+                    return;
+                }}
+                String key = ownerKind + ":" + ownerId + ":" + usage + ":" + modelId;
+                if (!seen.add(key)) {{
+                    return;
+                }}
+                byte[] model = cache.data(Index.MODELS, modelId, 0, null);
+                if (model == null) {{
+                    return;
+                }}
+                String filename = sanitize(ownerKind + "_" + ownerLabel + "_" + ownerId + "_" + usage + "_" + modelId + ".bin");
+                Files.write(outputDir.resolve(filename), model);
+                exported.add(new ExportedModel(ownerKind, ownerLabel, ownerId, usage, modelId, filename, model.length));
+            }}
+
+            private static int[] compactModelIds(int[] values) {{
+                LinkedHashSet<Integer> ids = new LinkedHashSet<>();
+                for (int value : values) {{
+                    if (value >= 0) {{
+                        ids.add(value);
+                    }}
+                }}
+                int[] compact = new int[ids.size()];
+                int index = 0;
+                for (Integer value : ids) {{
+                    compact[index++] = value;
+                }}
+                return compact;
+            }}
+
+            private static int[] flattenObjectModelIds(int[][] values) {{
+                if (values == null) {{
+                    return new int[0];
+                }}
+                LinkedHashSet<Integer> ids = new LinkedHashSet<>();
+                for (int[] group : values) {{
+                    if (group == null) {{
+                        continue;
+                    }}
+                    for (int value : group) {{
+                        if (value >= 0) {{
+                            ids.add(value);
+                        }}
+                    }}
+                }}
+                int[] compact = new int[ids.size()];
+                int index = 0;
+                for (Integer value : ids) {{
+                    compact[index++] = value;
+                }}
+                return compact;
+            }}
+
+            private static String sanitize(String value) {{
+                return value.replaceAll("[^A-Za-z0-9._-]", "_");
+            }}
+
             private static void writeMetadataJson(
                 Path output,
                 InterfaceDefinitionFull[] interfaces,
                 ItemDefinitionFull[] items,
                 NPCDefinitionFull[] npcs,
+                ObjectDefinitionFull[] objects,
+                IdentityKitDefinition[] identityKits,
                 List<ExportedSprite> sprites,
+                List<ExportedModel> modelExports,
                 CacheProbe probe
             ) throws IOException {{
                 StringBuilder json = new StringBuilder();
@@ -822,9 +1677,18 @@ def _java_exporter_source() -> str:
                         json.append("\\"model_id\\": ").append(item.getModelId()).append(", ");
                         json.append("\\"sprite_scale\\": ").append(item.getSpriteScale()).append(", ");
                         json.append("\\"sprite_pitch\\": ").append(item.getSpritePitch()).append(", ");
-                        json.append("\\"sprite_yaw\\": ").append(item.getSpriteCameraYaw());
+                        json.append("\\"sprite_roll\\": ").append(item.getSpriteCameraRoll()).append(", ");
+                        json.append("\\"sprite_translate_x\\": ").append(item.getSpriteTranslateX()).append(", ");
+                        json.append("\\"sprite_translate_y\\": ").append(item.getSpriteTranslateY()).append(", ");
+                        json.append("\\"sprite_yaw\\": ").append(item.getSpriteCameraYaw()).append(", ");
+                        json.append("\\"male_wield_model_ids\\": ").append(renderIntArray(compactModelIds(new int[]{{item.getPrimaryMaleModel(), item.getSecondaryMaleModel(), item.getTertiaryMaleModel()}}))).append(", ");
+                        json.append("\\"female_wield_model_ids\\": ").append(renderIntArray(compactModelIds(new int[]{{item.getPrimaryFemaleModel(), item.getSecondaryFemaleModel(), item.getTertiaryFemaleModel()}}))).append(", ");
+                        json.append("\\"original_colours\\": ").append(renderShortArray(item.getOriginalColours())).append(", ");
+                        json.append("\\"modified_colours\\": ").append(renderShortArray(item.getModifiedColours())).append(", ");
+                        json.append("\\"original_textures\\": ").append(renderShortArray(item.getOriginalTextureColours())).append(", ");
+                        json.append("\\"modified_textures\\": ").append(renderShortArray(item.getModifiedTextureColours()));
                     }} else {{
-                        json.append("\\"name\\": \\"missing\\", \\"model_id\\": -1, \\"sprite_scale\\": 0, \\"sprite_pitch\\": 0, \\"sprite_yaw\\": 0");
+                        json.append("\\"name\\": \\"missing\\", \\"model_id\\": -1, \\"sprite_scale\\": 0, \\"sprite_pitch\\": 0, \\"sprite_roll\\": 0, \\"sprite_translate_x\\": 0, \\"sprite_translate_y\\": 0, \\"sprite_yaw\\": 0, \\"male_wield_model_ids\\": [], \\"female_wield_model_ids\\": [], \\"original_colours\\": [], \\"modified_colours\\": [], \\"original_textures\\": [], \\"modified_textures\\": []");
                     }}
                     json.append("}}");
                     json.append(i + 1 == ITEMS.length ? "\\n" : ",\\n");
@@ -839,17 +1703,96 @@ def _java_exporter_source() -> str:
                     json.append("\\"label\\": \\"").append(entry.name()).append("\\", ");
                     json.append("\\"npc_id\\": ").append(entry.id()).append(", ");
                     if (npc != null) {{
-                        int modelCount = npc.getModelIds() == null ? 0 : npc.getModelIds().length;
                         json.append("\\"name\\": \\"").append(escape(npc.getName())).append("\\", ");
                         json.append("\\"size\\": ").append(npc.getSize()).append(", ");
-                        json.append("\\"model_count\\": ").append(modelCount).append(", ");
+                        json.append("\\"model_ids\\": ").append(renderIntArray(compactModelIds(npc.getModelIds()))).append(", ");
+                        json.append("\\"combat\\": ").append(npc.getCombat()).append(", ");
+                        json.append("\\"scale_xy\\": ").append(npc.getScaleXY()).append(", ");
+                        json.append("\\"scale_z\\": ").append(npc.getScaleZ()).append(", ");
+                        json.append("\\"head_icon\\": ").append(npc.getHeadIcon()).append(", ");
+                        json.append("\\"hitbar_sprite\\": ").append(npc.getHitbarSprite()).append(", ");
                         json.append("\\"sprite_id\\": ").append(npc.getSpriteId()).append(", ");
-                        json.append("\\"map_function\\": ").append(npc.getMapFunction());
+                        json.append("\\"map_function\\": ").append(npc.getMapFunction()).append(", ");
+                        json.append("\\"render_emote\\": ").append(npc.getRenderEmote()).append(", ");
+                        json.append("\\"original_colours\\": ").append(renderShortArray(npc.getOriginalColours())).append(", ");
+                        json.append("\\"modified_colours\\": ").append(renderShortArray(npc.getModifiedColours())).append(", ");
+                        json.append("\\"original_textures\\": ").append(renderShortArray(npc.getOriginalTextureColours())).append(", ");
+                        json.append("\\"modified_textures\\": ").append(renderShortArray(npc.getModifiedTextureColours()));
                     }} else {{
-                        json.append("\\"name\\": \\"missing\\", \\"size\\": 1, \\"model_count\\": 0, \\"sprite_id\\": -1, \\"map_function\\": -1");
+                        json.append("\\"name\\": \\"missing\\", \\"size\\": 1, \\"model_ids\\": [], \\"combat\\": -1, \\"scale_xy\\": 128, \\"scale_z\\": 128, \\"head_icon\\": -1, \\"hitbar_sprite\\": -1, \\"sprite_id\\": -1, \\"map_function\\": -1, \\"render_emote\\": -1, \\"original_colours\\": [], \\"modified_colours\\": [], \\"original_textures\\": [], \\"modified_textures\\": []");
                     }}
                     json.append("}}");
                     json.append(i + 1 == NPCS.length ? "\\n" : ",\\n");
+                }}
+                json.append("  ],\\n");
+
+                json.append("  \\"objects\\": [\\n");
+                for (int i = 0; i < OBJECTS.length; i++) {{
+                    IdLabel entry = OBJECTS[i];
+                    ObjectDefinitionFull object = entry.id() >= 0 && entry.id() < objects.length ? objects[entry.id()] : null;
+                    json.append("    {{");
+                    json.append("\\"label\\": \\"").append(entry.name()).append("\\", ");
+                    json.append("\\"object_id\\": ").append(entry.id()).append(", ");
+                    if (object != null) {{
+                        json.append("\\"name\\": \\"").append(escape(object.getName())).append("\\", ");
+                        json.append("\\"size_x\\": ").append(object.getSizeX()).append(", ");
+                        json.append("\\"size_y\\": ").append(object.getSizeY()).append(", ");
+                        json.append("\\"model_ids\\": ").append(renderIntArray(flattenObjectModelIds(object.getModelIds()))).append(", ");
+                        json.append("\\"model_size_x\\": ").append(object.getModelSizeX()).append(", ");
+                        json.append("\\"model_size_y\\": ").append(object.getModelSizeY()).append(", ");
+                        json.append("\\"model_size_z\\": ").append(object.getModelSizeZ()).append(", ");
+                        json.append("\\"offset_x\\": ").append(object.getOffsetX()).append(", ");
+                        json.append("\\"offset_y\\": ").append(object.getOffsetY()).append(", ");
+                        json.append("\\"offset_z\\": ").append(object.getOffsetZ()).append(", ");
+                        json.append("\\"mapscene\\": ").append(object.getMapscene()).append(", ");
+                        json.append("\\"interactive\\": ").append(object.getInteractive()).append(", ");
+                        json.append("\\"original_colours\\": ").append(renderShortArray(object.getOriginalColours())).append(", ");
+                        json.append("\\"modified_colours\\": ").append(renderShortArray(object.getModifiedColours())).append(", ");
+                        json.append("\\"original_textures\\": ").append(renderShortArray(object.getOriginalTextureColours())).append(", ");
+                        json.append("\\"modified_textures\\": ").append(renderShortArray(object.getModifiedTextureColours()));
+                    }} else {{
+                        json.append("\\"name\\": \\"missing\\", \\"size_x\\": 1, \\"size_y\\": 1, \\"model_ids\\": [], \\"model_size_x\\": 128, \\"model_size_y\\": 128, \\"model_size_z\\": 128, \\"offset_x\\": 0, \\"offset_y\\": 0, \\"offset_z\\": 0, \\"mapscene\\": -1, \\"interactive\\": -1, \\"original_colours\\": [], \\"modified_colours\\": [], \\"original_textures\\": [], \\"modified_textures\\": []");
+                    }}
+                    json.append("}}");
+                    json.append(i + 1 == OBJECTS.length ? "\\n" : ",\\n");
+                }}
+                json.append("  ],\\n");
+
+                json.append("  \\"identity_kits\\": [\\n");
+                for (int i = 0; i < PLAYER_LOOK_KIT_IDS.length; i++) {{
+                    int kitId = PLAYER_LOOK_KIT_IDS[i];
+                    IdentityKitDefinition kit = kitId >= 0 && kitId < identityKits.length ? identityKits[kitId] : null;
+                    json.append("    {{");
+                    json.append("\\"kit_id\\": ").append(kitId).append(", ");
+                    if (kit != null) {{
+                        json.append("\\"body_part_id\\": ").append(kit.getBodyPartId()).append(", ");
+                        json.append("\\"model_ids\\": ").append(renderIntArray(compactModelIds(kit.getModelIds()))).append(", ");
+                        json.append("\\"head_models\\": ").append(renderIntArray(compactModelIds(kit.getHeadModels()))).append(", ");
+                        json.append("\\"original_colours\\": ").append(renderShortArray(kit.getOriginalColours())).append(", ");
+                        json.append("\\"modified_colours\\": ").append(renderShortArray(kit.getModifiedColours())).append(", ");
+                        json.append("\\"original_textures\\": ").append(renderShortArray(kit.getOriginalTextureColours())).append(", ");
+                        json.append("\\"modified_textures\\": ").append(renderShortArray(kit.getModifiedTextureColours()));
+                    }} else {{
+                        json.append("\\"body_part_id\\": -1, \\"model_ids\\": [], \\"head_models\\": [], \\"original_colours\\": [], \\"modified_colours\\": [], \\"original_textures\\": [], \\"modified_textures\\": []");
+                    }}
+                    json.append("}}");
+                    json.append(i + 1 == PLAYER_LOOK_KIT_IDS.length ? "\\n" : ",\\n");
+                }}
+                json.append("  ],\\n");
+
+                json.append("  \\"model_exports\\": [\\n");
+                for (int i = 0; i < modelExports.size(); i++) {{
+                    ExportedModel model = modelExports.get(i);
+                    json.append("    {{");
+                    json.append("\\"owner_kind\\": \\"").append(escape(model.ownerKind())).append("\\", ");
+                    json.append("\\"owner_label\\": \\"").append(escape(model.ownerLabel())).append("\\", ");
+                    json.append("\\"owner_id\\": ").append(model.ownerId()).append(", ");
+                    json.append("\\"usage\\": \\"").append(escape(model.usage())).append("\\", ");
+                    json.append("\\"model_id\\": ").append(model.modelId()).append(", ");
+                    json.append("\\"filename\\": \\"models/").append(escape(model.filename())).append("\\", ");
+                    json.append("\\"byte_length\\": ").append(model.byteLength());
+                    json.append("}}");
+                    json.append(i + 1 == modelExports.size() ? "\\n" : ",\\n");
                 }}
                 json.append("  ],\\n");
 
@@ -884,6 +1827,36 @@ def _java_exporter_source() -> str:
                         json.append(", ");
                     }}
                     json.append("\\"").append(escape(values.get(index))).append("\\"");
+                }}
+                json.append("]");
+                return json.toString();
+            }}
+
+            private static String renderIntArray(int[] values) {{
+                if (values == null || values.length == 0) {{
+                    return "[]";
+                }}
+                StringBuilder json = new StringBuilder("[");
+                for (int index = 0; index < values.length; index++) {{
+                    if (index > 0) {{
+                        json.append(", ");
+                    }}
+                    json.append(values[index]);
+                }}
+                json.append("]");
+                return json.toString();
+            }}
+
+            private static String renderShortArray(short[] values) {{
+                if (values == null || values.length == 0) {{
+                    return "[]";
+                }}
+                StringBuilder json = new StringBuilder("[");
+                for (int index = 0; index < values.length; index++) {{
+                    if (index > 0) {{
+                        json.append(", ");
+                    }}
+                    json.append((int) values[index]);
                 }}
                 json.append("]");
                 return json.toString();

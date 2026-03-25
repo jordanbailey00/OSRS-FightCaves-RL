@@ -109,11 +109,26 @@ This plan assumes the current pass has already cleaned the workspace and establi
   - goal: build the first real native-owned Fight Caves export bundle and scene-parity slice from legacy source material
   - dependency: ARCH-VIEW1
   - note: completed with a validated cache-derived terrain/HUD export bundle from `reference/legacy-headless-env/data/cache`; object-archive props and richer model renderables remain explicitly blocked rather than faked
-- DV5
-  - status: next
-  - goal: tighten native HUD, inventory, camera, and interaction presentation toward Fight Caves parity without changing backend gameplay truth
+- ARCH-VIEW2
+  - status: partial
+  - goal: investigate and unblock Fight Caves object-archive props and richer model export inputs before any HUD/camera parity work resumes
   - dependency: DV4b
-  - note: now follows the landed DV4b cache-derived scene/UI slice and owns the remaining viewer-side readability/manual-play parity work
+  - note: investigation-complete but not sufficient as the main viewer path; item, NPC, object-definition, and default-player model export inputs now land in the native-owned bundle, but Fight Caves object-placement export is still blocked because no committed real XTEA source for regions `9551` and `9552` exists in this checkout and the resulting viewer presentation is still not acceptable
+- DV4c
+  - status: done
+  - goal: adopt the proven cache-derived terrain, NPC, and sprite viewer pipeline as the primary native presentation path
+  - dependency: ARCH-VIEW2
+  - note: completed with a validated `.dat2/.idx*` cache reader, cache-derived TERR/MDL2/PNG export, terrain from cache index `5`, floor defs from index `2`, NPC defs from index `18` plus models from index `7`, and viewer-relevant sprites from index `8`
+- DV4d
+  - status: next
+  - goal: finish the remaining upstream asset unblock work for object-archive props and richer render export categories after DV4c lands
+  - dependency: DV4c
+  - note: owns the missing object-archive/XTEA unblock plus richer item/player/NPC render export work and must not be folded into DV5
+- DV5
+  - status: upcoming
+  - goal: tighten native HUD, inventory, camera, and interaction presentation toward Fight Caves parity without changing backend gameplay truth
+  - dependency: DV4d
+  - note: remains HUD/inventory/camera/interaction parity work only and must not be used to paper over missing object-archive props, missing terrain/NPC/sprite export, or missing richer model-render exports
 - DV6
   - status: upcoming
   - goal: validate manual play, debugging workflow, and demo readiness on the shared-backend native viewer stack
@@ -149,6 +164,9 @@ This plan assumes the current pass has already cleaned the workspace and establi
 - DV1 must not absorb PR8a.3 learner optimization work.
 - ARCH1 must not absorb PR8a.3 learner optimization work, DV2 manual controls, or gameplay redesign.
 - DV4b must establish the native-owned export/parity slice and must not silently absorb DV5 HUD/camera parity work, TRAIN3 behavior work, or PR8b cutover work.
+- ARCH-VIEW2 is now investigation-only/partial and must not silently absorb DV4c scene-pipeline adoption, DV5 HUD/camera parity work, TRAIN3 behavior work, or PR8b cutover work.
+- DV4c must stay on adopting the proven terrain/NPC/sprite viewer pipeline and must not silently absorb DV4d object-archive/model unblock work, DV5 HUD/camera parity work, TRAIN3 behavior work, or PR8b cutover work.
+- DV4d must stay on object-archive/XTEA unblock and richer render-export work only and must not silently absorb DV5 HUD/camera parity work, TRAIN3 behavior work, or PR8b cutover work.
 - DV5 must stay on HUD, inventory, camera, and interaction parity using the exported native-owned assets and must not fall back to runtime reads from `reference/legacy-*`.
 - If an unblocker forces scope movement, record it explicitly in this file.
 
@@ -169,6 +187,9 @@ This plan assumes the current pass has already cleaned the workspace and establi
 - `docs/training_performance.md` is the active training-performance source of truth for current numbers, bottleneck interpretation, and history.
 - `docs/agent_performance.md` is reserved for future agent-side performance tracking and is not the active training-performance source of truth.
 - TRAIN3 and later behavior-focused training work are paused until the viewer-completion sequence reaches a minimum usable/readable/manual-debug bar.
+- DV4d is now the immediate viewer-side priority because DV4c has replaced the fake-scene path but the object-archive and richer render-export blockers are still unresolved.
+- DV4c is now complete and has replaced the fake-scene path with a cache-derived terrain/NPC/sprite viewer pipeline.
+- DV5 remains paused behind DV4d because HUD/camera/interaction work is not an acceptable substitute for missing object-archive props or missing richer item/player render export.
 
 ## Viewer-Track Priority
 
@@ -176,8 +197,59 @@ This plan assumes the current pass has already cleaned the workspace and establi
 - DV3 completed on the shared-backend path with replay controls and backend-driven inspector overlays.
 - DV4 is now complete only as an initial native-owned theme/presentation stub; it does not yet deliver acceptable Fight Caves scene parity.
 - ARCH-VIEW1 completed the missing investigation step and established that the real visual source is the RSPS client-plus-cache path, not the headed Kotlin wrapper and not the current hand-authored theme bundle.
-- DV4b is complete as the first real cache-derived scene-parity slice, and DV5 is now the next approved implementation step followed by DV6 before training/debugging passes resume.
+- DV4b is complete as the first real cache-derived scene-parity slice, but it also exposed that Fight Caves object archives and richer model renderables are still upstream export blockers.
+- ARCH-VIEW2 is now investigation-complete but no longer the main implementation path.
+- DV4c is now complete as the adopted terrain/NPC/sprite pipeline, and DV4d is now the next approved implementation step before DV5 and DV6.
 - Viewer asset/presentation work remains separate from PR8b and does not imply default-backend cutover.
+
+## ARCH-VIEW2 Progress Note
+
+- Completed in this pass:
+  - verified that `reference/legacy-headless-env/data/cache` is still the usable viewer cache input while `reference/legacy-rsps/data/cache` remains empty in this checkout,
+  - checked the local legacy/reference material for Fight Caves object-archive XTEAs and confirmed that no committed real key source for regions `9551` and `9552` exists in this checkout,
+  - extended the native-owned viewer export pipeline so the model side now exports real object-definition, item, NPC, and default-player render inputs into `runescape-rl/src/demo-env/assets/generated` instead of leaving them entirely implicit.
+- Still blocked:
+  - actual Fight Caves object-placement export remains blocked until real Fight Caves region XTEAs are provided to the offline export path,
+  - final raster item-icon export remains blocked until a committed offline item-icon renderer is added to the exporter path.
+- Intentionally not done:
+  - no DV5 HUD/camera/manual-play parity work,
+  - no TRAIN3 behavior work,
+  - no PR8b cutover work,
+  - no runtime dependency on `reference/legacy-*`.
+
+## DV4c Completion Note
+
+- Completed:
+  - adopted the validated `reference/legacy-headless-env/data/cache` `.dat2/.idx*` cache path as the primary viewer export source,
+  - exported a native-owned TERR bundle for Fight Caves regions `(37,79)`, `(37,80)`, `(38,80)`, and `(39,80)` using terrain from cache index `5` and floor definitions from cache index `2`,
+  - exported a native-owned MDL2 bundle for the core Fight Caves NPC set using NPC definitions from cache index `18` and model bytes from index `7`,
+  - exported the minimal viewer-relevant sprite subset from cache index `8`,
+  - integrated those TERR/MDL2/PNG bundles into the native Raylib viewer so the fake primitive scene is no longer the primary presentation path.
+- Intentionally not done:
+  - no object-archive prop placement that depends on missing Fight Caves XTEAs,
+  - no full item-icon rasterizer,
+  - no full player-model fidelity pass,
+  - no DV5 HUD/camera parity work,
+  - no TRAIN3 behavior work,
+  - no PR8b work.
+- Outcome:
+  - DV4c materially improves the viewer beyond the prior fake-scene result and clears the terrain/NPC/sprite pipeline adoption goal,
+  - DV4d remains required because object-archive props and richer item/player render export are still upstream blockers.
+
+## ARCH-VIEW2: Object Archive And Model Export Unblock
+
+- Goal:
+  - unblock the remaining upstream viewer asset/export blockers exposed by DV4b before DV5 begins.
+- Scope:
+  - validate or reject local XTEA inputs for Fight Caves object archives,
+  - wire real keys into the offline export path if they exist,
+  - otherwise record the exact missing dependency,
+  - export committed native-owned render-input bundles for Fight Caves props, items, NPCs, and the default player presentation path.
+- Non-goals:
+  - no HUD/camera polish,
+  - no viewer-owned gameplay logic,
+  - no runtime reads from `reference/legacy-*`,
+  - no training or performance work.
 
 ## Architecture-Performance Direction
 
@@ -1393,10 +1465,13 @@ Recommended order:
 20. DV4
 21. ARCH-VIEW1
 22. DV4b
-23. DV5
-24. DV6
-25. PR8b
+23. ARCH-VIEW2
+24. DV4c
+25. DV4d
+26. DV5
+27. DV6
+28. PR8b
 
-After ARCH1, the learner-performance track and the viewer track diverged cleanly. The narrow performance track remains paused after PR8a.5, ARCH-PERF2 has documented the broader architecture ceiling, DV4 is now understood as an initial presentation stub, ARCH-VIEW1 documented the real legacy render/asset source path, DV4b has now landed the first real cache-derived scene slice, DV5 is next, TRAIN3 is paused until the viewer-completion sequence clears the minimum usable/readable/manual-debug bar, and PR8b is still gated by an explicit architecture-performance decision rather than viewer work.
+After ARCH1, the learner-performance track and the viewer track diverged cleanly. The narrow performance track remains paused after PR8a.5, ARCH-PERF2 has documented the broader architecture ceiling, DV4 is now understood as an initial presentation stub, ARCH-VIEW1 documented the real legacy render/asset source path, ARCH-VIEW2 closed the investigation side of the remaining asset blockers, DV4c has now landed the adopted cache-derived terrain/NPC/sprite pipeline, DV4d is next, TRAIN3 is paused until the viewer-completion sequence clears the minimum usable/readable/manual-debug bar, and PR8b is still gated by an explicit architecture-performance decision rather than viewer work.
 
 Do not combine PR5 through PR8 into one migration batch. The highest-risk failure mode in this project is losing parity while changing runtime, outputs, trainer integration, and viewer behavior at the same time.

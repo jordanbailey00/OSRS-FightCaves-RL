@@ -3,6 +3,8 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "fight_caves_viewer_assets.generated.h"
+#include "fight_caves_viewer_models.h"
+#include "fight_caves_viewer_terrain.h"
 
 #include <inttypes.h>
 #include <math.h>
@@ -346,6 +348,36 @@ static const fc_viewer_sprite_asset* fc_find_hud_sprite_asset(const char* name) 
     return NULL;
 }
 
+static const fc_viewer_npc_visual_asset* fc_find_npc_visual_asset(int id_code) {
+    for (int index = 0; index < FC_VIEWER_NPC_VISUAL_COUNT; ++index) {
+        if (FC_VIEWER_NPC_VISUALS[index].id_code == id_code) {
+            return &FC_VIEWER_NPC_VISUALS[index];
+        }
+    }
+    return NULL;
+}
+
+static int fc_resolve_asset_path(
+    const char* argv0,
+    const char* filename,
+    char* out,
+    size_t out_size
+) {
+    if (filename == NULL || *filename == '\0' || out_size == 0) {
+        return 0;
+    }
+    fc_append_asset_path(argv0, filename, out, out_size);
+    if (FileExists(out)) {
+        return 1;
+    }
+    if (FileExists(filename)) {
+        snprintf(out, out_size, "%s", filename);
+        return 1;
+    }
+    out[0] = '\0';
+    return 0;
+}
+
 static int fc_load_texture_asset(
     const char* argv0,
     const char* filename,
@@ -651,6 +683,13 @@ static void fc_draw_prop_asset(const fc_viewer_prop_asset* prop, float time_seco
         DrawCubeV((Vector3){center.x + prop->size_x * 0.32f, prop->size_y * 0.45f, center.z}, (Vector3){prop->size_x * 0.22f, prop->size_y * 0.9f, prop->size_z}, FC_VIEWER_COLOR_BASALT_WALL);
         DrawCubeV((Vector3){center.x, prop->size_y * 0.82f, center.z}, (Vector3){prop->size_x, prop->size_y * 0.18f, prop->size_z * 0.9f}, FC_VIEWER_COLOR_BASALT_WALL_EDGE);
     }
+}
+
+static void fc_draw_cache_derived_terrain(const fc_viewer_terrain_mesh* terrain) {
+    if (terrain == NULL || !terrain->loaded) {
+        return;
+    }
+    DrawModel(terrain->model, (Vector3){0.0f, 0.0f, 0.0f}, 1.0f, WHITE);
 }
 
 static void fc_compute_scene_bounds(
@@ -1568,7 +1607,10 @@ static void fc_print_scene_json(
     printf("    \"asset_id\": \"%s\",\n", FC_VIEWER_ASSET_BUNDLE_ID);
     printf("    \"source_ref_count\": %d,\n", FC_VIEWER_ASSET_SOURCE_REF_COUNT);
     printf("    \"terrain_tile_count\": %d,\n", FC_VIEWER_TERRAIN_TILE_COUNT);
+    printf("    \"terrain_bundle_filename\": \"%s\",\n", FC_VIEWER_TERRAIN_FILENAME);
     printf("    \"hud_sprite_count\": %d,\n", FC_VIEWER_HUD_SPRITE_COUNT);
+    printf("    \"npc_model_bundle_filename\": \"%s\",\n", FC_VIEWER_NPC_MODEL_BUNDLE_FILENAME);
+    printf("    \"npc_visual_count\": %d,\n", FC_VIEWER_NPC_VISUAL_COUNT);
     printf("    \"blocked_category_count\": %d,\n", FC_VIEWER_BLOCKED_CATEGORY_COUNT);
     printf("    \"map_archive_accessible\": %d,\n", FC_VIEWER_MAP_ARCHIVE_ACCESSIBLE);
     printf("    \"object_archive_accessible\": %d\n", FC_VIEWER_OBJECT_ARCHIVE_ACCESSIBLE);
@@ -1596,9 +1638,18 @@ static void fc_print_scene_json(
     printf("}\n");
 }
 
-static void fc_draw_scene_rects(const fc_scene_rect* rects, int rect_count, float time_seconds) {
+static void fc_draw_scene_rects(
+    const fc_scene_rect* rects,
+    int rect_count,
+    float time_seconds,
+    const fc_viewer_terrain_mesh* terrain
+) {
     const fc_scene_rect* player_dais = fc_find_scene_rect(rects, rect_count, FC_NATIVE_SCENE_RECT_PLAYER_DAIS);
-    fc_draw_generated_scene_slice(time_seconds);
+    if (terrain != NULL && terrain->loaded) {
+        fc_draw_cache_derived_terrain(terrain);
+    } else {
+        fc_draw_generated_scene_slice(time_seconds);
+    }
     for (int index = 0; index < rect_count; ++index) {
         const fc_scene_rect* rect = &rects[index];
         if (rect->kind_code == FC_NATIVE_SCENE_RECT_ARENA_BOUNDS) {
@@ -1627,9 +1678,12 @@ static void fc_draw_snapshot_entities(
     const fc_runtime_slot_snapshot* snapshot,
     fc_hover_state hovered,
     int selected_npc_index,
-    fc_ground_hover_state hovered_ground
+    fc_ground_hover_state hovered_ground,
+    const fc_viewer_terrain_mesh* terrain,
+    const fc_viewer_model_bundle* npc_models
 ) {
-    Vector3 player_position = fc_world_position(snapshot->tile_x, snapshot->tile_y, 0.74f);
+    float player_ground = fc_viewer_terrain_height_avg(terrain, snapshot->tile_x, snapshot->tile_y);
+    Vector3 player_position = fc_world_position(snapshot->tile_x, snapshot->tile_y, player_ground + 0.74f);
     DrawCubeV((Vector3){player_position.x, player_position.y, player_position.z}, (Vector3){0.95f, 1.25f, 0.85f}, FC_VIEWER_COLOR_PLAYER_ACCENT);
     DrawCubeV((Vector3){player_position.x, player_position.y + 0.18f, player_position.z}, (Vector3){0.62f, 1.28f, 0.54f}, FC_VIEWER_COLOR_PLAYER_BASE);
     DrawSphere((Vector3){player_position.x, player_position.y + 0.92f, player_position.z}, 0.34f, FC_VIEWER_COLOR_PLAYER_BASE);
@@ -1641,8 +1695,11 @@ static void fc_draw_snapshot_entities(
 
     for (int index = 0; index < snapshot->visible_target_count; ++index) {
         const fc_visible_target* target = &snapshot->visible_targets[index];
+        const fc_viewer_npc_visual_asset* visual = fc_find_npc_visual_asset(target->id_code);
+        fc_viewer_model_entry* model_entry = NULL;
         Color color = fc_npc_color(target->id_code, target->jad_telegraph_state);
-        Vector3 npc_position = fc_world_position(target->tile_x, target->tile_y, target->id_code == 11 ? 1.55f : 0.72f);
+        float ground_height = fc_viewer_terrain_height_avg(terrain, target->tile_x, target->tile_y);
+        Vector3 npc_position = fc_world_position(target->tile_x, target->tile_y, ground_height + (target->id_code == 11 ? 1.55f : 0.72f));
         float scale = 1.0f;
         if (target->id_code == 11) {
             scale = 3.0f;
@@ -1653,29 +1710,60 @@ static void fc_draw_snapshot_entities(
         } else if (target->id_code == 3) {
             scale = 1.35f;
         }
-        DrawCubeV(npc_position, (Vector3){0.9f * scale, 1.1f * scale, 0.9f * scale}, Fade(color, target->currently_visible ? 0.94f : 0.38f));
-        DrawSphere((Vector3){npc_position.x, npc_position.y + 0.55f * scale, npc_position.z}, 0.28f * scale, fc_color_lerp(color, FC_VIEWER_COLOR_LAVA_HOT, 0.25f));
-        DrawCubeWiresV(npc_position, (Vector3){0.9f * scale, 1.1f * scale, 0.9f * scale}, Fade(BLACK, 0.82f));
-        if (target->id_code == 11) {
-            DrawCubeV((Vector3){npc_position.x - 0.95f, npc_position.y - 0.75f, npc_position.z + 0.35f}, (Vector3){0.45f, 1.25f, 0.45f}, color);
-            DrawCubeV((Vector3){npc_position.x + 0.95f, npc_position.y - 0.75f, npc_position.z - 0.35f}, (Vector3){0.45f, 1.25f, 0.45f}, color);
-            if (target->jad_telegraph_state > 0) {
-                fc_draw_ellipse_ring(npc_position.x, npc_position.z, 2.3f, 1.6f, 0.22f, Fade(FC_VIEWER_COLOR_NPC_JAD_TELEGRAPH, 0.96f));
+        if (visual != NULL && npc_models != NULL) {
+            model_entry = fc_viewer_model_bundle_get(npc_models, visual->model_id);
+        }
+        if (visual != NULL && model_entry != NULL) {
+            Vector3 draw_position = {
+                (float)target->tile_x + 0.5f,
+                ground_height + visual->draw_y_offset,
+                -((float)target->tile_y + 0.5f),
+            };
+            float draw_scale = visual->draw_scale > 0.0f ? visual->draw_scale : 1.0f;
+            DrawModelEx(
+                model_entry->model,
+                draw_position,
+                (Vector3){0.0f, 1.0f, 0.0f},
+                0.0f,
+                (Vector3){draw_scale, draw_scale, draw_scale},
+                Fade(WHITE, target->currently_visible ? 0.96f : 0.40f)
+            );
+        } else {
+            DrawCubeV(npc_position, (Vector3){0.9f * scale, 1.1f * scale, 0.9f * scale}, Fade(color, target->currently_visible ? 0.94f : 0.38f));
+            DrawSphere((Vector3){npc_position.x, npc_position.y + 0.55f * scale, npc_position.z}, 0.28f * scale, fc_color_lerp(color, FC_VIEWER_COLOR_LAVA_HOT, 0.25f));
+            DrawCubeWiresV(npc_position, (Vector3){0.9f * scale, 1.1f * scale, 0.9f * scale}, Fade(BLACK, 0.82f));
+            if (target->id_code == 11) {
+                DrawCubeV((Vector3){npc_position.x - 0.95f, npc_position.y - 0.75f, npc_position.z + 0.35f}, (Vector3){0.45f, 1.25f, 0.45f}, color);
+                DrawCubeV((Vector3){npc_position.x + 0.95f, npc_position.y - 0.75f, npc_position.z - 0.35f}, (Vector3){0.45f, 1.25f, 0.45f}, color);
             }
         }
+        if (target->id_code == 11 && target->jad_telegraph_state > 0) {
+            fc_draw_ellipse_ring(
+                (float)target->tile_x + 0.5f,
+                -((float)target->tile_y + 0.5f),
+                2.3f,
+                1.6f,
+                ground_height + 0.22f,
+                Fade(FC_VIEWER_COLOR_NPC_JAD_TELEGRAPH, 0.96f)
+            );
+        }
         if (target->under_attack) {
-            fc_draw_ellipse_ring(npc_position.x, npc_position.z, 0.95f * scale, 0.75f * scale, 0.18f, GOLD);
+            fc_draw_ellipse_ring((float)target->tile_x + 0.5f, -((float)target->tile_y + 0.5f), 0.95f * scale, 0.75f * scale, ground_height + 0.18f, GOLD);
         }
         if (hovered.kind == FC_HOVER_NPC && hovered.visible_index == index) {
-            fc_draw_ellipse_ring(npc_position.x, npc_position.z, 1.18f * scale, 0.98f * scale, 0.2f, FC_VIEWER_COLOR_HOVER);
+            fc_draw_ellipse_ring((float)target->tile_x + 0.5f, -((float)target->tile_y + 0.5f), 1.18f * scale, 0.98f * scale, ground_height + 0.2f, FC_VIEWER_COLOR_HOVER);
         }
         if (selected_npc_index >= 0 && target->npc_index == selected_npc_index) {
-            fc_draw_ellipse_ring(npc_position.x, npc_position.z, 1.42f * scale, 1.14f * scale, 0.22f, FC_VIEWER_COLOR_SELECTION);
+            fc_draw_ellipse_ring((float)target->tile_x + 0.5f, -((float)target->tile_y + 0.5f), 1.42f * scale, 1.14f * scale, ground_height + 0.22f, FC_VIEWER_COLOR_SELECTION);
         }
     }
 
     if (hovered_ground.valid) {
-        Vector3 tile_position = fc_world_position(hovered_ground.tile_x, hovered_ground.tile_y, 0.02f);
+        Vector3 tile_position = fc_world_position(
+            hovered_ground.tile_x,
+            hovered_ground.tile_y,
+            fc_viewer_terrain_height_avg(terrain, hovered_ground.tile_x, hovered_ground.tile_y) + 0.02f
+        );
         DrawCubeWiresV(tile_position, (Vector3){1.0f, 0.05f, 1.0f}, FC_VIEWER_COLOR_HOVER);
     }
 }
@@ -2228,6 +2316,8 @@ int main(int argc, char** argv) {
     fc_viewer_replay replay;
     fc_hud_layout hud_layout;
     fc_viewer_hud_textures hud_textures;
+    fc_viewer_terrain_mesh* terrain_asset = NULL;
+    fc_viewer_model_bundle* npc_model_bundle = NULL;
     Texture2D header_texture = {0};
     int header_texture_loaded = 0;
     const fc_scene_rect* scene_rects;
@@ -2307,6 +2397,16 @@ int main(int argc, char** argv) {
         }
     }
     fc_load_generated_hud_textures(argv[0], &hud_textures);
+    {
+        char terrain_path[FC_VIEWER_ASSET_PATH_SIZE];
+        char npc_model_path[FC_VIEWER_ASSET_PATH_SIZE];
+        if (fc_resolve_asset_path(argv[0], FC_VIEWER_TERRAIN_FILENAME, terrain_path, sizeof(terrain_path))) {
+            terrain_asset = fc_viewer_terrain_load(terrain_path);
+        }
+        if (fc_resolve_asset_path(argv[0], FC_VIEWER_NPC_MODEL_BUNDLE_FILENAME, npc_model_path, sizeof(npc_model_path))) {
+            npc_model_bundle = fc_viewer_model_bundle_load(npc_model_path);
+        }
+    }
 
     {
         float base_focus_x = 0.0f;
@@ -2513,8 +2613,8 @@ int main(int argc, char** argv) {
             ClearBackground(FC_VIEWER_COLOR_LAVA_BASE);
 
             BeginMode3D(camera);
-            fc_draw_scene_rects(scene_rects, scene_rect_count, (float)GetTime());
-            fc_draw_snapshot_entities(&snapshot, hovered, selected_npc_index, hovered_ground);
+            fc_draw_scene_rects(scene_rects, scene_rect_count, (float)GetTime(), terrain_asset);
+            fc_draw_snapshot_entities(&snapshot, hovered, selected_npc_index, hovered_ground, terrain_asset, npc_model_bundle);
             EndMode3D();
             fc_draw_entity_inspector_overlays(&camera, &snapshot, selected_npc_index, inspector_overlays_enabled);
 
@@ -2540,6 +2640,8 @@ int main(int argc, char** argv) {
     if (header_texture_loaded) {
         UnloadTexture(header_texture);
     }
+    fc_viewer_model_bundle_free(npc_model_bundle);
+    fc_viewer_terrain_free(terrain_asset);
     fc_unload_generated_hud_textures(&hud_textures);
     CloseWindow();
     fc_clear_replay(&replay);

@@ -74,12 +74,29 @@
 - DV4b also exposed the remaining explicit viewer-parity blockers:
   - Fight Caves object archives `l37_79` and `l37_80` are not readable from the validated cache input without region XTEAs,
   - richer item-icon and player/NPC model renderables are still blocked by the absence of a committed offline model-render export path in this checkout.
-- The viewer has now moved off the approximate hand-authored theme path and onto a legacy-asset-derived native presentation path owned under `runescape-rl/src/demo-env`.
-- The next approved implementation step is DV5: Native HUD / Inventory / Camera / Interaction Parity.
-- TRAIN3 and later behavior-focused training/debugging passes remain paused until the viewer clears the full minimum usable/readable/manual-debug bar through DV5 to DV6.
+- ARCH-VIEW2 is investigation-complete but not sufficient as the main implementation path:
+  - the offline export path now emits native-owned object-definition bundles plus item, NPC, and default-player model/render inputs under `runescape-rl/src/demo-env/assets/generated/models`,
+  - the local XTEA fixtures present in `reference/legacy-rsps/tools/src/test/resources/xteas` are only test samples and do not contain Fight Caves regions `9551` and `9552`,
+  - real Fight Caves object-placement export therefore remains blocked on an external XTEA source,
+  - final raster item icons are still not exported in this checkout even though the item model/render recipes are now committed.
+- The pre-DV4c viewer result from DV4 and DV4b was still not acceptable as a Fight Caves visual/demo/debug surface:
+  - DV4 delivered only a native-authored theme stub,
+  - DV4b proved that the cache-derived path works,
+  - but the resulting viewer still does not yet read closely enough like the real Fight Caves client path.
+- DV4c is complete:
+  - the viewer now uses a real `.dat2/.idx*` cache-reader-based export path against `reference/legacy-headless-env/data/cache`,
+  - the native-owned bundle now includes terrain exported from cache index `5` across Fight Caves regions `(37,79)`, `(37,80)`, `(38,80)`, and `(39,80)`,
+  - floor definitions now come from cache index `2`, core Fight Caves NPC definitions come from cache index `18` with model bytes from index `7`, and the viewer HUD sprite subset comes from cache index `8`,
+  - the native viewer now loads TERR, MDL2, and PNG outputs from native-owned generated bundles instead of relying on fake primitive scene dressing as the primary presentation path.
+- DV4c materially improves the viewer beyond the old fake-scene result, but it does not yet finish scene parity:
+  - real terrain, NPC model data, and cache-derived sprite assets are now in place,
+  - Fight Caves object-archive props still remain blocked on missing XTEAs for regions `9551` and `9552`,
+  - richer item/player render export is still incomplete.
+- The next approved implementation step is DV4d: Object-Archive/XTEA Unblock And Richer Render Export.
+- TRAIN3 and later behavior-focused training/debugging passes remain paused until the viewer asset/export pipeline is sufficiently unblocked for DV5 through DV6.
 - The next unresolved training-side problem remains agent behavior, but it is not the immediate implementation priority. After the viewer-completion sequence, the next training problem is still reset-step sequencing (`wait` before attack) rather than raw throughput.
 - Throughput remains an architecture-level issue only in the context of PR8b and the explicit `250,000` SPS target. Any future attempt to chase that gate should still be treated as a broader architecture redesign question, not another narrow optimization pass.
-- Viewer asset and presentation polish are no longer deferred. A generated native-owned asset slice now exists under `runescape-rl/src/demo-env/assets/generated`, DV4b has lifted the viewer onto a real cache-derived Fight Caves terrain and HUD path, and DV5 to DV6 now own the remaining viewer-completion work before more training/debugging passes resume.
+- Viewer asset and presentation polish are no longer deferred. The main implementation path now runs through DV4d before DV5 to DV6 resume the viewer-completion sequence.
 - The native rewrite boundary remains unchanged: the native runtime will eventually own the headless hot path, while `reference/legacy-headless-env` and `reference/legacy-rsps` stay as oracle/reference validation infrastructure.
 - The active ownership model now includes the native debug/playable viewer-demo harness alongside the native headless training environment and RL/PufferLib connectivity and training code.
 

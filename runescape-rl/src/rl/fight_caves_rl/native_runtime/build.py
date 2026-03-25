@@ -15,7 +15,10 @@ from fight_caves_rl.native_runtime.viewer_assets import (
     ensure_native_viewer_asset_bundle,
     generated_viewer_bundle_path,
     generated_viewer_manifest_path,
+    generated_viewer_npc_models_bundle_path,
+    generated_viewer_models_root,
     generated_viewer_sprites_root,
+    generated_viewer_terrain_bundle_path,
     load_native_viewer_asset_bundle,
 )
 from fight_caves_rl.utils.paths import repo_root, source_root, workspace_root
@@ -181,7 +184,10 @@ def build_native_debug_viewer(config: NativeViewerBuildConfig | None = None) -> 
     copied_header_asset = output_dir / viewer_header_image_path().name
     copied_bundle_asset = output_dir / generated_viewer_bundle_path().name
     copied_bundle_manifest = output_dir / generated_viewer_manifest_path().name
+    copied_terrain_bundle = output_dir / generated_viewer_terrain_bundle_path().name
+    copied_npc_models_bundle = output_dir / generated_viewer_npc_models_bundle_path().name
     copied_sprites_root = output_dir / "sprites"
+    copied_models_root = output_dir / "models"
     runtime_library_path = build_native_runtime(
         NativeRuntimeBuildConfig(output_dir=output_dir, force_rebuild=build_config.force_rebuild)
     )
@@ -221,9 +227,14 @@ def build_native_debug_viewer(config: NativeViewerBuildConfig | None = None) -> 
     shutil.copy2(header_image, copied_header_asset)
     shutil.copy2(generated_viewer_bundle_path(), copied_bundle_asset)
     shutil.copy2(generated_viewer_manifest_path(), copied_bundle_manifest)
+    shutil.copy2(generated_viewer_terrain_bundle_path(), copied_terrain_bundle)
+    shutil.copy2(generated_viewer_npc_models_bundle_path(), copied_npc_models_bundle)
     if copied_sprites_root.exists():
         shutil.rmtree(copied_sprites_root)
     shutil.copytree(generated_viewer_sprites_root(), copied_sprites_root)
+    if copied_models_root.exists():
+        shutil.rmtree(copied_models_root)
+    shutil.copytree(generated_viewer_models_root(), copied_models_root)
     if not sys.platform.startswith("linux"):
         raise RuntimeError(
             f"DV1 native viewer build is currently implemented for Linux only, got {sys.platform!r}."
@@ -276,7 +287,10 @@ def build_native_debug_viewer(config: NativeViewerBuildConfig | None = None) -> 
                 "copied_header_asset": str(copied_header_asset),
                 "copied_bundle_asset": str(copied_bundle_asset),
                 "copied_bundle_manifest": str(copied_bundle_manifest),
+                "copied_terrain_bundle": str(copied_terrain_bundle),
+                "copied_npc_models_bundle": str(copied_npc_models_bundle),
                 "copied_sprites_root": str(copied_sprites_root),
+                "copied_models_root": str(copied_models_root),
             },
             indent=2,
             sort_keys=True,
@@ -310,11 +324,21 @@ def _viewer_build_fingerprint(*, runtime_library_path: Path) -> str:
     hasher = hashlib.sha256()
     hasher.update((training_source_root() / "include" / "fight_caves_native_runtime.h").read_bytes())
     hasher.update((demo_source_root() / "src" / "fight_caves_native_viewer.c").read_bytes())
+    for helper_path in (
+        demo_source_root() / "src" / "fight_caves_viewer_models.h",
+        demo_source_root() / "src" / "fight_caves_viewer_terrain.h",
+    ):
+        if helper_path.is_file():
+            hasher.update(helper_path.read_bytes())
     hasher.update((repo_root() / "fight_caves_rl" / "native_runtime" / "viewer_assets.py").read_bytes())
     hasher.update(generated_viewer_bundle_path().read_bytes())
     hasher.update(generated_viewer_manifest_path().read_bytes())
+    hasher.update(generated_viewer_terrain_bundle_path().read_bytes())
+    hasher.update(generated_viewer_npc_models_bundle_path().read_bytes())
     for sprite_path in sorted(generated_viewer_sprites_root().glob("*.png")):
         hasher.update(sprite_path.read_bytes())
+    for model_path in sorted(generated_viewer_models_root().glob("*.bin")):
+        hasher.update(model_path.read_bytes())
     hasher.update(viewer_header_image_path().read_bytes())
     hasher.update(runtime_library_path.read_bytes())
     raylib_archive = raylib_sdk_root() / "lib" / "libraylib.a"
@@ -328,6 +352,24 @@ def _render_generated_viewer_assets_header(viewer_bundle: dict[str, object]) -> 
     hud_sprites = viewer_bundle.get("hud_sprite_files", {})
     blocked_categories = viewer_bundle.get("blocked_categories", [])
     cache_validation = viewer_bundle.get("cache_validation", {})
+    npc_model_bundle = viewer_bundle.get("npc_model_bundle", {})
+    terrain_bundle_filename = str(viewer_bundle["terrain"].get("terrain_bundle_filename", ""))
+
+    npc_scale_overrides = {
+        "tz_kih": 0.82,
+        "tz_kih_spawn_point": 0.82,
+        "tz_kek": 1.05,
+        "tz_kek_spawn_point": 1.05,
+        "tz_kek_spawn": 0.88,
+        "tok_xil": 1.18,
+        "tok_xil_spawn_point": 1.18,
+        "yt_mej_kot": 1.52,
+        "yt_mej_kot_spawn_point": 1.52,
+        "ket_zek": 1.96,
+        "ket_zek_spawn_point": 1.96,
+        "tztok_jad": 3.75,
+        "yt_hur_kot": 0.94,
+    }
 
     def color_literal(name: str) -> str:
         values = colors[name]
@@ -392,6 +434,25 @@ def _render_generated_viewer_assets_header(viewer_bundle: dict[str, object]) -> 
         for name, filename in sorted(hud_sprites.items())
     )
     blocked_lines = ",\n    ".join(json.dumps(str(value)) for value in blocked_categories)
+    npc_visual_lines = []
+    for entry in npc_model_bundle.get("npcs", []):
+        label = str(entry.get("label", ""))
+        if label not in POLICY_NPC_ID_TO_INDEX:
+            continue
+        width_scale = float(entry.get("width_scale", 128))
+        height_scale = float(entry.get("height_scale", 128))
+        draw_scale = npc_scale_overrides.get(label, 1.0) * ((width_scale + height_scale) * 0.5 / 128.0)
+        npc_visual_lines.append(
+            "{"
+            f"{POLICY_NPC_ID_TO_INDEX[label]}, "
+            f"{int(entry.get('npc_id', -1))}, "
+            f"{int(entry.get('model_id', 0))}u, "
+            f"{draw_scale:.6f}f, "
+            "0.0f, "
+            f"{json.dumps(label)}"
+            "}"
+        )
+    npc_visual_text = ",\n    ".join(npc_visual_lines)
 
     return (
         "#ifndef FIGHT_CAVES_VIEWER_ASSETS_GENERATED_H\n"
@@ -424,6 +485,14 @@ def _render_generated_viewer_assets_header(viewer_bundle: dict[str, object]) -> 
         "    const char* name;\n"
         "    const char* filename;\n"
         "} fc_viewer_sprite_asset;\n\n"
+        "typedef struct fc_viewer_npc_visual_asset {\n"
+        "    int id_code;\n"
+        "    int npc_id;\n"
+        "    unsigned int model_id;\n"
+        "    float draw_scale;\n"
+        "    float draw_y_offset;\n"
+        "    const char* label;\n"
+        "} fc_viewer_npc_visual_asset;\n\n"
         "enum {\n"
         "    FC_VIEWER_TILE_VOID = 0,\n"
         "    FC_VIEWER_TILE_FLOOR = 1,\n"
@@ -454,6 +523,10 @@ def _render_generated_viewer_assets_header(viewer_bundle: dict[str, object]) -> 
         f"static const char* FC_VIEWER_HEADER_IMAGE_FILENAME = {json.dumps(viewer_header_image_path().name)};\n"
         f"static const char* FC_VIEWER_BUNDLE_FILENAME = {json.dumps(generated_viewer_bundle_path().name)};\n"
         f"static const char* FC_VIEWER_BUNDLE_MANIFEST_FILENAME = {json.dumps(generated_viewer_manifest_path().name)};\n\n"
+        f"static const char* FC_VIEWER_TERRAIN_FILENAME = {json.dumps(terrain_bundle_filename)};\n"
+        f"static const char* FC_VIEWER_NPC_MODEL_BUNDLE_FILENAME = {json.dumps(str(npc_model_bundle.get('filename', '')))};\n"
+        f"static const fc_viewer_npc_visual_asset FC_VIEWER_NPC_VISUALS[{max(1, len(npc_visual_lines))}] = {{\n    {npc_visual_text if npc_visual_text else '{-1, -1, 0u, 1.0f, 0.0f, \"\"}'}\n}};\n"
+        f"static const int FC_VIEWER_NPC_VISUAL_COUNT = {len(npc_visual_lines)};\n\n"
         "#endif\n"
     )
 

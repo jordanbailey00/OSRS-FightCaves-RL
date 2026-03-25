@@ -27,7 +27,10 @@ def test_native_debug_viewer_builds_and_exports_generic_scene_json(tmp_path: Pat
     assert (build_dir / "fight_caves_header.png").is_file()
     assert (build_dir / "fight_caves_scene_slice_v1.json").is_file()
     assert (build_dir / "fight_caves_export_manifest_v1.json").is_file()
+    assert (build_dir / "fight_caves_terrain_slice_v1.terr").is_file()
+    assert (build_dir / "fight_caves_npc_models_v1.mdl2").is_file()
     assert (build_dir / "sprites" / "pray_magic_127_0.png").is_file()
+    assert (build_dir / "models").is_dir()
 
     result = subprocess.run(
         [
@@ -50,13 +53,41 @@ def test_native_debug_viewer_builds_and_exports_generic_scene_json(tmp_path: Pat
     assert payload["scene"]["rect_count"] >= 6
     assert payload["assets"]["asset_id"] == "fight_caves_scene_slice_v1"
     assert payload["assets"]["terrain_tile_count"] >= 5000
+    assert payload["assets"]["terrain_bundle_filename"] == "fight_caves_terrain_slice_v1.terr"
     assert payload["assets"]["hud_sprite_count"] >= 20
+    assert payload["assets"]["npc_model_bundle_filename"] == "fight_caves_npc_models_v1.mdl2"
+    assert payload["assets"]["npc_visual_count"] >= 7
     assert payload["assets"]["map_archive_accessible"] == 1
     assert payload["assets"]["object_archive_accessible"] == 0
     assert payload["snapshot"]["wave"] == 63
     assert payload["snapshot"]["player"]["hitpoints_current"] == 700
     assert payload["snapshot"]["inventory"]["ammo"] == 1000
     assert payload["viewer"]["last_action"]["present"] == 0
+
+    bundle = json.loads((build_dir / "fight_caves_scene_slice_v1.json").read_text(encoding="utf-8"))
+    assert bundle["cache_validation"]["preferred_input"] == "reference/legacy-headless-env/data/cache"
+    assert bundle["cache_validation"]["required_object_archive_regions"] == [9551, 9552]
+    assert bundle["terrain"]["terrain_bundle_filename"] == "fight_caves_terrain_slice_v1.terr"
+    assert bundle["terrain"]["region_count"] == 4
+    assert bundle["terrain"]["regions"] == ["37_79", "37_80", "38_80", "39_80"]
+    assert bundle["terrain"]["tile_count"] == 16384
+    assert bundle["npc_model_bundle"]["filename"] == "fight_caves_npc_models_v1.mdl2"
+    assert bundle["npc_model_bundle"]["count"] >= 7
+    assert len(bundle["sprites"]) >= 20
+    assert bundle["render_export_status"]["object_archive_props"]["status"] == "blocked"
+    assert bundle["render_export_status"]["terrain_bundle"]["status"] == "exported"
+    assert bundle["render_export_status"]["terrain_bundle"]["region_count"] == 4
+    assert bundle["render_export_status"]["sprite_bundle"]["status"] == "exported"
+    assert bundle["render_export_status"]["sprite_bundle"]["sprite_count"] >= 20
+    assert bundle["render_export_status"]["npc_model_bundle"]["status"] == "exported"
+    assert bundle["render_export_status"]["npc_model_bundle"]["exported_model_count"] >= 7
+    assert bundle["render_export_status"]["item_render_inputs"]["status"] == "exported"
+    assert bundle["render_export_status"]["npc_render_inputs"]["status"] == "exported"
+    assert bundle["render_export_status"]["player_render_inputs"]["status"] == "exported"
+    assert bundle["render_export_status"]["item_icon_rasterization"]["status"] == "blocked"
+    assert bundle["render_export_status"]["item_render_inputs"]["exported_model_file_count"] > 0
+    assert bundle["render_export_status"]["npc_render_inputs"]["exported_model_file_count"] > 0
+    assert bundle["render_export_status"]["player_render_inputs"]["exported_model_file_count"] > 0
 
 
 def test_native_debug_viewer_can_export_trace_replay_scene_json(tmp_path: Path):
