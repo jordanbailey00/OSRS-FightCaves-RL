@@ -407,13 +407,19 @@ Both scripts require the OSRS cache at `runescape-rl/reference/legacy-headless-e
 
 ---
 
-#### PR 9a.1: Stabilization / Correctness Pass — IN PROGRESS
+#### PR 9a.1: Terrain coordinate fix (done, terrain aligned)
 
-**Problem found**: Terrain exported at 192x128 tiles (full 4-region OSRS area) but fc_core arena is 64x64 tiles. Terrain mesh was 3x too wide and not aligned with entity positions. Entities rendered at (0-63, 0, 0-63) but terrain spanned (0-191, height, 0-127).
+Terrain export cropped from 192x128 to 64x64 matching fc_core arena.
 
-**Root cause**: Coordinate system mismatch in `export_fc_terrain.py`. The exporter cropped at `wx < -5 or wx > 200` (full region bounds) instead of `wx < 0 or wx >= 63` (fc_core arena bounds).
+---
 
-**Fix**: Re-exported terrain cropped to 64x64 matching fc_core arena. New terrain: 23,814 vertices (down from 95,256), X=[0,63] Z=[0,63].
+#### PR 9a.2: Viewer Recovery / Asset-Backed Mode Restoration — IN PROGRESS
+
+**Problem**: Viewer has a dual-render-path architecture bug. 3D mode (`use_3d_models=true`) uses NPC models and terrain mesh, but 2D mode falls back to colored primitives (checkerboard, blue circles, orange rects) with zero asset integration. When the user sees the 2D view, it looks like a complete regression. The 2D fallback should not exist as a separate un-asset-backed path.
+
+**Root cause**: The render loop has `if (use_3d_models && model_cache) { draw_3d(); } else { draw_2d_primitives(); }`. The 2D path was never updated to use exported assets. The viewer defaults to 3D mode but the user may not be in 3D mode, or the condition may fail silently.
+
+**Fix**: Eliminate the dual path. Make ONE render path that always uses the 3D camera + exported terrain + NPC models when assets are loaded. Add explicit on-screen diagnostic banner when assets fail to load. Add startup diagnostics (CWD, asset paths, load status).
 
 **Delivered so far (PR9a total)**:
 - `demo-env/scripts/export_fc_terrain.py`: Terrain exporter with VoidPS floor definition opcode handling. Now correctly cropped to fc_core 64x64 arena.

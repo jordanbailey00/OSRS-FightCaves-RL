@@ -362,7 +362,7 @@ These will be maintained in `docs/training_performance.md` and `docs/agent_perfo
 - Full episode: reset → 63 waves of combat → Jad + healers → cave complete or player death. Deterministic given (seed, action_sequence).
 - 57 test assertions passing (560 total). PR6 golden trace: seed 66666, hash `0x7c0d19cd`.
 
-**PR 9a — In progress (stabilization pass).** Terrain export coordinate mismatch found and fixed (was exporting 192x128 tile area, now cropped to 64x64 matching fc_core arena). Tabbed UI with clickable prayers/inventory implemented but needs verification pass. Player model still placeholder (blue cylinder). Item sprites still placeholder (colored rectangles). Training remains blocked.
+**PR 9a — In progress (recovery pass needed).** PR9a.1 fixed terrain coordinate mismatch but the viewer has a dual-render-path bug: 3D mode uses exported models but 2D mode falls back to colored primitives with zero asset integration. The viewer must have ONE integrated render path that always uses assets. Player model still placeholder. Item sprites still placeholder. Training remains blocked.
 
 **PR 8 — Foundation complete, parity NOT yet complete (PR8a+PR8b+PR8c).**
 - **PR8a**: Identified all FC asset sources. Found OSRS binary cache at `reference/legacy-headless-env/data/cache/`. Decoded VoidPS NPC definitions to extract model IDs.

@@ -148,9 +148,8 @@ typedef struct {
 
     int paused, step_once, ticks_per_sec;
     float tick_accumulator;
-    int show_debug, use_3d_models;
+    int show_debug;
 
-    Camera2D camera2d;
     Camera3D camera3d;
     float cam_yaw, cam_pitch, cam_dist;
 
@@ -196,33 +195,10 @@ static Vector2 tile_scr(int tx, int ty) {
 }
 
 /* ======================================================================== */
-/* Draw arena (2D procedural)                                                */
+/* Draw 3D scene (terrain + entities) — single render path                   */
 /* ======================================================================== */
 
-static void draw_arena(ViewerState* v) {
-    for (int x = 0; x < FC_ARENA_WIDTH; x++) {
-        for (int y = 0; y < FC_ARENA_HEIGHT; y++) {
-            Vector2 sp = tile_scr(x, y);
-            if (v->state.walkable[x][y]) {
-                DrawRectangle((int)sp.x,(int)sp.y,TILE_SIZE,TILE_SIZE,((x+y)%2==0)?COL_FLOOR_1:COL_FLOOR_2);
-            } else {
-                int adj=0;
-                for (int dx=-1;dx<=1;dx++) for (int dy=-1;dy<=1;dy++) {
-                    int nx=x+dx,ny=y+dy;
-                    if (nx>=0&&nx<FC_ARENA_WIDTH&&ny>=0&&ny<FC_ARENA_HEIGHT&&v->state.walkable[nx][ny]) adj=1;
-                }
-                if (adj) DrawRectangle((int)sp.x,(int)sp.y,TILE_SIZE,TILE_SIZE,((x+y+(v->state.tick/3))%3==0)?COL_LAVA_LIGHT:COL_LAVA);
-                else DrawRectangle((int)sp.x,(int)sp.y,TILE_SIZE,TILE_SIZE,((x+y)%2==0)?COL_ROCK:COL_ROCK_EDGE);
-            }
-        }
-    }
-}
-
-/* ======================================================================== */
-/* Draw 3D NPC models                                                        */
-/* ======================================================================== */
-
-static void draw_entities_3d(ViewerState* v) {
+static void draw_scene(ViewerState* v) {
     /* Set up 3D camera looking at the arena */
     float cx = (float)(FC_ARENA_WIDTH / 2);
     float cy = (float)(FC_ARENA_HEIGHT / 2);
@@ -305,65 +281,7 @@ static void draw_entities_3d(ViewerState* v) {
     EndMode3D();
 }
 
-/* ======================================================================== */
-/* Draw 2D entities (fallback)                                               */
-/* ======================================================================== */
-
-static void draw_entities_2d(ViewerState* v) {
-    for (int i = 0; i < v->entity_count; i++) {
-        FcRenderEntity* e = &v->entities[i];
-        Vector2 sp = tile_scr(e->x, e->y);
-        int sz = TILE_SIZE * e->size;
-        if (e->size > 1) sp.y -= TILE_SIZE * (e->size - 1);
-
-        if (e->entity_type == ENTITY_PLAYER) {
-            int cx = (int)sp.x + sz/2, cy = (int)sp.y + sz/2;
-            DrawCircle(cx, cy, (float)(sz/2-1), COL_PLAYER);
-            DrawCircleLines(cx, cy, (float)(sz/2-1), WHITE);
-
-            /* Prayer icon sprite overhead */
-            Texture2D* tex = NULL;
-            if (e->prayer == PRAYER_PROTECT_MELEE && v->pray_melee_tex.id) tex = &v->pray_melee_tex;
-            else if (e->prayer == PRAYER_PROTECT_RANGE && v->pray_range_tex.id) tex = &v->pray_range_tex;
-            else if (e->prayer == PRAYER_PROTECT_MAGIC && v->pray_magic_tex.id) tex = &v->pray_magic_tex;
-
-            if (tex) {
-                int iw = tex->width, ih = tex->height;
-                DrawTexture(*tex, cx - iw/2, cy - sz/2 - ih - 2, WHITE);
-            } else {
-                const char* pn = NULL; Color pc = COL_TEXT_CYAN;
-                if (e->prayer == PRAYER_PROTECT_MELEE) { pn="Melee"; pc=COL_TEXT_RED; }
-                else if (e->prayer == PRAYER_PROTECT_RANGE) { pn="Range"; pc=COL_TEXT_GREEN; }
-                else if (e->prayer == PRAYER_PROTECT_MAGIC) { pn="Mage"; pc=COL_TEXT_CYAN; }
-                if (pn) { int tw=MeasureText(pn,10); text_s(pn,cx-tw/2,cy-sz/2-14,10,pc); }
-            }
-        } else {
-            Color c = npc_color(e->npc_type);
-            if (e->is_dead) c.a = 60;
-            DrawRectangleRounded((Rectangle){sp.x+1,sp.y+1,sz-2,sz-2}, 0.3f, 4, c);
-
-            if (!e->is_dead) {
-                const char* name = npc_name(e->npc_type);
-                int tw = MeasureText(name, 10);
-                text_s(name, (int)sp.x+sz/2-tw/2, (int)sp.y-26, 10, COL_TEXT_YELLOW);
-            }
-
-            if (e->jad_telegraph == JAD_TELEGRAPH_MAGIC_WINDUP)
-                text_s("MAGE!", (int)sp.x+sz/2-16, (int)sp.y-14, 12, COL_TEXT_CYAN);
-            else if (e->jad_telegraph == JAD_TELEGRAPH_RANGED_WINDUP)
-                text_s("RANGE!", (int)sp.x+sz/2-18, (int)sp.y-14, 12, COL_TEXT_GREEN);
-        }
-
-        /* HP bar */
-        if (e->max_hp > 0 && !e->is_dead) {
-            int bw = sz+4, bh = 5, bx = (int)sp.x-2, by = (int)sp.y-8;
-            float f = (float)e->current_hp / (float)e->max_hp;
-            DrawRectangle(bx,by,bw,bh,COL_HP_RED);
-            DrawRectangle(bx,by,(int)(bw*f),bh,COL_HP_GREEN);
-            DrawRectangleLines(bx,by,bw,bh,COL_GUI_BORDER);
-        }
-    }
-}
+/* (2D fallback removed — single 3D render path only) */
 
 /* ======================================================================== */
 /* Hit splats                                                                */
@@ -621,7 +539,7 @@ static void draw_panel(ViewerState* v) {
 
     /* Status bar at bottom */
     snprintf(buf,128,"%s %dtps Tick:%d %s",v->paused?"PAUSED":"RUN",v->ticks_per_sec,v->state.tick,
-             v->use_3d_models?"[3D]":"[2D]");
+             "[3D]");
     text_s(buf,x,WINDOW_H-22,10,v->paused?COL_TEXT_RED:COL_TEXT_GREEN);
 }
 
@@ -695,6 +613,10 @@ static void reset_episode(ViewerState* v) {
 /* ======================================================================== */
 
 int main(void) {
+    /* Startup diagnostics */
+    fprintf(stderr, "=== Fight Caves Viewer Startup ===\n");
+    fprintf(stderr, "CWD: %s\n", GetWorkingDirectory());
+
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(WINDOW_W, WINDOW_H, "Fight Caves RL — Viewer");
     SetTargetFPS(60);
@@ -704,15 +626,8 @@ int main(void) {
     fc_init(&v.state);
     v.paused = 1;
     v.ticks_per_sec = 5;
-    v.use_3d_models = 1;
 
-    /* Camera2D (for 2D mode) */
-    v.camera2d.offset = (Vector2){(float)(FC_ARENA_WIDTH*TILE_SIZE)/2.0f,
-                                   (float)(HEADER_HEIGHT+FC_ARENA_HEIGHT*TILE_SIZE/2.0f)};
-    v.camera2d.target = v.camera2d.offset;
-    v.camera2d.zoom = 1.0f;
-
-    /* Camera3D */
+    /* Camera3D (single render path — no 2D fallback) */
     v.cam_yaw = 0.0f;
     v.cam_pitch = 0.8f;
     v.cam_dist = 40.0f;
@@ -751,11 +666,19 @@ int main(void) {
         #undef LOAD_TEX
 
         v.sprites_loaded = (v.pray_melee_tex.id && v.pray_range_tex.id && v.pray_magic_tex.id);
-        fprintf(stderr, "Sprites: prayer=%s tabs=%s terrain=%s\n",
-                v.sprites_loaded ? "yes" : "no",
-                v.tab_inv_tex.id ? "yes" : "no",
-                v.terrain.loaded ? "yes" : "no");
     }
+
+    /* Startup diagnostic summary */
+    fprintf(stderr, "\n=== Asset Load Summary ===\n");
+    fprintf(stderr, "NPC models: %s (%d models)\n", v.model_cache ? "LOADED" : "FAILED",
+            v.model_cache ? v.model_cache->count : 0);
+    fprintf(stderr, "Terrain:    %s\n", v.terrain.loaded ? "LOADED" : "FAILED");
+    fprintf(stderr, "Prayer spr: %s\n", v.sprites_loaded ? "LOADED" : "FAILED");
+    fprintf(stderr, "Tab spr:    %s\n", v.tab_inv_tex.id ? "LOADED" : "FAILED");
+    fprintf(stderr, "Render:     3D asset-backed (single path, no 2D fallback)\n");
+    if (!v.model_cache || !v.terrain.loaded)
+        fprintf(stderr, "WARNING: Missing assets — run from project root or check asset paths\n");
+    fprintf(stderr, "==============================\n\n");
 
     reset_episode(&v);
 
@@ -768,42 +691,20 @@ int main(void) {
         if (IsKeyPressed(KEY_DOWN) && v.ticks_per_sec > MIN_TICKS_PER_SEC) v.ticks_per_sec--;
         if (IsKeyPressed(KEY_R)) reset_episode(&v);
         if (IsKeyPressed(KEY_D)) v.show_debug = !v.show_debug;
-        if (IsKeyPressed(KEY_T)) v.use_3d_models = !v.use_3d_models;
 
-        /* Camera controls */
+        /* 3D orbit camera controls */
         float wheel = GetMouseWheelMove();
-        if (v.use_3d_models) {
-            /* 3D orbit camera */
-            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-                Vector2 delta = GetMouseDelta();
-                v.cam_yaw += delta.x * 0.005f;
-                v.cam_pitch -= delta.y * 0.005f;
-                if (v.cam_pitch < 0.1f) v.cam_pitch = 0.1f;
-                if (v.cam_pitch > 1.4f) v.cam_pitch = 1.4f;
-            }
-            if (wheel != 0.0f) {
-                v.cam_dist *= (wheel > 0) ? (1.0f/1.15f) : 1.15f;
-                if (v.cam_dist < 5.0f) v.cam_dist = 5.0f;
-                if (v.cam_dist > 200.0f) v.cam_dist = 200.0f;
-            }
-        } else {
-            /* 2D camera */
-            if (wheel != 0.0f) {
-                v.camera2d.zoom *= (wheel > 0) ? 1.15f : (1.0f/1.15f);
-                if (v.camera2d.zoom < 0.3f) v.camera2d.zoom = 0.3f;
-                if (v.camera2d.zoom > 5.0f) v.camera2d.zoom = 5.0f;
-            }
-            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-                Vector2 delta = GetMouseDelta();
-                v.camera2d.target.x -= delta.x / v.camera2d.zoom;
-                v.camera2d.target.y -= delta.y / v.camera2d.zoom;
-            }
-            if (v.entity_count > 0) {
-                Vector2 pp = tile_scr(v.entities[0].x, v.entities[0].y);
-                pp.x += TILE_SIZE/2.0f; pp.y += TILE_SIZE/2.0f;
-                v.camera2d.target.x += (pp.x - v.camera2d.target.x) * 0.08f;
-                v.camera2d.target.y += (pp.y - v.camera2d.target.y) * 0.08f;
-            }
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+            Vector2 delta = GetMouseDelta();
+            v.cam_yaw += delta.x * 0.005f;
+            v.cam_pitch -= delta.y * 0.005f;
+            if (v.cam_pitch < 0.1f) v.cam_pitch = 0.1f;
+            if (v.cam_pitch > 1.4f) v.cam_pitch = 1.4f;
+        }
+        if (wheel != 0.0f) {
+            v.cam_dist *= (wheel > 0) ? (1.0f/1.15f) : 1.15f;
+            if (v.cam_dist < 5.0f) v.cam_dist = 5.0f;
+            if (v.cam_dist > 200.0f) v.cam_dist = 200.0f;
         }
 
         /* Tick */
@@ -845,22 +746,23 @@ int main(void) {
         BeginDrawing();
         ClearBackground(COL_BORDER);
 
-        if (v.use_3d_models && v.model_cache) {
-            draw_entities_3d(&v);
-        } else {
-            BeginMode2D(v.camera2d);
-            draw_arena(&v);
-            draw_entities_2d(&v);
-            draw_splats(&v);
-            EndMode2D();
+        /* Single 3D render path — always uses exported assets when loaded */
+        draw_scene(&v);
+
+        /* Asset load failure banner */
+        if (!v.model_cache || !v.terrain.loaded) {
+            DrawRectangle(10, HEADER_HEIGHT+4, 400, 20, CLITERAL(Color){180,30,30,220});
+            char fail[128];
+            snprintf(fail, 128, "ASSET LOAD FAILED: models=%s terrain=%s",
+                     v.model_cache ? "OK" : "MISSING", v.terrain.loaded ? "OK" : "MISSING");
+            text_s(fail, 14, HEADER_HEIGHT+7, 12, COL_TEXT_WHITE);
         }
 
         draw_header(&v);
         draw_panel(&v);
         draw_debug(&v);
-        DrawText("Space:pause Right:step Up/Down:speed R:reset D:debug T:2D/3D Q:quit Scroll:zoom RightDrag:orbit | Click prayers/items in panel",
+        DrawText("Space:pause Right:step Up/Down:speed R:reset D:debug Q:quit Scroll:zoom RightDrag:orbit | Click prayers/items in panel",
                  10, WINDOW_H-12, 9, CLITERAL(Color){80,80,90,255});
-        /* Mode indicator */
         text_s("Demo mode (random actions + UI clicks)  |  Move/Attack: not yet implemented (PR9b)",
                10, WINDOW_H-24, 9, CLITERAL(Color){120,100,60,255});
 
