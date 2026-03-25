@@ -317,12 +317,26 @@ def build_terrain_mesh(reader, underlays, overlays):
 
                 tile = tiles[0][lx][ly]
 
-                # Get color from floor definitions
-                rgb = 0x786432  # default sandy brown
+                # Get color — use Fight Caves specific mapping
+                # Known FC floor types from cache analysis:
+                #   underlay 72 (idx 71): rgb=#030303 (black rock walls)
+                #   underlay 118 (idx 117): rgb=#752222 (dark red lava rock)
+                #   overlay 28466: FC lava crack overlay (orange-red glow)
+                #   overlay 10802: FC secondary overlay (darker lava)
+                #   no floor: void/border → black
+                rgb = 0x000000  # default: void black
                 if tile.overlay_id > 0:
                     ov = overlays.get(tile.overlay_id - 1)
                     if ov and ov.rgb != 0:
                         rgb = ov.rgb
+                    elif tile.overlay_id == 28466:
+                        # FC primary overlay: lava cracks — orange-red glow
+                        rgb = 0xC03010
+                    elif tile.overlay_id == 10802:
+                        # FC secondary overlay: darker lava border
+                        rgb = 0x401008
+                    else:
+                        rgb = 0x501510  # generic dark red fallback for unknown FC overlays
                 elif tile.underlay_id > 0:
                     ul = underlays.get(tile.underlay_id - 1)
                     if ul and ul.rgb != 0:

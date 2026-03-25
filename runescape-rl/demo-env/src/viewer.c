@@ -166,6 +166,7 @@ typedef struct {
     Texture2D pray_melee_tex, pray_range_tex, pray_magic_tex;
     Texture2D pray_melee_off_tex, pray_range_off_tex, pray_magic_off_tex;
     Texture2D tab_inv_tex, tab_pray_tex, tab_combat_tex;
+    Texture2D shark_tex, prayer_pot_tex;
     int sprites_loaded;
 
     /* Tabbed UI */
@@ -404,10 +405,14 @@ static void draw_panel(ViewerState* v) {
             DrawRectangle(sx, sy, slot_w, slot_h, COL_BG_SLOT);
             DrawRectangleLines(sx, sy, slot_w, slot_h, COL_GUI_BORDER);
             if (has_item) {
-                /* Shark icon (stylized) */
-                DrawRectangle(sx+4, sy+8, 32, 18, CLITERAL(Color){180,140,100,255});
-                DrawRectangle(sx+8, sy+10, 24, 14, CLITERAL(Color){220,170,120,255});
-                text_s("S", sx+16, sy+10, 14, COL_TEXT_WHITE);
+                /* Shark icon */
+                if (v->shark_tex.id) {
+                    float sc = 32.0f / (float)(v->shark_tex.height > 0 ? v->shark_tex.height : 1);
+                    DrawTextureEx(v->shark_tex, (Vector2){(float)(sx+4),(float)(sy+2)}, 0, sc, WHITE);
+                } else {
+                    DrawRectangle(sx+4, sy+8, 32, 18, CLITERAL(Color){180,140,100,255});
+                    text_s("S", sx+16, sy+10, 14, COL_TEXT_WHITE);
+                }
                 /* Click to eat */
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     Rectangle r = {(float)sx,(float)sy,(float)slot_w,(float)slot_h};
@@ -430,12 +435,17 @@ static void draw_panel(ViewerState* v) {
             DrawRectangle(sx, sy, slot_w, slot_h, COL_BG_SLOT);
             DrawRectangleLines(sx, sy, slot_w, slot_h, COL_GUI_BORDER);
             if (has_item) {
-                DrawRectangle(sx+12, sy+4, 16, 28, CLITERAL(Color){50,180,220,255});
-                DrawRectangle(sx+10, sy+2, 20, 8, CLITERAL(Color){80,60,40,255});
+                if (v->prayer_pot_tex.id) {
+                    float sc = 32.0f / (float)(v->prayer_pot_tex.height > 0 ? v->prayer_pot_tex.height : 1);
+                    DrawTextureEx(v->prayer_pot_tex, (Vector2){(float)(sx+4),(float)(sy+2)}, 0, sc, WHITE);
+                } else {
+                    DrawRectangle(sx+12, sy+4, 16, 28, CLITERAL(Color){50,180,220,255});
+                    DrawRectangle(sx+10, sy+2, 20, 8, CLITERAL(Color){80,60,40,255});
+                }
                 int doses_in_pot = (i < pots_remaining - 1) ? 4 :
                     ((p->prayer_doses_remaining % 4 == 0) ? 4 : (p->prayer_doses_remaining % 4));
                 snprintf(buf, 128, "%d", doses_in_pot);
-                text_s(buf, sx+16, sy+16, 10, COL_TEXT_WHITE);
+                text_s(buf, sx+28, sy+24, 10, COL_TEXT_GREEN);
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     Rectangle r = {(float)sx,(float)sy,(float)slot_w,(float)slot_h};
                     if (CheckCollisionPointRec(mouse, r)) v->pending_drink_action = FC_DRINK_PRAYER_POT;
@@ -696,6 +706,8 @@ int main(void) {
         LOAD_TEX(v.tab_inv_tex, "tab_inventory.png");
         LOAD_TEX(v.tab_pray_tex, "tab_prayer.png");
         LOAD_TEX(v.tab_combat_tex, "tab_combat.png");
+        LOAD_TEX(v.shark_tex, "shark.png");
+        LOAD_TEX(v.prayer_pot_tex, "prayer_potion.jpg");
 
         #undef LOAD_TEX
 
@@ -815,6 +827,8 @@ int main(void) {
     if (v.tab_inv_tex.id) UnloadTexture(v.tab_inv_tex);
     if (v.tab_pray_tex.id) UnloadTexture(v.tab_pray_tex);
     if (v.tab_combat_tex.id) UnloadTexture(v.tab_combat_tex);
+    if (v.shark_tex.id) UnloadTexture(v.shark_tex);
+    if (v.prayer_pot_tex.id) UnloadTexture(v.prayer_pot_tex);
     CloseWindow();
     return 0;
 }
