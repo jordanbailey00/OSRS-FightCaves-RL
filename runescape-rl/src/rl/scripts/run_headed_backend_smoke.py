@@ -17,7 +17,7 @@ from fight_caves_rl.headed_backend_control import (
     issue_action,
     timestamp_id,
 )
-from fight_caves_rl.utils.paths import runtime_subdir, source_root
+from fight_caves_rl.utils.paths import legacy_rsps_root, runtime_subdir
 
 
 def main() -> None:
@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument(
         "--rsps-root",
         type=Path,
-        default=source_root() / "rsps",
+        default=legacy_rsps_root(),
     )
     parser.add_argument(
         "--output",

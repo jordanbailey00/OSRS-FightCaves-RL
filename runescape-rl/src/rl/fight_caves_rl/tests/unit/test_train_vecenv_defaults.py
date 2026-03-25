@@ -3,7 +3,6 @@ import pytest
 from fight_caves_rl.envs.shared_memory_transport import INFO_PAYLOAD_MODE_MINIMAL
 from fight_caves_rl.native_runtime import (
     ENV_BACKEND_NATIVE_PREVIEW,
-    NATIVE_RUNTIME_VECENV_GUARD_MESSAGE,
 )
 from fight_caves_rl.puffer.factory import (
     ENV_BACKEND_V1_BRIDGE,
@@ -132,14 +131,44 @@ def test_resolve_train_env_backend_accepts_native_preview_selection():
     assert resolve_train_env_backend(config) == ENV_BACKEND_NATIVE_PREVIEW
 
 
-def test_make_vecenv_rejects_native_preview_before_pr7_cutover():
+def test_make_vecenv_routes_native_preview_embedded_backend(monkeypatch):
     config = load_smoke_train_config()
     config["env"]["env_backend"] = ENV_BACKEND_NATIVE_PREVIEW
+    captured: dict[str, object] = {}
 
-    with pytest.raises(NotImplementedError, match="direct-test scaffold"):
-        make_vecenv(config, backend="embedded")
+    def _fake_native_vecenv(batch_config, *, reward_adapter):
+        captured["batch_config"] = batch_config
+        captured["reward_adapter"] = reward_adapter
+        return object()
 
-    with pytest.raises(NotImplementedError, match="Standard vecenv/train usage"):
-        make_vecenv(config, backend="subprocess")
+    monkeypatch.setattr("fight_caves_rl.puffer.factory.NativeKernelVecEnv", _fake_native_vecenv)
 
-    assert "PR7" in NATIVE_RUNTIME_VECENV_GUARD_MESSAGE
+    result = make_vecenv(config, backend="embedded")
+
+    assert result is not None
+    assert captured["batch_config"].info_payload_mode == INFO_PAYLOAD_MODE_MINIMAL
+    assert captured["reward_adapter"].config_id == str(config["reward_config"])
+
+
+def test_make_vecenv_routes_native_preview_subprocess_backend_via_subprocess_wrapper(monkeypatch):
+    config = load_smoke_train_config()
+    config["env"]["env_backend"] = ENV_BACKEND_NATIVE_PREVIEW
+    config["env"]["subprocess_worker_count"] = 2
+    captured: dict[str, object] = {}
+
+    def _fake_subprocess_vecenv(subprocess_config):
+        captured["config"] = subprocess_config
+        return object()
+
+    monkeypatch.setattr(
+        "fight_caves_rl.puffer.factory.SubprocessHeadlessBatchVecEnv",
+        _fake_subprocess_vecenv,
+    )
+
+    result = make_vecenv(config, backend="subprocess")
+
+    assert result is not None
+    subprocess_config = captured["config"]
+    assert subprocess_config.env_backend == ENV_BACKEND_NATIVE_PREVIEW
+    assert subprocess_config.worker_count == 2
+    assert subprocess_config.info_payload_mode == INFO_PAYLOAD_MODE_MINIMAL

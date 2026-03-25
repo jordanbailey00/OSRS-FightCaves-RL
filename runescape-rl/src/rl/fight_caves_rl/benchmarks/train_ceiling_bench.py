@@ -228,6 +228,7 @@ def _run_train_ceiling_measurement(
         data_dir=Path("/tmp/fc_train_ceiling_bench"),
         total_timesteps=int(total_timesteps),
     )
+    policy = policy.to(train_config["device"])
     stage_started = perf_counter()
     trainer = ConfigurablePuffeRL(
         train_config,

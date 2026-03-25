@@ -16,7 +16,7 @@ from fight_caves_rl.defaults import (
     DEMO_BACKEND_RSPS_HEADED,
     backend_selection_registry,
 )
-from fight_caves_rl.utils.paths import repo_root, workspace_root
+from fight_caves_rl.utils.paths import legacy_headless_env_root, repo_root
 
 
 def test_training_defaults_point_to_v2_fast_configs():
@@ -57,7 +57,7 @@ def test_demo_backend_defaults_point_to_rsps_headed_with_explicit_fallbacks():
     }
     assert Path(registry[DEMO_BACKEND_RSPS_HEADED].entrypoint).is_file()
     assert Path(registry[DEMO_BACKEND_ORACLE_V1].entrypoint).is_file()
-    assert "fight_caves_demo_lite" in registry[DEMO_BACKEND_FIGHT_CAVES_DEMO_LITE].entrypoint
+    assert str(legacy_headless_env_root()) in registry[DEMO_BACKEND_FIGHT_CAVES_DEMO_LITE].entrypoint
 
 
 def test_preserved_v1_config_fallbacks_pin_v1_bridge_backend():

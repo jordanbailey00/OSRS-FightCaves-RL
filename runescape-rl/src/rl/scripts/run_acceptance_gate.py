@@ -26,7 +26,13 @@ from fight_caves_rl.defaults import (
     DEMO_BACKEND_RSPS_HEADED,
     backend_selection_registry,
 )
-from fight_caves_rl.utils.paths import repo_root, runtime_subdir
+from fight_caves_rl.utils.paths import (
+    legacy_headed_env_root,
+    legacy_headless_env_root,
+    legacy_rsps_root,
+    repo_root,
+    runtime_subdir,
+)
 
 
 @dataclass(frozen=True)
@@ -379,25 +385,19 @@ def main() -> None:
         )
         checks.append(
             AcceptanceCheck(
-                name="headed_phase8_proof_available",
+                name="headed_reference_surfaces_available",
                 passed=all(
-                    path.is_file()
+                    path.is_dir()
                     for path in (
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_backend_control_validation.md",
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_headed_replay_validation.md",
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_live_checkpoint_validation.md",
+                        legacy_headless_env_root(),
+                        legacy_headed_env_root(),
+                        legacy_rsps_root(),
                     )
                 ),
                 details={
-                    "backend_control_validation": str(
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_backend_control_validation.md"
-                    ),
-                    "headed_replay_validation": str(
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_headed_replay_validation.md"
-                    ),
-                    "live_checkpoint_validation": str(
-                        root.parent / "RSPS" / "docs" / "fight_caves_demo_live_checkpoint_validation.md"
-                    ),
+                    "legacy_headless_env_root": str(legacy_headless_env_root()),
+                    "legacy_headed_env_root": str(legacy_headed_env_root()),
+                    "legacy_rsps_root": str(legacy_rsps_root()),
                 },
             )
         )

@@ -19,7 +19,7 @@ from fight_caves_rl.defaults import (
     ORACLE_REPLAY_CONFIG_PATH,
     backend_selection_registry,
 )
-from fight_caves_rl.utils.paths import repo_root, source_root
+from fight_caves_rl.utils.paths import legacy_headless_env_root, repo_root, source_root
 
 
 def main() -> None:
@@ -116,7 +116,7 @@ def build_command(
             "-lc",
             (
                 f"source {source / 'scripts' / 'workspace-env.sh'} && "
-                f"cd {source / 'training-env' / 'env'} && "
+                f"cd {legacy_headless_env_root()} && "
                 "./gradlew --no-daemon :fight-caves-demo-lite:run"
             ),
         )

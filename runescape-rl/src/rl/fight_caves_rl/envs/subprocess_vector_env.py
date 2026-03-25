@@ -36,6 +36,7 @@ from fight_caves_rl.envs_fast.fast_spaces import (
     build_fast_action_space,
     build_fast_observation_space,
 )
+from fight_caves_rl.native_runtime import ENV_BACKEND_NATIVE_PREVIEW, NativeKernelVecEnv, NativeKernelVecEnvConfig
 from fight_caves_rl.rewards.registry import resolve_reward_fn
 
 
@@ -87,7 +88,7 @@ class SubprocessHeadlessBatchVecEnv:
         self.agents_per_batch = int(config.env_count)
         self.num_agents = self.agents_per_batch
         self.env_backend = str(config.env_backend)
-        if self.env_backend == "v2_fast":
+        if self.env_backend in {"v2_fast", ENV_BACKEND_NATIVE_PREVIEW}:
             self.single_observation_space = build_fast_observation_space()
             self.single_action_space = build_fast_action_space()
         else:
@@ -648,6 +649,29 @@ def _build_worker_vecenv(payload: dict[str, Any]) -> HeadlessBatchVecEnv:
     if env_backend == "v2_fast":
         return FastKernelVecEnv(
             FastKernelVecEnvConfig(
+                env_count=int(payload["env_count"]),
+                account_name_prefix=str(payload["account_name_prefix"]),
+                start_wave=int(payload["start_wave"]),
+                ammo=int(payload["ammo"]),
+                prayer_potions=int(payload["prayer_potions"]),
+                sharks=int(payload["sharks"]),
+                tick_cap=int(payload["tick_cap"]),
+                include_future_leakage=bool(payload["include_future_leakage"]),
+                info_payload_mode=str(payload["info_payload_mode"]),
+                instrumentation_enabled=bool(payload["instrumentation_enabled"]),
+                bootstrap=HeadlessBootstrapConfig(
+                    load_content_scripts=bool(payload["bootstrap"]["load_content_scripts"]),
+                    start_world=bool(payload["bootstrap"]["start_world"]),
+                    install_shutdown_hook=bool(payload["bootstrap"]["install_shutdown_hook"]),
+                    settings_overrides=dict(payload["bootstrap"]["settings_overrides"]),
+                ),
+                reset_options_provider=curriculum.reset_overrides,
+            ),
+            reward_adapter=FastRewardAdapter.from_config_id(str(payload["reward_config_id"])),
+        )
+    if env_backend == ENV_BACKEND_NATIVE_PREVIEW:
+        return NativeKernelVecEnv(
+            NativeKernelVecEnvConfig(
                 env_count=int(payload["env_count"]),
                 account_name_prefix=str(payload["account_name_prefix"]),
                 start_wave=int(payload["start_wave"]),

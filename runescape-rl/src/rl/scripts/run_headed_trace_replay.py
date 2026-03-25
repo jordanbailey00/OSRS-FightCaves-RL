@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from fight_caves_rl.envs.action_mapping import normalize_action
 from fight_caves_rl.headed_backend_control import issue_action, timestamp_id
-from fight_caves_rl.utils.paths import runtime_subdir, source_root
+from fight_caves_rl.utils.paths import legacy_rsps_root, runtime_subdir
 
 _TRACE_PACKS_PATH = REPO_ROOT / "fight_caves_rl" / "replay" / "trace_packs.py"
 _TRACE_PACKS_SPEC = importlib.util.spec_from_file_location("fight_caves_rl_trace_packs_direct", _TRACE_PACKS_PATH)
@@ -50,7 +50,7 @@ def main() -> None:
     parser.add_argument(
         "--rsps-root",
         type=Path,
-        default=source_root() / "rsps",
+        default=legacy_rsps_root(),
     )
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--input-trace-output", type=Path, default=None)

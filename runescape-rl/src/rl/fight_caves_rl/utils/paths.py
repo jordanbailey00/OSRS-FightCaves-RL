@@ -1,6 +1,7 @@
 from os import environ
 from pathlib import Path
 
+
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -12,6 +13,22 @@ def workspace_root() -> Path:
 
 def source_root() -> Path:
     return workspace_root().parent
+
+
+def reference_root() -> Path:
+    return source_root().parent / "reference"
+
+
+def legacy_headless_env_root() -> Path:
+    return reference_root() / "legacy-headless-env"
+
+
+def legacy_headed_env_root() -> Path:
+    return reference_root() / "legacy-headed-env"
+
+
+def legacy_rsps_root() -> Path:
+    return reference_root() / "legacy-rsps"
 
 
 def default_runtime_root() -> Path:

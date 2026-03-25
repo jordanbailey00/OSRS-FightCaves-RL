@@ -17,6 +17,7 @@ from fight_caves_rl.policies.checkpointing import (
     metadata_path_for_checkpoint,
 )
 from fight_caves_rl.policies.registry import build_policy_from_metadata
+from fight_caves_rl.puffer.gumbel_sample import sample_logits_gumbel
 from fight_caves_rl.puffer.factory import (
     build_policy_episode_env,
     load_replay_eval_config,
@@ -64,8 +65,10 @@ def run_replay_eval(
         curriculum_config_id = str(config.get("curriculum_config", "curriculum_disabled_v0"))
         step_cap = int(max_steps if max_steps is not None else config["max_steps"])
         runtime_reward_config_id = _resolve_eval_runtime_reward_config(reward_config_id)
+        env_config = dict(config.get("env", {}))
+        env_config["tick_cap"] = step_cap
         env = build_policy_episode_env(
-            {"tick_cap": step_cap},
+            env_config,
             runtime_reward_config_id,
             curriculum_config_id,
         )
@@ -321,10 +324,12 @@ def greedy_policy_action(policy: torch.nn.Module, observation: np.ndarray, *, re
         logits, _values = policy.forward_eval(obs_tensor, state=state)
     if state is not None:
         policy._eval_state = state
-    return np.asarray(
-        [int(torch.argmax(head, dim=1).item()) for head in logits],
-        dtype=np.int64,
+    action, _logprob, _entropy = sample_logits_gumbel(
+        logits,
+        observations=obs_tensor,
+        greedy=True,
     )
+    return np.asarray(action.squeeze(0).tolist(), dtype=np.int64)
 
 
 def _resolve_eval_runtime_reward_config(config_id: str) -> str:

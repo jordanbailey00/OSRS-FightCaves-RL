@@ -25,12 +25,15 @@ def test_fast_reward_adapter_shaped_v2_supports_direct_feature_weighting():
     features[0, REWARD_FEATURE_INDEX["damage_dealt"]] = 10.0
     features[0, REWARD_FEATURE_INDEX["damage_taken"]] = 2.0
     features[0, REWARD_FEATURE_INDEX["npc_kill"]] = 1.0
+    features[0, REWARD_FEATURE_INDEX["food_used"]] = 1.0
+    features[0, REWARD_FEATURE_INDEX["invalid_action"]] = 1.0
+    features[0, REWARD_FEATURE_INDEX["idle_penalty_flag"]] = 1.0
     features[0, REWARD_FEATURE_INDEX["wrong_jad_prayer_on_resolve"]] = 1.0
     features[0, REWARD_FEATURE_INDEX["tick_penalty_base"]] = 1.0
 
     weighted = adapter.weight_batch(features)
 
-    assert weighted.tolist() == pytest.approx([0.0095], abs=1.0e-7)
+    assert weighted.tolist() == pytest.approx([0.7695], abs=1.0e-7)
 
 
 def test_fast_reward_adapter_rejects_legacy_unsupported_nonzero_coefficients():

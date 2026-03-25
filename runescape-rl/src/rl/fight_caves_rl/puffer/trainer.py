@@ -26,6 +26,7 @@ from fight_caves_rl.policies.checkpointing import (
     write_checkpoint_metadata,
 )
 from fight_caves_rl.puffer.factory import (
+    ENV_BACKEND_NATIVE_PREVIEW,
     build_puffer_train_config,
     build_train_output_dir,
     load_smoke_train_config,
@@ -87,6 +88,13 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
             _TrainerInstrumentation() if self._instrumentation_enabled else None
         )
         super().__init__(*args, **kwargs)
+        self._ep_indices_host: np.ndarray | None = None
+        self._ep_lengths_host: np.ndarray | None = None
+        self._obs_device_staging: torch.Tensor | None = None
+        self._reward_device_staging: torch.Tensor | None = None
+        self._done_device_staging: torch.Tensor | None = None
+        self._action_host_staging: torch.Tensor | None = None
+        self._refresh_rollout_host_mirrors()
         if not self._profiling_enabled:
             self.profile = _NullProfile()
         if not self._utilization_enabled:
@@ -128,6 +136,78 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
             return
         instrumentation.record(bucket, seconds)
 
+    def _refresh_rollout_host_mirrors(self) -> None:
+        ep_indices = getattr(self, "ep_indices", None)
+        ep_lengths = getattr(self, "ep_lengths", None)
+        if ep_indices is None or ep_lengths is None:
+            self._ep_indices_host = None
+            self._ep_lengths_host = None
+            return
+        self._ep_indices_host = np.asarray(
+            ep_indices.detach().cpu().numpy(),
+            dtype=np.int32,
+        ).copy()
+        self._ep_lengths_host = np.asarray(
+            ep_lengths.detach().cpu().numpy(),
+            dtype=np.int32,
+        ).copy()
+
+    def _ensure_rollout_transfer_buffers(
+        self,
+        *,
+        device: torch.device | str,
+        observation_shape: tuple[int, ...],
+        observation_dtype: torch.dtype,
+        reward_dtype: torch.dtype,
+        done_dtype: torch.dtype,
+        action_shape: tuple[int, ...] | None = None,
+        action_dtype: torch.dtype | None = None,
+    ) -> None:
+        if (
+            self._obs_device_staging is None
+            or tuple(self._obs_device_staging.shape) != observation_shape
+            or self._obs_device_staging.dtype != observation_dtype
+            or self._obs_device_staging.device != torch.device(device)
+        ):
+            self._obs_device_staging = torch.empty(
+                observation_shape,
+                dtype=observation_dtype,
+                device=device,
+            )
+        if (
+            self._reward_device_staging is None
+            or tuple(self._reward_device_staging.shape) != (observation_shape[0],)
+            or self._reward_device_staging.dtype != reward_dtype
+            or self._reward_device_staging.device != torch.device(device)
+        ):
+            self._reward_device_staging = torch.empty(
+                (observation_shape[0],),
+                dtype=reward_dtype,
+                device=device,
+            )
+        if (
+            self._done_device_staging is None
+            or tuple(self._done_device_staging.shape) != (observation_shape[0],)
+            or self._done_device_staging.dtype != done_dtype
+            or self._done_device_staging.device != torch.device(device)
+        ):
+            self._done_device_staging = torch.empty(
+                (observation_shape[0],),
+                dtype=done_dtype,
+                device=device,
+            )
+        if action_shape is not None and action_dtype is not None:
+            if (
+                self._action_host_staging is None
+                or tuple(self._action_host_staging.shape) != action_shape
+                or self._action_host_staging.dtype != action_dtype
+            ):
+                self._action_host_staging = torch.empty(
+                    action_shape,
+                    dtype=action_dtype,
+                    device="cpu",
+                )
+
     @pufferlib.pufferl.record
     def evaluate(self):
         # Always use the custom evaluate loop so that Gumbel-max sampling
@@ -167,9 +247,24 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
             copy_started = perf_counter()
             profile("eval_copy", epoch)
             o = torch.as_tensor(o)
-            o_device = o.to(device)
-            r = torch.as_tensor(r).to(device)
-            d = torch.as_tensor(d).to(device)
+            r_cpu = torch.as_tensor(r)
+            d_cpu = torch.as_tensor(d)
+            self._ensure_rollout_transfer_buffers(
+                device=device,
+                observation_shape=tuple(o.shape),
+                observation_dtype=o.dtype,
+                reward_dtype=r_cpu.dtype,
+                done_dtype=d_cpu.dtype,
+            )
+            assert self._obs_device_staging is not None
+            assert self._reward_device_staging is not None
+            assert self._done_device_staging is not None
+            self._obs_device_staging.copy_(o)
+            self._reward_device_staging.copy_(r_cpu)
+            self._done_device_staging.copy_(d_cpu)
+            o_device = self._obs_device_staging
+            r = self._reward_device_staging
+            d = self._done_device_staging
             self._record_instrumentation("eval_tensor_copy", perf_counter() - copy_started)
 
             forward_started = perf_counter()
@@ -187,7 +282,7 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
                     state["lstm_c"] = self.lstm_c[env_id.start]
 
                 logits, value = self.policy.forward_eval(o_device, state)
-                action, logprob, _ = sample_logits_gumbel(logits)
+                action, logprob, _ = sample_logits_gumbel(logits, observations=o_device)
                 r = torch.clamp(r, -1, 1)
             self._record_instrumentation("eval_policy_forward", perf_counter() - forward_started)
 
@@ -198,12 +293,23 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
                     self.lstm_h[env_id.start] = state["lstm_h"]
                     self.lstm_c[env_id.start] = state["lstm_c"]
 
-                l = self.ep_lengths[env_id.start].item()
+                if self._ep_indices_host is None or self._ep_lengths_host is None:
+                    self._refresh_rollout_host_mirrors()
+
+                index_started = perf_counter()
+                host_start = int(env_id.start)
+                host_stop = int(env_id.stop)
+                l = int(self._ep_lengths_host[host_start])
                 batch_rows = slice(
-                    self.ep_indices[env_id.start].item(),
-                    1 + self.ep_indices[env_id.stop - 1].item(),
+                    int(self._ep_indices_host[host_start]),
+                    1 + int(self._ep_indices_host[host_stop - 1]),
+                )
+                self._record_instrumentation(
+                    "eval_rollout_index_extract",
+                    perf_counter() - index_started,
                 )
 
+                state_write_started = perf_counter()
                 if config["cpu_offload"]:
                     self.observations[batch_rows, l] = o
                 else:
@@ -216,20 +322,46 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
                 self.values[batch_rows, l] = value.flatten()
 
                 self.ep_lengths[env_id] += 1
+                self._ep_lengths_host[host_start:host_stop] += 1
                 if l + 1 >= config["bptt_horizon"]:
                     num_full = env_id.stop - env_id.start
+                    next_indices = np.arange(
+                        self.free_idx,
+                        self.free_idx + num_full,
+                        dtype=np.int32,
+                    )
                     self.ep_indices[env_id] = self.free_idx + torch.arange(
                         num_full,
                         device=config["device"],
                     ).int()
                     self.ep_lengths[env_id] = 0
+                    self._ep_indices_host[host_start:host_stop] = next_indices
+                    self._ep_lengths_host[host_start:host_stop] = 0
                     self.free_idx += num_full
                     self.full_rows += num_full
+                self._record_instrumentation(
+                    "eval_rollout_state_write",
+                    perf_counter() - state_write_started,
+                )
             self._record_instrumentation("eval_rollout_write", perf_counter() - write_started)
 
             action_started = perf_counter()
             with torch.no_grad():
-                action = action.cpu().numpy()
+                action_host = self._action_host_staging
+                if action_host is None:
+                    self._ensure_rollout_transfer_buffers(
+                        device=device,
+                        observation_shape=tuple(o.shape),
+                        observation_dtype=o.dtype,
+                        reward_dtype=r.dtype,
+                        done_dtype=d.dtype,
+                        action_shape=tuple(action.shape),
+                        action_dtype=action.dtype,
+                    )
+                    action_host = self._action_host_staging
+                assert action_host is not None
+                action_host.copy_(action)
+                action = action_host.numpy()
                 if isinstance(logits, torch.distributions.Normal):
                     action = np.clip(
                         action,
@@ -264,6 +396,8 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
         self.free_idx = self.total_agents
         self.ep_indices = torch.arange(self.total_agents, device=device, dtype=torch.int32)
         self.ep_lengths.zero_()
+        self._ep_indices_host = np.arange(self.total_agents, dtype=np.int32)
+        self._ep_lengths_host = np.zeros(self.total_agents, dtype=np.int32)
         self._record_instrumentation("eval_reset_state", perf_counter() - reset_started)
         self._record_instrumentation("eval_total", perf_counter() - evaluate_started)
         profile.end()
@@ -289,6 +423,7 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
         anneal_beta = b0 + (1 - b0) * a * self.epoch / self.total_epochs
         self.ratio[:] = 1
         _losses: dict[str, float] = defaultdict(float)
+        track_loss_metrics = bool(self._logging_enabled)
 
         for mb in range(self.total_minibatches):
             profile("train_misc", epoch, nest=True)
@@ -344,11 +479,16 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
             )
 
             logits, newvalue = self.policy(mb_obs, state)
-            _, newlogprob, entropy = sample_logits_gumbel(logits, action=mb_actions)
+            _, newlogprob, entropy = sample_logits_gumbel(
+                logits,
+                action=mb_actions,
+                observations=mb_obs,
+            )
             self._record_instrumentation("train_policy_forward", perf_counter() - bucket_started)
 
             bucket_started = perf_counter()
             profile("train_misc", epoch)
+            metric_sync_started = None
             newlogprob = newlogprob.reshape(mb_logprobs.shape)
             logratio = newlogprob - mb_logprobs
             ratio = logratio.exp()
@@ -372,16 +512,28 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
             self.amp_context.__enter__()
 
             self.values[idx] = newvalue.detach().float()
+            self._record_instrumentation(
+                "train_loss_tensor_math",
+                perf_counter() - bucket_started,
+            )
 
             # Loss tracking for mean_and_log / dashboard (matches PufferLib base)
-            _n = self.total_minibatches
-            _losses["policy_loss"] += pg_loss.item() / _n
-            _losses["value_loss"] += v_loss.item() / _n
-            _losses["entropy"] += entropy_loss.item() / _n
-            _losses["old_approx_kl"] += (-logratio).mean().item() / _n
-            _losses["approx_kl"] += ((ratio - 1) - logratio).mean().item() / _n
-            _losses["clipfrac"] += ((ratio - 1.0).abs() > clip_coef).float().mean().item() / _n
-            _losses["importance"] += ratio.mean().item() / _n
+            if track_loss_metrics:
+                metric_sync_started = perf_counter()
+                _n = self.total_minibatches
+                _losses["policy_loss"] += pg_loss.item() / _n
+                _losses["value_loss"] += v_loss.item() / _n
+                _losses["entropy"] += entropy_loss.item() / _n
+                _losses["old_approx_kl"] += (-logratio).mean().item() / _n
+                _losses["approx_kl"] += ((ratio - 1) - logratio).mean().item() / _n
+                _losses["clipfrac"] += (
+                    ((ratio - 1.0).abs() > clip_coef).float().mean().item() / _n
+                )
+                _losses["importance"] += ratio.mean().item() / _n
+                self._record_instrumentation(
+                    "train_loss_metric_items",
+                    perf_counter() - metric_sync_started,
+                )
 
             self._record_instrumentation("train_loss_compute", perf_counter() - bucket_started)
 
@@ -405,26 +557,75 @@ class ConfigurablePuffeRL(pufferlib.pufferl.PuffeRL):
 
         bucket_started = perf_counter()
         # Explained variance (matches PufferLib base)
-        y_pred = self.values.flatten()
-        y_true = advantages.flatten() + self.values.flatten()
-        var_y = y_true.var()
-        if var_y == 0:
-            _losses["explained_variance"] = float("nan")
-        else:
-            _losses["explained_variance"] = (1 - (y_true - y_pred).var() / var_y).item()
-
+        cleanup_log_gate_started = perf_counter()
         self.epoch += 1
         done_training = self.global_step >= config["total_timesteps"]
-        if done_training or self.global_step == 0 or time.time() > self.last_log_time + 0.25:
+        should_log = (
+            done_training or self.global_step == 0 or time.time() > self.last_log_time + 0.25
+        )
+        self._record_instrumentation(
+            "train_done_cleanup_log_gate",
+            perf_counter() - cleanup_log_gate_started,
+        )
+        if should_log:
+            if track_loss_metrics:
+                cleanup_explained_started = perf_counter()
+                y_pred = self.values.flatten()
+                y_true = advantages.flatten() + self.values.flatten()
+                var_y = y_true.var()
+                if var_y == 0:
+                    _losses["explained_variance"] = float("nan")
+                else:
+                    _losses["explained_variance"] = (1 - (y_true - y_pred).var() / var_y).item()
+                self._record_instrumentation(
+                    "train_done_cleanup_explained_variance",
+                    perf_counter() - cleanup_explained_started,
+                )
+
+            cleanup_mean_log_started = perf_counter()
             self.mean_and_log()
+            self._record_instrumentation(
+                "train_done_cleanup_mean_and_log",
+                perf_counter() - cleanup_mean_log_started,
+            )
+
+            cleanup_loss_assign_started = perf_counter()
             self.losses = dict(_losses)
+            self._record_instrumentation(
+                "train_done_cleanup_loss_assign",
+                perf_counter() - cleanup_loss_assign_started,
+            )
+
+            cleanup_dashboard_started = perf_counter()
             self.print_dashboard()
+            self._record_instrumentation(
+                "train_done_cleanup_dashboard",
+                perf_counter() - cleanup_dashboard_started,
+            )
+
+            cleanup_reset_started = perf_counter()
             self.stats = defaultdict(list)
             self.last_log_time = time.time()
             self.last_log_step = self.global_step
+            self._record_instrumentation(
+                "train_done_cleanup_reset_state",
+                perf_counter() - cleanup_reset_started,
+            )
+
+            cleanup_profile_started = perf_counter()
             profile.clear()
+            self._record_instrumentation(
+                "train_done_cleanup_profile_clear",
+                perf_counter() - cleanup_profile_started,
+            )
         else:
-            self.losses = dict(_losses)
+            if track_loss_metrics:
+                cleanup_loss_assign_started = perf_counter()
+                self.losses = dict(_losses)
+                self._record_instrumentation(
+                    "train_done_cleanup_loss_assign",
+                    perf_counter() - cleanup_loss_assign_started,
+                )
         self._record_instrumentation("train_done_cleanup", perf_counter() - bucket_started)
 
         if self.epoch % config["checkpoint_interval"] == 0 or done_training:
@@ -547,12 +748,20 @@ def run_smoke_training(
     transport_mode = (
         f"v2_fast_subprocess_{requested_transport_mode}"
         if env_backend == "v2_fast"
-        else requested_transport_mode
+        else (
+            f"native_preview_subprocess_{requested_transport_mode}"
+            if env_backend == ENV_BACKEND_NATIVE_PREVIEW
+            else requested_transport_mode
+        )
     )
     manifest_bridge_mode = (
         "v2_fast_subprocess_isolated_jvm"
         if env_backend == "v2_fast"
-        else "subprocess_isolated_jvm"
+        else (
+            "native_preview_subprocess_ctypes"
+            if env_backend == ENV_BACKEND_NATIVE_PREVIEW
+            else "subprocess_isolated_jvm"
+        )
     )
     output_dir = build_train_output_dir(str(config["config_id"]), data_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -587,6 +796,7 @@ def run_smoke_training(
         data_dir=output_dir,
         total_timesteps=total_timesteps,
     )
+    policy = policy.to(puffer_train_config["device"])
     dashboard_enabled = should_enable_dashboard(config)
     trace_stage(f"run_smoke_training:dashboard_enabled={int(dashboard_enabled)}")
     logger = WandbRunLogger(

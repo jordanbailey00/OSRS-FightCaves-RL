@@ -1,0 +1,244 @@
+asset_id = "fight_caves_scene_theme_v1"
+description = "Minimal native-owned Fight Caves viewer theme derived from legacy Fight Caves presentation and TzHaar area/object references."
+source_refs = [
+  "reference/legacy-headless-env/assets/fight-caves-header.png",
+  "reference/legacy-rsps/data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.areas.toml",
+  "reference/legacy-rsps/data/area/karamja/tzhaar_city/tzhaar_city.objs.toml",
+]
+
+[colors]
+lava_base = [42, 11, 12, 255]
+lava_mid = [75, 13, 12, 255]
+lava_hot = [252, 119, 89, 255]
+lava_ring = [247, 94, 47, 112]
+lava_ring_dim = [139, 30, 17, 84]
+basalt_floor = [32, 21, 19, 255]
+basalt_floor_highlight = [67, 45, 38, 255]
+basalt_wall = [56, 34, 29, 255]
+basalt_wall_edge = [101, 79, 82, 255]
+dais = [87, 74, 67, 255]
+dais_glow = [196, 57, 10, 255]
+ember = [247, 94, 47, 255]
+player_base = [236, 231, 223, 255]
+player_accent = [88, 189, 195, 255]
+npc_jad = [182, 49, 49, 255]
+npc_jad_telegraph = [240, 80, 70, 255]
+npc_healer = [160, 214, 79, 255]
+npc_ranger = [243, 181, 79, 255]
+npc_mage = [132, 58, 69, 255]
+npc_melee = [214, 125, 52, 255]
+hover = [255, 199, 90, 255]
+selection = [145, 226, 96, 255]
+spawn_pad = [214, 147, 76, 255]
+
+[[lava_rings]]
+tile_x = -22.0
+tile_y = 25.0
+radius_x = 8.0
+radius_z = 3.0
+phase = 0.07
+speed = 0.20
+
+[[lava_rings]]
+tile_x = -9.0
+tile_y = 31.0
+radius_x = 7.0
+radius_z = 2.2
+phase = 0.14
+speed = 0.18
+
+[[lava_rings]]
+tile_x = 10.0
+tile_y = 27.0
+radius_x = 11.0
+radius_z = 4.5
+phase = 0.23
+speed = 0.12
+
+[[lava_rings]]
+tile_x = 24.0
+tile_y = 19.0
+radius_x = 6.0
+radius_z = 2.4
+phase = 0.30
+speed = 0.21
+
+[[lava_rings]]
+tile_x = -26.0
+tile_y = -7.0
+radius_x = 6.5
+radius_z = 2.0
+phase = 0.39
+speed = 0.16
+
+[[lava_rings]]
+tile_x = -17.0
+tile_y = -24.0
+radius_x = 7.0
+radius_z = 2.7
+phase = 0.47
+speed = 0.15
+
+[[lava_rings]]
+tile_x = 6.0
+tile_y = -26.0
+radius_x = 10.0
+radius_z = 3.3
+phase = 0.55
+speed = 0.11
+
+[[lava_rings]]
+tile_x = 25.0
+tile_y = -12.0
+radius_x = 7.0
+radius_z = 2.0
+phase = 0.66
+speed = 0.22
+
+[[lava_rings]]
+tile_x = 19.0
+tile_y = 6.0
+radius_x = 6.0
+radius_z = 2.0
+phase = 0.73
+speed = 0.18
+
+[[props]]
+kind = "rock_arch"
+label = "fight_cave_entrance_arch"
+tile_x = 0.0
+tile_y = 31.0
+base_y = 0.0
+size_x = 10.0
+size_y = 7.0
+size_z = 4.0
+
+[[props]]
+kind = "lava_forge"
+label = "north_west_lava_forge"
+tile_x = -16.0
+tile_y = 17.0
+base_y = 0.0
+size_x = 5.5
+size_y = 1.8
+size_z = 5.5
+
+[[props]]
+kind = "lava_forge"
+label = "south_west_lava_forge"
+tile_x = -16.0
+tile_y = -17.0
+base_y = 0.0
+size_x = 5.5
+size_y = 1.8
+size_z = 5.5
+
+[[props]]
+kind = "lava_forge"
+label = "south_forge"
+tile_x = 5.0
+tile_y = -17.0
+base_y = 0.0
+size_x = 5.5
+size_y = 1.8
+size_z = 5.5
+
+[[props]]
+kind = "lava_forge"
+label = "south_east_lava_forge"
+tile_x = 18.0
+tile_y = -5.0
+base_y = 0.0
+size_x = 5.5
+size_y = 1.8
+size_z = 5.5
+
+[[props]]
+kind = "rock_spire"
+label = "west_buttress"
+tile_x = -23.0
+tile_y = 9.0
+base_y = 0.0
+size_x = 6.0
+size_y = 8.0
+size_z = 7.0
+
+[[props]]
+kind = "rock_spire"
+label = "east_buttress"
+tile_x = 23.0
+tile_y = 4.0
+base_y = 0.0
+size_x = 6.0
+size_y = 8.5
+size_z = 7.0
+
+[[props]]
+kind = "rock_spire"
+label = "north_wall_spire_a"
+tile_x = -12.0
+tile_y = 28.0
+base_y = 0.0
+size_x = 4.8
+size_y = 9.0
+size_z = 4.8
+
+[[props]]
+kind = "rock_spire"
+label = "north_wall_spire_b"
+tile_x = 12.0
+tile_y = 27.0
+base_y = 0.0
+size_x = 5.2
+size_y = 10.0
+size_z = 5.2
+
+[[props]]
+kind = "rock_spire"
+label = "south_wall_spire_a"
+tile_x = -8.0
+tile_y = -28.0
+base_y = 0.0
+size_x = 5.0
+size_y = 7.2
+size_z = 5.0
+
+[[props]]
+kind = "rock_spire"
+label = "south_wall_spire_b"
+tile_x = 13.0
+tile_y = -28.0
+base_y = 0.0
+size_x = 5.4
+size_y = 7.8
+size_z = 5.4
+
+[[props]]
+kind = "basalt_column"
+label = "north_center_column"
+tile_x = 0.0
+tile_y = 24.0
+base_y = 0.0
+size_x = 3.6
+size_y = 6.0
+size_z = 3.6
+
+[[props]]
+kind = "basalt_column"
+label = "mid_west_column"
+tile_x = -19.0
+tile_y = 1.0
+base_y = 0.0
+size_x = 3.2
+size_y = 5.4
+size_z = 3.2
+
+[[props]]
+kind = "basalt_column"
+label = "mid_east_column"
+tile_x = 17.0
+tile_y = 8.0
+base_y = 0.0
+size_x = 3.2
+size_y = 5.2
+size_z = 3.2

@@ -4,13 +4,21 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tomllib
 
 from fight_caves_rl.envs.puffer_encoding import POLICY_MAX_VISIBLE_NPCS, POLICY_NPC_ID_TO_INDEX
 from fight_caves_rl.native_runtime.contracts import expected_descriptor_bundle
-from fight_caves_rl.utils.paths import repo_root, workspace_root
+from fight_caves_rl.native_runtime.viewer_assets import (
+    ensure_native_viewer_asset_bundle,
+    generated_viewer_bundle_path,
+    generated_viewer_manifest_path,
+    generated_viewer_sprites_root,
+    load_native_viewer_asset_bundle,
+)
+from fight_caves_rl.utils.paths import repo_root, source_root, workspace_root
 
 JAD_HIT_RESOLVE_OUTCOME_TO_CODE = {
     "none": 0,
@@ -26,16 +34,40 @@ class NativeRuntimeBuildConfig:
     force_rebuild: bool = False
 
 
-def native_source_root() -> Path:
-    return workspace_root() / "native-env"
+@dataclass(frozen=True)
+class NativeViewerBuildConfig:
+    output_dir: Path | None = None
+    force_rebuild: bool = False
+
+
+def training_source_root() -> Path:
+    return workspace_root() / "training-env"
+
+
+def demo_source_root() -> Path:
+    return workspace_root() / "demo-env"
+
+
+def demo_assets_root() -> Path:
+    return demo_source_root() / "assets"
 
 
 def default_native_build_dir() -> Path:
     return repo_root() / ".native-build"
 
 
+def raylib_sdk_root() -> Path:
+    return source_root().parent / "pufferlib" / "raylib-5.5_linux_amd64"
+
+
 def fight_cave_waves_path() -> Path:
-    return workspace_root() / "headless-env" / "data" / "minigame" / "tzhaar_fight_cave" / "tzhaar_fight_cave_waves.toml"
+    return (
+        training_source_root()
+        / "data"
+        / "minigame"
+        / "tzhaar_fight_cave"
+        / "tzhaar_fight_cave_waves.toml"
+    )
 
 
 def reset_fixtures_dir() -> Path:
@@ -46,12 +78,24 @@ def parity_fixtures_dir() -> Path:
     return repo_root() / "fight_caves_rl" / "fixtures" / "goldens" / "parity"
 
 
+def viewer_header_image_path() -> Path:
+    return demo_assets_root() / "fight_caves_header.png"
+
+
 def native_library_filename() -> str:
     if sys.platform == "darwin":
         return "libfight_caves_native_runtime.dylib"
     if sys.platform.startswith("linux"):
         return "libfight_caves_native_runtime.so"
     raise RuntimeError(f"Unsupported platform for PR2 native runtime build: {sys.platform!r}")
+
+
+def native_viewer_filename() -> str:
+    if sys.platform.startswith("linux"):
+        return "fight_caves_native_viewer"
+    if sys.platform == "darwin":
+        return "fight_caves_native_viewer"
+    raise RuntimeError(f"Unsupported platform for native viewer build: {sys.platform!r}")
 
 
 def build_native_runtime(config: NativeRuntimeBuildConfig | None = None) -> Path:
@@ -81,8 +125,8 @@ def build_native_runtime(config: NativeRuntimeBuildConfig | None = None) -> Path
         encoding="utf-8",
     )
 
-    include_dir = native_source_root() / "include"
-    source_file = native_source_root() / "src" / "fight_caves_native_runtime.c"
+    include_dir = training_source_root() / "include"
+    source_file = training_source_root() / "src" / "fight_caves_native_runtime.c"
     command = [
         "cc",
         "-std=c11",
@@ -123,8 +167,128 @@ def build_native_runtime(config: NativeRuntimeBuildConfig | None = None) -> Path
     return library_path
 
 
+def build_native_debug_viewer(config: NativeViewerBuildConfig | None = None) -> Path:
+    build_config = config or NativeViewerBuildConfig()
+    output_dir = (
+        build_config.output_dir.resolve()
+        if build_config.output_dir is not None
+        else default_native_build_dir().resolve()
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    viewer_path = output_dir / native_viewer_filename()
+    manifest_path = output_dir / "viewer_build_manifest.json"
+    generated_assets_header = output_dir / "fight_caves_viewer_assets.generated.h"
+    copied_header_asset = output_dir / viewer_header_image_path().name
+    copied_bundle_asset = output_dir / generated_viewer_bundle_path().name
+    copied_bundle_manifest = output_dir / generated_viewer_manifest_path().name
+    copied_sprites_root = output_dir / "sprites"
+    runtime_library_path = build_native_runtime(
+        NativeRuntimeBuildConfig(output_dir=output_dir, force_rebuild=build_config.force_rebuild)
+    )
+    ensure_native_viewer_asset_bundle(force_rebuild=build_config.force_rebuild)
+    viewer_bundle = load_native_viewer_asset_bundle()
+    fingerprint = _viewer_build_fingerprint(runtime_library_path=runtime_library_path)
+
+    if (
+        not build_config.force_rebuild
+        and viewer_path.is_file()
+        and manifest_path.is_file()
+        and _manifest_matches(manifest_path, fingerprint=fingerprint)
+    ):
+        return viewer_path
+
+    include_dir = training_source_root() / "include"
+    source_file = demo_source_root() / "src" / "fight_caves_native_viewer.c"
+    raylib_root = raylib_sdk_root()
+    raylib_include = raylib_root / "include"
+    raylib_archive = raylib_root / "lib" / "libraylib.a"
+
+    if not raylib_include.is_dir() or not raylib_archive.is_file():
+        raise RuntimeError(
+            "Raylib SDK bundle is missing. "
+            f"Expected include dir {raylib_include} and archive {raylib_archive}."
+        )
+    generated_assets_header.write_text(
+        _render_generated_viewer_assets_header(viewer_bundle),
+        encoding="utf-8",
+    )
+    header_image = viewer_header_image_path()
+    if not header_image.is_file():
+        raise RuntimeError(
+            "Native viewer header asset is missing. "
+            f"Expected {header_image}."
+        )
+    shutil.copy2(header_image, copied_header_asset)
+    shutil.copy2(generated_viewer_bundle_path(), copied_bundle_asset)
+    shutil.copy2(generated_viewer_manifest_path(), copied_bundle_manifest)
+    if copied_sprites_root.exists():
+        shutil.rmtree(copied_sprites_root)
+    shutil.copytree(generated_viewer_sprites_root(), copied_sprites_root)
+    if not sys.platform.startswith("linux"):
+        raise RuntimeError(
+            f"DV1 native viewer build is currently implemented for Linux only, got {sys.platform!r}."
+        )
+
+    command = [
+        "cc",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-DPLATFORM_DESKTOP",
+        "-I",
+        str(include_dir),
+        "-I",
+        str(raylib_include),
+        "-I",
+        str(output_dir),
+        "-o",
+        str(viewer_path),
+        str(source_file),
+        "-L",
+        str(output_dir),
+        "-Wl,-rpath,$ORIGIN",
+        "-lfight_caves_native_runtime",
+        str(raylib_archive),
+        "-lm",
+        "-lpthread",
+        "-ldl",
+        "-lrt",
+        "-lX11",
+    ]
+    command.extend(_linux_raylib_extra_link_flags())
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Native debug viewer build failed.\n"
+            f"Command: {' '.join(command)}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "fingerprint": fingerprint,
+                "viewer_path": str(viewer_path),
+                "runtime_library_path": str(runtime_library_path),
+                "generated_assets_header": str(generated_assets_header),
+                "copied_header_asset": str(copied_header_asset),
+                "copied_bundle_asset": str(copied_bundle_asset),
+                "copied_bundle_manifest": str(copied_bundle_manifest),
+                "copied_sprites_root": str(copied_sprites_root),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return viewer_path
+
+
 def _build_fingerprint(*, descriptor_bundle: dict[str, object]) -> str:
-    source_root = native_source_root()
+    source_root = training_source_root()
     hasher = hashlib.sha256()
     for path in (
         source_root / "include" / "fight_caves_native_runtime.h",
@@ -140,6 +304,225 @@ def _build_fingerprint(*, descriptor_bundle: dict[str, object]) -> str:
     for fixture_path in _trace_parity_fixture_paths():
         hasher.update(fixture_path.read_bytes())
     return hasher.hexdigest()
+
+
+def _viewer_build_fingerprint(*, runtime_library_path: Path) -> str:
+    hasher = hashlib.sha256()
+    hasher.update((training_source_root() / "include" / "fight_caves_native_runtime.h").read_bytes())
+    hasher.update((demo_source_root() / "src" / "fight_caves_native_viewer.c").read_bytes())
+    hasher.update((repo_root() / "fight_caves_rl" / "native_runtime" / "viewer_assets.py").read_bytes())
+    hasher.update(generated_viewer_bundle_path().read_bytes())
+    hasher.update(generated_viewer_manifest_path().read_bytes())
+    for sprite_path in sorted(generated_viewer_sprites_root().glob("*.png")):
+        hasher.update(sprite_path.read_bytes())
+    hasher.update(viewer_header_image_path().read_bytes())
+    hasher.update(runtime_library_path.read_bytes())
+    raylib_archive = raylib_sdk_root() / "lib" / "libraylib.a"
+    hasher.update(raylib_archive.read_bytes())
+    return hasher.hexdigest()
+
+def _render_generated_viewer_assets_header(viewer_bundle: dict[str, object]) -> str:
+    colors = viewer_bundle["terrain"]["palette"]
+    source_refs = viewer_bundle.get("source_refs", [])
+    terrain_tiles = viewer_bundle["terrain"]["tiles"]
+    hud_sprites = viewer_bundle.get("hud_sprite_files", {})
+    blocked_categories = viewer_bundle.get("blocked_categories", [])
+    cache_validation = viewer_bundle.get("cache_validation", {})
+
+    def color_literal(name: str) -> str:
+        values = colors[name]
+        if len(values) != 4:
+            raise RuntimeError(f"Viewer theme color {name!r} must have 4 RGBA entries.")
+        return f"{{{int(values[0])}, {int(values[1])}, {int(values[2])}, {int(values[3])}}}"
+
+    color_names = [
+        "lava_base",
+        "lava_mid",
+        "lava_hot",
+        "lava_ring",
+        "lava_ring_dim",
+        "basalt_floor",
+        "basalt_floor_highlight",
+        "basalt_wall",
+        "basalt_wall_edge",
+        "dais",
+        "dais_glow",
+        "ember",
+        "player_base",
+        "player_accent",
+        "npc_jad",
+        "npc_jad_telegraph",
+        "npc_healer",
+        "npc_ranger",
+        "npc_mage",
+        "npc_melee",
+        "hover",
+        "selection",
+        "spawn_pad",
+    ]
+    color_lines = [
+        f"static const Color FC_VIEWER_COLOR_{name.upper()} = {color_literal(name)};"
+        for name in color_names
+    ]
+
+    source_ref_lines = ",\n    ".join(json.dumps(str(value)) for value in source_refs)
+    terrain_kind_codes = {
+        "void": 0,
+        "floor": 1,
+        "lava": 2,
+    }
+    terrain_lines = ",\n    ".join(
+        (
+            "{"
+            f"{int(tile['runtime_x'])}, "
+            f"{int(tile['runtime_y'])}, "
+            f"{terrain_kind_codes[str(tile['kind'])]}, "
+            f"{{{int(tile['color'][0])}, {int(tile['color'][1])}, {int(tile['color'][2])}, {int(tile['color'][3])}}}"
+            "}"
+        )
+        for tile in terrain_tiles
+    )
+    sprite_lines = ",\n    ".join(
+        (
+            "{"
+            f"{json.dumps(str(name))}, "
+            f"{json.dumps(str(filename))}"
+            "}"
+        )
+        for name, filename in sorted(hud_sprites.items())
+    )
+    blocked_lines = ",\n    ".join(json.dumps(str(value)) for value in blocked_categories)
+
+    return (
+        "#ifndef FIGHT_CAVES_VIEWER_ASSETS_GENERATED_H\n"
+        "#define FIGHT_CAVES_VIEWER_ASSETS_GENERATED_H\n\n"
+        "typedef struct fc_viewer_terrain_tile_asset {\n"
+        "    int tile_x;\n"
+        "    int tile_y;\n"
+        "    int kind_code;\n"
+        "    Color color;\n"
+        "} fc_viewer_terrain_tile_asset;\n\n"
+        "typedef struct fc_viewer_lava_ring_asset {\n"
+        "    float tile_x;\n"
+        "    float tile_y;\n"
+        "    float radius_x;\n"
+        "    float radius_z;\n"
+        "    float phase;\n"
+        "    float speed;\n"
+        "} fc_viewer_lava_ring_asset;\n\n"
+        "typedef struct fc_viewer_prop_asset {\n"
+        "    int kind_code;\n"
+        "    float tile_x;\n"
+        "    float tile_y;\n"
+        "    float base_y;\n"
+        "    float size_x;\n"
+        "    float size_y;\n"
+        "    float size_z;\n"
+        "    const char* label;\n"
+        "} fc_viewer_prop_asset;\n\n"
+        "typedef struct fc_viewer_sprite_asset {\n"
+        "    const char* name;\n"
+        "    const char* filename;\n"
+        "} fc_viewer_sprite_asset;\n\n"
+        "enum {\n"
+        "    FC_VIEWER_TILE_VOID = 0,\n"
+        "    FC_VIEWER_TILE_FLOOR = 1,\n"
+        "    FC_VIEWER_TILE_LAVA = 2,\n"
+        "    FC_VIEWER_PROP_ROCK_SPIRE = 1,\n"
+        "    FC_VIEWER_PROP_LAVA_FORGE = 2,\n"
+        "    FC_VIEWER_PROP_BASALT_COLUMN = 3,\n"
+        "    FC_VIEWER_PROP_ROCK_ARCH = 4,\n"
+        "};\n\n"
+        f"static const char* FC_VIEWER_ASSET_BUNDLE_ID = {json.dumps(str(viewer_bundle['asset_id']))};\n"
+        f"static const char* FC_VIEWER_ASSET_DESCRIPTION = {json.dumps(str(viewer_bundle.get('description', '')))};\n"
+        f"static const int FC_VIEWER_ASSET_SOURCE_REF_COUNT = {len(source_refs)};\n"
+        f"static const char* FC_VIEWER_ASSET_SOURCE_REFS[{max(1, len(source_refs))}] = {{\n    {source_ref_lines if source_ref_lines else json.dumps('')}\n}};\n\n"
+        + "\n".join(color_lines)
+        + "\n\n"
+        f"static const fc_viewer_terrain_tile_asset FC_VIEWER_TERRAIN_TILES[{max(1, len(terrain_tiles))}] = {{\n    {terrain_lines if terrain_lines else '{0, 0, 0, {0, 0, 0, 255}}'}\n}};\n"
+        f"static const int FC_VIEWER_TERRAIN_TILE_COUNT = {len(terrain_tiles)};\n\n"
+        "static const fc_viewer_lava_ring_asset FC_VIEWER_LAVA_RINGS[1] = {{\n    {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}\n}};\n"
+        "static const int FC_VIEWER_LAVA_RING_COUNT = 0;\n\n"
+        "static const fc_viewer_prop_asset FC_VIEWER_PROPS[1] = {{\n    {0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, \"\"}\n}};\n"
+        "static const int FC_VIEWER_PROP_COUNT = 0;\n\n"
+        f"static const fc_viewer_sprite_asset FC_VIEWER_HUD_SPRITES[{max(1, len(hud_sprites))}] = {{\n    {sprite_lines if sprite_lines else '{\"\", \"\"}'}\n}};\n"
+        f"static const int FC_VIEWER_HUD_SPRITE_COUNT = {len(hud_sprites)};\n\n"
+        f"static const int FC_VIEWER_BLOCKED_CATEGORY_COUNT = {len(blocked_categories)};\n"
+        f"static const char* FC_VIEWER_BLOCKED_CATEGORIES[{max(1, len(blocked_categories))}] = {{\n    {blocked_lines if blocked_lines else json.dumps('')}\n}};\n"
+        f"static const int FC_VIEWER_OBJECT_ARCHIVE_ACCESSIBLE = {1 if cache_validation.get('object_archive_accessible') else 0};\n"
+        f"static const int FC_VIEWER_MAP_ARCHIVE_ACCESSIBLE = {1 if cache_validation.get('map_archive_accessible') else 0};\n"
+        f"static const char* FC_VIEWER_HEADER_IMAGE_FILENAME = {json.dumps(viewer_header_image_path().name)};\n"
+        f"static const char* FC_VIEWER_BUNDLE_FILENAME = {json.dumps(generated_viewer_bundle_path().name)};\n"
+        f"static const char* FC_VIEWER_BUNDLE_MANIFEST_FILENAME = {json.dumps(generated_viewer_manifest_path().name)};\n\n"
+        "#endif\n"
+    )
+
+
+def _linux_raylib_extra_link_flags() -> list[str]:
+    resolved: list[str] = []
+    for linker_name, candidates in (
+        (
+            "-lXrandr",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libXrandr.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libXrandr.so.2"),
+                Path("/lib/x86_64-linux-gnu/libXrandr.so"),
+                Path("/lib/x86_64-linux-gnu/libXrandr.so.2"),
+            ),
+        ),
+        (
+            "-lXi",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libXi.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libXi.so.6"),
+                Path("/lib/x86_64-linux-gnu/libXi.so"),
+                Path("/lib/x86_64-linux-gnu/libXi.so.6"),
+            ),
+        ),
+        (
+            "-lXxf86vm",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libXxf86vm.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libXxf86vm.so.1"),
+                Path("/lib/x86_64-linux-gnu/libXxf86vm.so"),
+                Path("/lib/x86_64-linux-gnu/libXxf86vm.so.1"),
+            ),
+        ),
+        (
+            "-lXinerama",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libXinerama.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libXinerama.so.1"),
+                Path("/lib/x86_64-linux-gnu/libXinerama.so"),
+                Path("/lib/x86_64-linux-gnu/libXinerama.so.1"),
+            ),
+        ),
+        (
+            "-lXcursor",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libXcursor.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libXcursor.so.1"),
+                Path("/lib/x86_64-linux-gnu/libXcursor.so"),
+                Path("/lib/x86_64-linux-gnu/libXcursor.so.1"),
+            ),
+        ),
+        (
+            "-lGL",
+            (
+                Path("/usr/lib/x86_64-linux-gnu/libGL.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libGL.so.1"),
+                Path("/lib/x86_64-linux-gnu/libGL.so"),
+                Path("/lib/x86_64-linux-gnu/libGL.so.1"),
+            ),
+        ),
+    ):
+        resolved_flag = linker_name
+        for candidate in candidates:
+            if candidate.is_file():
+                resolved_flag = str(candidate)
+                break
+        resolved.append(resolved_flag)
+    return resolved
 
 
 def _manifest_matches(manifest_path: Path, *, fingerprint: str) -> bool:

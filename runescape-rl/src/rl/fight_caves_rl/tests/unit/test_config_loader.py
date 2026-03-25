@@ -1,14 +1,13 @@
 from fight_caves_rl.utils.config import load_bootstrap_config
-from fight_caves_rl.utils.paths import source_root
+from fight_caves_rl.utils.paths import legacy_headless_env_root, legacy_rsps_root, repo_root
 
 
 def test_load_bootstrap_config_defaults_to_workspace_paths():
     config = load_bootstrap_config({})
-    source = source_root()
 
-    assert config.rl_repo == source / "training-env" / "rl"
-    assert config.sim_repo == source / "training-env" / "sim"
-    assert config.rsps_repo == source / "rsps"
+    assert config.rl_repo == repo_root()
+    assert config.sim_repo == legacy_headless_env_root()
+    assert config.rsps_repo == legacy_rsps_root()
     assert config.python_baseline == "3.11"
     assert config.pufferlib_distribution == "pufferlib-core"
     assert config.pufferlib_version == "3.0.17"

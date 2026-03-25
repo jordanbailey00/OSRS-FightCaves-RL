@@ -6,4 +6,4 @@ __pycache__/
 artifacts/
 runs/
 .env
-
+.native-build/

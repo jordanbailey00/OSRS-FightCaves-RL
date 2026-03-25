@@ -6,18 +6,20 @@ def test_required_root_docs_exist_and_contain_rewrite_anchor_terms():
     expected = {
         root / "README.md": (
             "C/C++ rewrite",
-            "runescape-rl/src/headless-env",
             "docs/plan.md",
+            "docs/pr_plan.md",
         ),
         root / "docs/plan.md": (
-            "FastFightCavesKernelRuntime",
-            "HeadlessObservationBuilder.kt",
+            "reference/legacy-headless-env",
+            "reference/legacy-rsps",
             "fight_caves_v2_reward_features_v1",
         ),
         root / "docs/pr_plan.md": (
-            "PR1: Contract Freeze And Golden Fixtures",
-            "PR7: Python `v2_fast` Integration Cutover",
-            "PR8: Performance Validation And Default Cutover",
+            "PR8a.5: Rollout Boundary And Tiny-Batch Throughput Reduction",
+            "DV3: Agent Attach, Replay, And Inspector Overlays",
+            "Repo Boundary Note",
+            "Performance-Track Pause",
+            "Viewer-Track Priority",
         ),
     }
 

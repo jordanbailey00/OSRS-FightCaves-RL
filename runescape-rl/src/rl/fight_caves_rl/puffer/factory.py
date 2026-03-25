@@ -29,7 +29,9 @@ from fight_caves_rl.envs.shared_memory_transport import INFO_PAYLOAD_MODE_MINIMA
 from fight_caves_rl.envs.vector_env import HeadlessBatchVecEnv, HeadlessBatchVecEnvConfig
 from fight_caves_rl.native_runtime import (
     ENV_BACKEND_NATIVE_PREVIEW,
-    NATIVE_RUNTIME_VECENV_GUARD_MESSAGE,
+    NativeFightCavesGymEnv,
+    NativeKernelVecEnv,
+    NativeKernelVecEnvConfig,
 )
 from fight_caves_rl.rewards.registry import resolve_reward_fn
 from fight_caves_rl.utils.paths import runtime_subdir
@@ -258,8 +260,6 @@ def make_vecenv(
     reward_config_id = str(config["reward_config"])
     curriculum = build_curriculum(str(config["curriculum_config"]))
     env_backend = str(env_config["env_backend"])
-    if env_backend == ENV_BACKEND_NATIVE_PREVIEW:
-        raise NotImplementedError(NATIVE_RUNTIME_VECENV_GUARD_MESSAGE)
     batch_config = HeadlessBatchVecEnvConfig(
         env_count=int(config["num_envs"]),
         account_name_prefix=str(env_config.get("account_name_prefix", "rl_vecenv")),
@@ -277,6 +277,49 @@ def make_vecenv(
         if backend == "embedded":
             return FastKernelVecEnv(
                 FastKernelVecEnvConfig(
+                    env_count=int(config["num_envs"]),
+                    account_name_prefix=batch_config.account_name_prefix,
+                    start_wave=batch_config.start_wave,
+                    ammo=batch_config.ammo,
+                    prayer_potions=batch_config.prayer_potions,
+                    sharks=batch_config.sharks,
+                    tick_cap=batch_config.tick_cap,
+                    include_future_leakage=batch_config.include_future_leakage,
+                    info_payload_mode=batch_config.info_payload_mode,
+                    instrumentation_enabled=batch_config.instrumentation_enabled,
+                    bootstrap=batch_config.bootstrap,
+                    reset_options_provider=curriculum.reset_overrides,
+                ),
+                reward_adapter=FastRewardAdapter.from_config_id(reward_config_id),
+            )
+        if backend == "subprocess":
+            return SubprocessHeadlessBatchVecEnv(
+                SubprocessHeadlessBatchVecEnvConfig(
+                    env_count=int(config["num_envs"]),
+                    reward_config_id=reward_config_id,
+                    curriculum_config_id=str(config["curriculum_config"]),
+                    env_backend=env_backend,
+                    transport_mode=str(
+                        env_config.get("subprocess_transport_mode", PIPE_PICKLE_TRANSPORT_MODE)
+                    ),
+                    worker_count=int(env_config.get("subprocess_worker_count", 1)),
+                    account_name_prefix=batch_config.account_name_prefix,
+                    start_wave=batch_config.start_wave,
+                    ammo=batch_config.ammo,
+                    prayer_potions=batch_config.prayer_potions,
+                    sharks=batch_config.sharks,
+                    tick_cap=batch_config.tick_cap,
+                    include_future_leakage=batch_config.include_future_leakage,
+                    info_payload_mode=batch_config.info_payload_mode,
+                    instrumentation_enabled=batch_config.instrumentation_enabled,
+                    bootstrap=batch_config.bootstrap,
+                )
+            )
+        raise ValueError(f"Unsupported vecenv backend: {backend!r}")
+    if env_backend == ENV_BACKEND_NATIVE_PREVIEW:
+        if backend == "embedded":
+            return NativeKernelVecEnv(
+                NativeKernelVecEnvConfig(
                     env_count=int(config["num_envs"]),
                     account_name_prefix=batch_config.account_name_prefix,
                     start_wave=batch_config.start_wave,
@@ -375,10 +418,18 @@ def build_policy_episode_env(
     reward_config_id: str,
     curriculum_config_id: str = "curriculum_disabled_v0",
 ) -> FightCavesPufferGymEnv:
-    if _resolve_env_backend(env_config) == ENV_BACKEND_V2_FAST:
+    env_backend = _resolve_env_backend(env_config)
+    if env_backend == ENV_BACKEND_V2_FAST:
         raise ValueError(
             "build_policy_episode_env does not support env_backend='v2_fast' in Phase 4.1. "
             "Use the vecenv-based trainer path until the single-env fast wrapper lands."
+        )
+    if env_backend == ENV_BACKEND_NATIVE_PREVIEW:
+        return NativeFightCavesGymEnv(
+            env_config=env_config,
+            reward_config_id=reward_config_id,
+            curriculum_config_id=curriculum_config_id,
+            env_index=0,
         )
     return FightCavesPufferGymEnv(
         env_config=env_config,

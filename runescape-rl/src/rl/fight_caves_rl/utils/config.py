@@ -8,7 +8,12 @@ from fight_caves_rl.manifests.versions import (
     PUFFERLIB_BASELINE_DISTRIBUTION,
     PUFFERLIB_BASELINE_VERSION,
 )
-from fight_caves_rl.utils.paths import repo_root, runtime_subdir, source_root
+from fight_caves_rl.utils.paths import (
+    legacy_headless_env_root,
+    legacy_rsps_root,
+    repo_root,
+    runtime_subdir,
+)
 
 
 @dataclass(frozen=True)
@@ -87,7 +92,6 @@ def _normalize_wandb_target(
 def load_bootstrap_config(env: Mapping[str, str] | None = None) -> BootstrapConfig:
     env_map = env or environ
     rl_root = repo_root()
-    source = source_root()
     artifacts_root = runtime_subdir("artifacts", "training-env", "rl")
     wandb_entity, wandb_project = _normalize_wandb_target(
         entity_value=env_map.get("WANDB_ENTITY"),
@@ -95,8 +99,8 @@ def load_bootstrap_config(env: Mapping[str, str] | None = None) -> BootstrapConf
     )
     return BootstrapConfig(
         rl_repo=Path(env_map.get("RL_REPO", str(rl_root))),
-        sim_repo=Path(env_map.get("FIGHT_CAVES_RL_REPO", str(source / "src" / "headless-env"))),
-        rsps_repo=Path(env_map.get("RSPS_REPO", str(source / "src" / "rsps"))),
+        sim_repo=Path(env_map.get("FIGHT_CAVES_RL_REPO", str(legacy_headless_env_root()))),
+        rsps_repo=Path(env_map.get("RSPS_REPO", str(legacy_rsps_root()))),
         python_baseline=env_map.get("PYTHON_BASELINE", "3.11"),
         pufferlib_distribution=env_map.get(
             "PUFFERLIB_DISTRIBUTION",

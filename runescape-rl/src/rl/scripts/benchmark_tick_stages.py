@@ -5,7 +5,7 @@ Runs the v2 fast kernel environment and extracts per-stage timing data
 from GameLoop instrumentation.
 
 Usage:
-    cd training-env/rl
+    cd runescape-rl/src/rl
     python scripts/benchmark_tick_stages.py \\
         --config configs/benchmark/sps_decomposition_v0.yaml \\
         --output results/tick_stages.json

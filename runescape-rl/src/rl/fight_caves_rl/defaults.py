@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from fight_caves_rl.utils.paths import repo_root, source_root
+from fight_caves_rl.utils.paths import legacy_headless_env_root, repo_root
 
 DEFAULT_TRAIN_CONFIG_PATH = Path("configs/train/smoke_fast_v2.yaml")
 DEFAULT_VECENV_SMOKE_CONFIG_PATH = DEFAULT_TRAIN_CONFIG_PATH
@@ -36,7 +36,6 @@ class BackendSelection:
 
 
 def backend_selection_registry() -> dict[str, BackendSelection]:
-    source = source_root()
     rl_scripts = repo_root() / "scripts"
     return {
         DEMO_BACKEND_RSPS_HEADED: BackendSelection(
@@ -45,7 +44,7 @@ def backend_selection_registry() -> dict[str, BackendSelection]:
             default_mode="replay",
             entrypoint=str(rl_scripts / "run_headed_trace_replay.py"),
             selection_hint=(
-                "Use training-env/rl/scripts/run_demo_backend.py with the default backend "
+                "Use runescape-rl/src/rl/scripts/run_demo_backend.py with the default backend "
                 "or pass --backend rsps_headed."
             ),
         ),
@@ -53,9 +52,9 @@ def backend_selection_registry() -> dict[str, BackendSelection]:
             backend_id=DEMO_BACKEND_FIGHT_CAVES_DEMO_LITE,
             role="frozen headed fallback/reference path",
             default_mode="launch_reference",
-            entrypoint=f"{source}/training-env/sim ::fight-caves-demo-lite:run",
+            entrypoint=f"{legacy_headless_env_root()} ::fight-caves-demo-lite:run",
             selection_hint=(
-                "Use training-env/rl/scripts/run_demo_backend.py --backend fight_caves_demo_lite "
+                "Use runescape-rl/src/rl/scripts/run_demo_backend.py --backend fight_caves_demo_lite "
                 "--mode launch_reference."
             ),
         ),
@@ -65,7 +64,7 @@ def backend_selection_registry() -> dict[str, BackendSelection]:
             default_mode="replay",
             entrypoint=str(rl_scripts / "replay_eval.py"),
             selection_hint=(
-                "Use training-env/rl/scripts/run_demo_backend.py --backend oracle_v1 --mode replay."
+                "Use runescape-rl/src/rl/scripts/run_demo_backend.py --backend oracle_v1 --mode replay."
             ),
         ),
     }

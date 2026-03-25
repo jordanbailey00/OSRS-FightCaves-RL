@@ -9,6 +9,14 @@ extern "C" {
 #endif
 
 #define FC_NATIVE_ABI_VERSION 1
+#define FC_NATIVE_MAX_VISIBLE_TARGETS 8
+
+#define FC_NATIVE_SCENE_RECT_ARENA_BOUNDS 1
+#define FC_NATIVE_SCENE_RECT_SPAWN_NORTH_WEST 2
+#define FC_NATIVE_SCENE_RECT_SPAWN_SOUTH_WEST 3
+#define FC_NATIVE_SCENE_RECT_SPAWN_SOUTH 4
+#define FC_NATIVE_SCENE_RECT_SPAWN_SOUTH_EAST 5
+#define FC_NATIVE_SCENE_RECT_PLAYER_DAIS 6
 
 typedef struct fc_episode_config {
     int64_t seed;
@@ -55,6 +63,58 @@ typedef struct fc_visible_target {
     int jad_telegraph_state;
 } fc_visible_target;
 
+typedef struct fc_scene_rect {
+    int kind_code;
+    int min_tile_x;
+    int max_tile_x;
+    int min_tile_y;
+    int max_tile_y;
+    int tile_level;
+} fc_scene_rect;
+
+typedef struct fc_runtime_slot_snapshot {
+    int slot_index;
+    int initialized;
+    int64_t seed;
+    int wave;
+    int rotation;
+    int remaining;
+    int tick;
+    int steps;
+    int tile_x;
+    int tile_y;
+    int tile_level;
+    int hitpoints_current;
+    int hitpoints_max;
+    int prayer_current;
+    int prayer_max;
+    int run_energy;
+    int run_energy_max;
+    int running;
+    int protect_from_magic;
+    int protect_from_missiles;
+    int protect_from_melee;
+    int attack_locked;
+    int food_locked;
+    int drink_locked;
+    int combo_locked;
+    int busy_locked;
+    int sharks;
+    int prayer_potion_dose_count;
+    int ammo;
+    int tick_cap;
+    int force_invalid_state;
+    int slot_mode;
+    int core_trace_id;
+    int core_trace_record_index;
+    int terminal_code;
+    int terminated;
+    int truncated;
+    int jad_hit_resolve_outcome_code;
+    int visible_target_count;
+    fc_visible_target visible_targets[FC_NATIVE_MAX_VISIBLE_TARGETS];
+} fc_runtime_slot_snapshot;
+
 typedef struct fc_native_runtime fc_native_runtime;
 
 int fc_native_abi_version(void);
@@ -65,6 +125,8 @@ const char* fc_native_runtime_last_error(void);
 int fc_native_runtime_descriptor_count(const fc_native_runtime* runtime);
 const char* fc_native_runtime_descriptor_bundle_json(const fc_native_runtime* runtime);
 size_t fc_native_runtime_descriptor_bundle_json_size(const fc_native_runtime* runtime);
+int fc_native_runtime_scene_rect_count(void);
+const fc_scene_rect* fc_native_runtime_scene_rects(void);
 int fc_native_runtime_reset_batch(
     fc_native_runtime* runtime,
     const fc_episode_config* configs,
@@ -111,6 +173,11 @@ int fc_native_runtime_debug_snapshot_slots(
     fc_native_runtime* runtime,
     const int* slot_indices,
     int env_count
+);
+int fc_native_runtime_export_slot_snapshot(
+    const fc_native_runtime* runtime,
+    int slot_index,
+    fc_runtime_slot_snapshot* out
 );
 int fc_native_runtime_step_batch(
     fc_native_runtime* runtime,

@@ -192,7 +192,7 @@ extern const int fc_core_trace_tzkek_split_visible_alive[];
 #define FC_RESET_PRAYER_MAX 43
 #define FC_RESET_RUN_ENERGY 10000
 #define FC_RESET_RUN_ENERGY_MAX 10000
-#define FC_MAX_VISIBLE_TARGETS 8
+#define FC_MAX_VISIBLE_TARGETS FC_NATIVE_MAX_VISIBLE_TARGETS
 #define FC_PACKED_ACTION_WORD_COUNT 4
 #define FC_GENERIC_DEFAULT_TICK_CAP 20000
 #define FC_NPC_ID_TZTOK_JAD 11
@@ -251,6 +251,15 @@ enum {
     FC_JAD_HIT_RESOLVE_PENDING = 1,
     FC_JAD_HIT_RESOLVE_PROTECTED = 2,
     FC_JAD_HIT_RESOLVE_HIT = 3,
+};
+
+static const fc_scene_rect fc_scene_rects[] = {
+    {FC_NATIVE_SCENE_RECT_ARENA_BOUNDS, -24, 24, -24, 80, 0},
+    {FC_NATIVE_SCENE_RECT_SPAWN_NORTH_WEST, -18, -12, 14, 20, 0},
+    {FC_NATIVE_SCENE_RECT_SPAWN_SOUTH_WEST, -18, -12, -20, -14, 0},
+    {FC_NATIVE_SCENE_RECT_SPAWN_SOUTH, 2, 8, -20, -14, 0},
+    {FC_NATIVE_SCENE_RECT_SPAWN_SOUTH_EAST, 14, 20, -8, -2, 0},
+    {FC_NATIVE_SCENE_RECT_PLAYER_DAIS, -4, 4, -4, 4, 0},
 };
 
 typedef struct fc_xorwow_rng {
@@ -1439,6 +1448,14 @@ size_t fc_native_runtime_descriptor_bundle_json_size(const fc_native_runtime* ru
     return fc_descriptor_bundle_json_len;
 }
 
+int fc_native_runtime_scene_rect_count(void) {
+    return (int)(sizeof(fc_scene_rects) / sizeof(fc_scene_rects[0]));
+}
+
+const fc_scene_rect* fc_native_runtime_scene_rects(void) {
+    return fc_scene_rects;
+}
+
 int fc_native_runtime_reset_batch(
     fc_native_runtime* runtime,
     const fc_episode_config* configs,
@@ -1792,6 +1809,68 @@ int fc_native_runtime_debug_snapshot_slots(
             slot
         );
     }
+    fc_last_error[0] = '\0';
+    return 1;
+}
+
+int fc_native_runtime_export_slot_snapshot(
+    const fc_native_runtime* runtime,
+    int slot_index,
+    fc_runtime_slot_snapshot* out
+) {
+    const fc_slot_state* slot;
+    if (!fc_runtime_has_slots(runtime)) {
+        return 0;
+    }
+    if (!fc_validate_slot_index(runtime, slot_index)) {
+        return 0;
+    }
+    if (out == NULL) {
+        fc_set_error("slot snapshot output is required");
+        return 0;
+    }
+    slot = &runtime->slots[slot_index];
+    memset(out, 0, sizeof(*out));
+    out->slot_index = slot_index;
+    out->initialized = slot->initialized;
+    out->seed = slot->seed;
+    out->wave = slot->wave;
+    out->rotation = slot->rotation;
+    out->remaining = slot->remaining;
+    out->tick = slot->tick;
+    out->steps = slot->steps;
+    out->tile_x = slot->tile_x;
+    out->tile_y = slot->tile_y;
+    out->tile_level = slot->tile_level;
+    out->hitpoints_current = slot->hitpoints_current;
+    out->hitpoints_max = slot->hitpoints_max;
+    out->prayer_current = slot->prayer_current;
+    out->prayer_max = slot->prayer_max;
+    out->run_energy = slot->run_energy;
+    out->run_energy_max = slot->run_energy_max;
+    out->running = slot->running;
+    out->protect_from_magic = slot->protect_from_magic;
+    out->protect_from_missiles = slot->protect_from_missiles;
+    out->protect_from_melee = slot->protect_from_melee;
+    out->attack_locked = slot->attack_locked;
+    out->food_locked = slot->food_locked;
+    out->drink_locked = slot->drink_locked;
+    out->combo_locked = slot->combo_locked;
+    out->busy_locked = slot->busy_locked;
+    out->sharks = slot->sharks;
+    out->prayer_potion_dose_count = slot->prayer_potion_dose_count;
+    out->ammo = slot->ammo;
+    out->tick_cap = slot->tick_cap;
+    out->force_invalid_state = slot->force_invalid_state;
+    out->slot_mode = slot->slot_mode;
+    out->core_trace_id = slot->core_trace_id;
+    out->core_trace_record_index = slot->core_trace_record_index;
+    out->terminal_code = slot->terminal_code;
+    out->terminated = slot->terminated;
+    out->truncated = slot->truncated;
+    out->jad_hit_resolve_outcome_code = slot->jad_hit_resolve_outcome_code;
+    out->visible_target_count = slot->visible_target_count;
+    memcpy(out->visible_targets, slot->visible_targets, sizeof(slot->visible_targets));
     fc_last_error[0] = '\0';
     return 1;
 }

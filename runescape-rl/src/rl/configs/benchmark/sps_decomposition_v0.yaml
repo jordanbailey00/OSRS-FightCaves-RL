@@ -7,7 +7,7 @@
 #   Mode 4 — full public env step (wall clock)
 #
 # Usage:
-#   cd training-env/rl
+#   cd runescape-rl/src/rl
 #   python scripts/benchmark_sps_decomposition.py \
 #       --config configs/benchmark/sps_decomposition_v0.yaml \
 #       --output results/sps_decomposition.json
