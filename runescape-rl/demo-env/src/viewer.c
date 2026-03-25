@@ -635,23 +635,57 @@ int main(void) {
     v.camera3d.fovy = 45.0f;
     v.camera3d.projection = CAMERA_PERSPECTIVE;
 
+    /* Resolve asset root — try multiple strategies to find demo-env/assets/ */
+    char asset_root[512] = "";
+    {
+        /* Strategy 1: CWD/demo-env/assets/ (run from project root) */
+        const char* candidates[] = {
+            "demo-env/assets",
+            "../demo-env/assets",           /* run from build/ */
+            "../../demo-env/assets",         /* run from build/demo-env/ */
+        };
+        for (int i = 0; i < 3; i++) {
+            char test[512];
+            snprintf(test, 512, "%s/fight_caves_npcs.models", candidates[i]);
+            if (FileExists(test)) {
+                snprintf(asset_root, 512, "%s", candidates[i]);
+                break;
+            }
+        }
+        /* Strategy 2: relative to executable path */
+        if (asset_root[0] == '\0') {
+            const char* app_dir = GetApplicationDirectory();
+            char test[512];
+            snprintf(test, 512, "%s../../demo-env/assets/fight_caves_npcs.models", app_dir);
+            if (FileExists(test)) {
+                snprintf(asset_root, 512, "%s../../demo-env/assets", app_dir);
+            }
+        }
+        fprintf(stderr, "Asset root: %s%s\n", asset_root[0] ? asset_root : "(NOT FOUND)",
+                asset_root[0] ? "" : " — run from project root or set CWD");
+    }
+
     /* Load NPC models */
-    v.model_cache = fc_model_cache_load("demo-env/assets/fight_caves_npcs.models");
-    if (!v.model_cache)
-        v.model_cache = fc_model_cache_load("../demo-env/assets/fight_caves_npcs.models");
+    {
+        char path[512];
+        snprintf(path, 512, "%s/fight_caves_npcs.models", asset_root);
+        v.model_cache = fc_model_cache_load(path);
+    }
 
     /* Load terrain mesh */
-    v.terrain = fc_terrain_load("demo-env/assets/fight_caves.terrain");
-    if (!v.terrain.loaded)
-        v.terrain = fc_terrain_load("../demo-env/assets/fight_caves.terrain");
+    {
+        char path[512];
+        snprintf(path, 512, "%s/fight_caves.terrain", asset_root);
+        v.terrain = fc_terrain_load(path);
+    }
 
     /* Load sprites */
     {
-        const char* dirs[] = {"demo-env/assets/sprites/", "../demo-env/assets/sprites/"};
-        char path[256];
+        char sprite_dir[512];
+        snprintf(sprite_dir, 512, "%s/sprites/", asset_root);
+        char path[512];
 
-        #define LOAD_TEX(var, name) \
-            for (int d=0; d<2 && !(var).id; d++) { snprintf(path,256,"%s%s",dirs[d],name); var=LoadTexture(path); }
+        #define LOAD_TEX(var, name) do { snprintf(path,512,"%s%s",sprite_dir,name); var=LoadTexture(path); } while(0)
 
         LOAD_TEX(v.pray_melee_tex, "protect_melee_on.png");
         LOAD_TEX(v.pray_range_tex, "protect_missiles_on.png");
