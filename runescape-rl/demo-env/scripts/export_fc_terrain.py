@@ -317,30 +317,37 @@ def build_terrain_mesh(reader, underlays, overlays):
 
                 tile = tiles[0][lx][ly]
 
-                # Get color — use Fight Caves specific mapping
-                # Known FC floor types from cache analysis:
-                #   underlay 72 (idx 71): rgb=#030303 (black rock walls)
-                #   underlay 118 (idx 117): rgb=#752222 (dark red lava rock)
-                #   overlay 28466: FC lava crack overlay (orange-red glow)
-                #   overlay 10802: FC secondary overlay (darker lava)
-                #   no floor: void/border → black
-                rgb = 0x000000  # default: void black
+                # Fight Caves terrain color mapping
+                # Cache data: underlay 72 (tex 521) = rock/wall, underlay 118 (tex 181) = lava floor
+                # Overlays 28466, 10802 = lava crack detail (not in our overlay table)
+                # Real FC look requires texture bitmaps — these are approximated vertex colors
+                #
+                # Color scheme to match FC reference:
+                # - Rock/wall tiles: dark brownish-red (the cave floor base)
+                # - Lava floor tiles: darker reddish-brown (between cracks)
+                # - Lava crack overlays: bright orange-red (the glowing cracks)
+                # - No-floor tiles: very dark brown (border/void, not black)
+                rgb = 0x1A0A05  # default: very dark brown (border)
+
                 if tile.overlay_id > 0:
                     ov = overlays.get(tile.overlay_id - 1)
                     if ov and ov.rgb != 0:
                         rgb = ov.rgb
                     elif tile.overlay_id == 28466:
-                        # FC primary overlay: lava cracks — orange-red glow
-                        rgb = 0xC03010
+                        rgb = 0xD04010  # lava crack glow (bright orange-red)
                     elif tile.overlay_id == 10802:
-                        # FC secondary overlay: darker lava border
-                        rgb = 0x401008
+                        rgb = 0x802010  # secondary lava (medium red)
                     else:
-                        rgb = 0x501510  # generic dark red fallback for unknown FC overlays
-                elif tile.underlay_id > 0:
-                    ul = underlays.get(tile.underlay_id - 1)
-                    if ul and ul.rgb != 0:
-                        rgb = ul.rgb
+                        rgb = 0x601810
+
+                if tile.underlay_id > 0:
+                    # Underlay provides base color; overlay overrides if present
+                    if tile.underlay_id == 72:
+                        if tile.overlay_id == 0:
+                            rgb = 0x2A1008  # dark rock floor (was #030303)
+                    elif tile.underlay_id == 118:
+                        if tile.overlay_id == 0:
+                            rgb = 0x501818  # lava rock base (dark red-brown)
 
                 r = (rgb >> 16) & 0xFF
                 g = (rgb >> 8) & 0xFF

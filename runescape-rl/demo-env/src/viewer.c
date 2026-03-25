@@ -807,7 +807,7 @@ int main(void) {
 
         /* Render */
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(CLITERAL(Color){10, 8, 6, 255});  /* very dark brown, not black */
 
         /* Single 3D render path — always uses exported assets when loaded */
         draw_scene(&v);
