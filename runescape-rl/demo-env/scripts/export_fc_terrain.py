@@ -354,9 +354,9 @@ def build_terrain_mesh(reader, underlays, overlays):
 
                 fx, fy = float(wx), float(wy)
 
-                # Two triangles per quad
-                for tri in [(fx, h0, fy, fx+1, h1, fy, fx, h2, fy+1),
-                            (fx+1, h1, fy, fx+1, h3, fy+1, fx, h2, fy+1)]:
+                # Two triangles per quad (CCW winding for +Y normals)
+                for tri in [(fx, h0, fy, fx, h2, fy+1, fx+1, h1, fy),
+                            (fx+1, h1, fy, fx, h2, fy+1, fx+1, h3, fy+1)]:
                     for vi in range(0, 9, 3):
                         verts.extend([tri[vi], tri[vi+1], tri[vi+2]])
                         colors.extend([r, g, b, 255])
