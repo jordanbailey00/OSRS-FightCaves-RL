@@ -311,8 +311,8 @@ def build_terrain_mesh(reader, underlays, overlays):
                 wx = base_x + lx - FC_BASE_X
                 wy = base_y + ly - FC_BASE_Y
 
-                # Skip tiles outside our arena (0..63 x 0..63 ish)
-                if wx < -5 or wx > 200 or wy < -5 or wy > 200:
+                # Crop to fc_core arena bounds (0..63 x 0..63)
+                if wx < 0 or wx >= 63 or wy < 0 or wy >= 63:
                     continue
 
                 tile = tiles[0][lx][ly]

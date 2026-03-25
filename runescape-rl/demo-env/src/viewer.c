@@ -603,6 +603,22 @@ static void draw_panel(ViewerState* v) {
         text_s(buf,x,cy,10,CLITERAL(Color){130,130,140,255});
     }
 
+    /* Action feedback banner */
+    if (v->pending_prayer_action || v->pending_eat_action || v->pending_drink_action) {
+        char action_buf[64] = "Queued: ";
+        if (v->pending_prayer_action) {
+            const char* pnames[] = {"","Off","Magic","Range","Melee"};
+            int pi = v->pending_prayer_action;
+            if (pi >= 0 && pi <= 4) strcat(action_buf, pnames[pi]);
+            strcat(action_buf, " ");
+        }
+        if (v->pending_eat_action) strcat(action_buf, "Eat ");
+        if (v->pending_drink_action) strcat(action_buf, "Drink ");
+        int banner_y = WINDOW_H - 36;
+        DrawRectangle(px+4, banner_y, pw-8, 14, CLITERAL(Color){0,80,0,200});
+        text_s(action_buf, px+8, banner_y+2, 10, COL_TEXT_YELLOW);
+    }
+
     /* Status bar at bottom */
     snprintf(buf,128,"%s %dtps Tick:%d %s",v->paused?"PAUSED":"RUN",v->ticks_per_sec,v->state.tick,
              v->use_3d_models?"[3D]":"[2D]");
@@ -627,17 +643,36 @@ static void draw_header(ViewerState* v) {
 
 static void draw_debug(ViewerState* v) {
     if (!v->show_debug) return;
-    int x=10, y=HEADER_HEIGHT+6; char buf[128];
-    DrawRectangle(5,y-2,280,60,CLITERAL(Color){0,0,0,160});
-    snprintf(buf,128,"Hash:0x%08x Actions:[%d %d %d %d %d]",v->last_hash,
+    int x=10, y=HEADER_HEIGHT+6; char buf[256];
+    DrawRectangle(5,y-2,340,90,CLITERAL(Color){0,0,0,180});
+    snprintf(buf,256,"Hash:0x%08x  Actions:[%d %d %d %d %d]",v->last_hash,
              v->actions[0],v->actions[1],v->actions[2],v->actions[3],v->actions[4]);
     text_s(buf,x,y,10,CLITERAL(Color){180,180,190,255}); y+=14;
-    snprintf(buf,128,"Terminal:%d DMG:%d/%d Models:%d",v->state.terminal,
+    snprintf(buf,256,"Terminal:%d DMG:%d/%d Models:%d Terrain:%s",v->state.terminal,
              v->state.damage_dealt_this_tick/10,v->state.damage_taken_this_tick/10,
-             v->model_cache?v->model_cache->count:0);
+             v->model_cache?v->model_cache->count:0,
+             v->terrain.loaded?"loaded":"MISSING");
     text_s(buf,x,y,10,CLITERAL(Color){180,180,190,255}); y+=14;
-    snprintf(buf,128,"Timers: atk=%d food=%d pot=%d",v->state.player.attack_timer,
-             v->state.player.food_timer,v->state.player.potion_timer);
+    snprintf(buf,256,"Player:(%d,%d) Timers: atk=%d food=%d pot=%d",
+             v->state.player.x, v->state.player.y,
+             v->state.player.attack_timer,v->state.player.food_timer,v->state.player.potion_timer);
+    text_s(buf,x,y,10,CLITERAL(Color){180,180,190,255}); y+=14;
+
+    /* Queued UI actions */
+    const char* pray_q = v->pending_prayer_action ? "QUEUED" : "-";
+    const char* eat_q = v->pending_eat_action ? "QUEUED" : "-";
+    const char* drink_q = v->pending_drink_action ? "QUEUED" : "-";
+    snprintf(buf,256,"Queued: pray=%s eat=%s drink=%s  Sprites:%s",
+             pray_q, eat_q, drink_q, v->sprites_loaded?"yes":"no");
+    text_s(buf,x,y,10,CLITERAL(Color){180,180,190,255}); y+=14;
+
+    /* Active prayer */
+    const char* ap = "None";
+    if (v->state.player.prayer==PRAYER_PROTECT_MELEE) ap="Melee";
+    else if (v->state.player.prayer==PRAYER_PROTECT_RANGE) ap="Range";
+    else if (v->state.player.prayer==PRAYER_PROTECT_MAGIC) ap="Magic";
+    snprintf(buf,256,"Prayer:%s Sharks:%d Doses:%d",
+             ap, v->state.player.sharks_remaining, v->state.player.prayer_doses_remaining);
     text_s(buf,x,y,10,CLITERAL(Color){180,180,190,255});
 }
 
@@ -823,8 +858,11 @@ int main(void) {
         draw_header(&v);
         draw_panel(&v);
         draw_debug(&v);
-        DrawText("Space:pause Right:step Up/Down:speed R:reset D:debug T:2D/3D Q:quit Scroll:zoom RightDrag:orbit",
+        DrawText("Space:pause Right:step Up/Down:speed R:reset D:debug T:2D/3D Q:quit Scroll:zoom RightDrag:orbit | Click prayers/items in panel",
                  10, WINDOW_H-12, 9, CLITERAL(Color){80,80,90,255});
+        /* Mode indicator */
+        text_s("Demo mode (random actions + UI clicks)  |  Move/Attack: not yet implemented (PR9b)",
+               10, WINDOW_H-24, 9, CLITERAL(Color){120,100,60,255});
 
         EndDrawing();
     }

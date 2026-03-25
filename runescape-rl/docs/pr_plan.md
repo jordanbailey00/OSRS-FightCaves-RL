@@ -405,14 +405,24 @@ Both scripts require the OSRS cache at `runescape-rl/reference/legacy-headless-e
 
 ### PR 9a: Viewer Parity — Terrain, Player Composite, Tabbed UI, Item Sprites — IN PROGRESS
 
-**Delivered so far**:
-- `demo-env/scripts/export_fc_terrain.py`: Terrain exporter with VoidPS floor definition opcode handling (underlays: opcodes 1-5, overlays: opcodes 1-14). Successfully decoded 159 underlays + 235 overlays from cache.
-- `demo-env/assets/fight_caves.terrain`: Exported TERR binary (95,256 vertices, 31,752 triangles, 1.5MB). 4 FC map regions (37,79), (37,80), (38,80), (39,80).
-- `demo-env/src/fc_terrain_loader.h`: TERR binary loader, creates Raylib Mesh+Model.
-- Terrain mesh integrated into 3D viewer mode — `DrawModel` replaces per-tile cubes when terrain is loaded.
+---
+
+#### PR 9a.1: Stabilization / Correctness Pass — IN PROGRESS
+
+**Problem found**: Terrain exported at 192x128 tiles (full 4-region OSRS area) but fc_core arena is 64x64 tiles. Terrain mesh was 3x too wide and not aligned with entity positions. Entities rendered at (0-63, 0, 0-63) but terrain spanned (0-191, height, 0-127).
+
+**Root cause**: Coordinate system mismatch in `export_fc_terrain.py`. The exporter cropped at `wx < -5 or wx > 200` (full region bounds) instead of `wx < 0 or wx >= 63` (fc_core arena bounds).
+
+**Fix**: Re-exported terrain cropped to 64x64 matching fc_core arena. New terrain: 23,814 vertices (down from 95,256), X=[0,63] Z=[0,63].
+
+**Delivered so far (PR9a total)**:
+- `demo-env/scripts/export_fc_terrain.py`: Terrain exporter with VoidPS floor definition opcode handling. Now correctly cropped to fc_core 64x64 arena.
+- `demo-env/assets/fight_caves.terrain`: TERR binary, 23,814 vertices, 7,938 triangles, 381KB. Coordinates [0,63]x[0,63] aligned with fc_core arena.
+- `demo-env/src/fc_terrain_loader.h`: TERR binary loader.
+- Terrain mesh integrated into 3D mode — entities and terrain share the same coordinate space.
 - **Tabbed UI panel**: 3 tabs (Inventory, Prayer, Combat) with tab switching and exported tab icon sprites.
-- **Inventory tab**: Shark slots (20) and prayer potion slots (8) with colored icons, dose counters. Clicking a shark slot queues `FC_EAT_SHARK`. Clicking a potion slot queues `FC_DRINK_PRAYER_POT`. Actions routed through canonical action heads.
-- **Prayer tab**: 3 protection prayers with exported on/off icon sprites, active highlight, clickable to toggle. Click queues the appropriate `FC_PRAYER_*` action through canonical interface.
+- **Inventory tab**: Shark slots (20) and prayer potion slots (8). Clicking queues EAT/DRINK actions.
+- **Prayer tab**: 3 protection prayers with exported on/off icon sprites, clickable to toggle.
 - **Combat tab**: Damage dealt/taken, food/potion usage, position, cooldown timers.
 - Off-state prayer sprites (`protect_*_off.png`) loaded alongside on-state versions.
 
