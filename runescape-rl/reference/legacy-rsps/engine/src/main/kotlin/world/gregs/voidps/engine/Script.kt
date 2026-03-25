@@ -28,13 +28,21 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 interface Script : Spawn, Despawn, Skills, Moved, VariableApi, TimerApi, Operation, Approachable, InterfaceApi, Death, SettingsReload, Dialogues, Items, InventoryApi, Hunt, Teleport, CombatApi {
     companion object {
+        var loading: Boolean = true
 
         private val logger = InlineLogger()
         private val scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
 
         fun launch(block: suspend CoroutineScope.() -> Unit) {
-            scope.launch(errorHandler, block = block)
+            scope.launch(errorHandler) {
+                try {
+                    block()
+                } catch (e: Exception) {
+                    logger.error(e) { "Error in script handler." }
+                }
+            }
         }
+
         private val errorHandler = CoroutineExceptionHandler { _, throwable ->
             if (throwable !is CancellationException) {
                 logger.warn(throwable) { "Error in script handler." }
@@ -66,6 +74,11 @@ interface Script : Spawn, Despawn, Skills, Moved, VariableApi, TimerApi, Operati
             for (closable in interfaces) {
                 closable.close()
             }
+            loading = true
+        }
+
+        fun checkLoading() {
+            require(loading) { "Can't add event handler after startup. Make sure your event handlers aren't inside one another." }
         }
     }
 }

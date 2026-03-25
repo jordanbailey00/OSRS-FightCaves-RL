@@ -1,12 +1,14 @@
 package content.skill.fletching
 
 import content.entity.player.dialogue.type.makeAmount
+import world.gregs.voidps.cache.definition.Params
 import world.gregs.voidps.engine.Script
 import world.gregs.voidps.engine.client.message
 import world.gregs.voidps.engine.data.definition.EnumDefinitions
 import world.gregs.voidps.engine.entity.character.player.Player
 import world.gregs.voidps.engine.entity.character.player.chat.ChatType
 import world.gregs.voidps.engine.entity.character.player.skill.Skill
+import world.gregs.voidps.engine.entity.character.player.skill.exp.exp
 import world.gregs.voidps.engine.entity.character.player.skill.level.Level.has
 import world.gregs.voidps.engine.inv.inventory
 import world.gregs.voidps.engine.inv.transact.operation.AddItem.add
@@ -18,7 +20,7 @@ class FletchUnfinished : Script {
     init {
         @Suppress("UNCHECKED_CAST")
         itemOnItem("knife", "*logs*") { _, toItem ->
-            val displayItems = toItem.def.extras?.get("fletchables") as? List<String> ?: return@itemOnItem
+            val displayItems = toItem.def.params?.get(Params.FLETCHABLES) as? List<String> ?: return@itemOnItem
             weakQueue("fletching_make_dialog") {
                 val (selected, amount) = makeAmount(
                     displayItems,
@@ -60,7 +62,7 @@ class FletchUnfinished : Script {
             val itemCreated = getFletched(addItem)
             message("You carefully cut the wood into $itemCreated.", ChatType.Game)
             val xp = EnumDefinitions.int("unf_fletching_xp", addItem)
-            experience.add(Skill.Fletching, xp / 10.0)
+            exp(Skill.Fletching, xp / 10.0)
             anim("fletching_log")
             fletch(addItem, removeItem, amount - 1)
         }

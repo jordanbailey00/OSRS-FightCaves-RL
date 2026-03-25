@@ -400,7 +400,7 @@ def = 23
 style = "stab"
 max_hit_melee = 30
 respawn_delay = 90
-drop_table = "unicorn"
+drop_table = "black_unicorn"
 examine = "A unicorn with a blackened heart."
 
 [svidi]
@@ -436,8 +436,9 @@ id = 2437
 [general_khazard_rellekka_2]
 id = 5566
 
-[erjolf_rellekka_2]
+[erjolf]
 id = 7462
+dialogue = "child"
 
 [larry_rellekka_3]
 id = 5425

@@ -9,7 +9,6 @@ import world.gregs.voidps.engine.data.SaveQueue
 import world.gregs.voidps.engine.data.Settings
 import world.gregs.voidps.engine.data.Storage
 import world.gregs.voidps.engine.data.definition.AccountDefinitions
-import world.gregs.voidps.engine.data.copy
 import world.gregs.voidps.engine.entity.World
 import world.gregs.voidps.engine.entity.character.player.Player
 import world.gregs.voidps.engine.entity.character.player.name
@@ -56,18 +55,14 @@ class PlayerAccountLoader(
                 client.disconnect(Response.GAME_UPDATE)
                 return null
             }
-            val existing = storage.load(username)
-            var player = existing?.toPlayer()
-            val createdNew = player == null
+            var player = storage.load(username)?.toPlayer()
             if (player == null) {
                 if (!Settings["development.accountCreation", false]) {
                     client.disconnect(Response.INVALID_CREDENTIALS)
                     return null
                 }
                 player = accounts.create(username, passwordHash)
-                persist(player)
             }
-            logger.info { "login_load username=$username save_present=${existing != null} created_new=$createdNew" }
             logger.info { "Player $username loaded and queued for login." }
             connect(player, client, displayMode)
             return player.instructions
@@ -78,27 +73,17 @@ class PlayerAccountLoader(
         }
     }
 
-    private fun persist(player: Player) {
-        storage.save(listOf(player.copy()))
-        logger.info { "login_persist_new_account username=${player.accountName}" }
-    }
-
     suspend fun connect(player: Player, client: Client, displayMode: Int = 0, viewport: Boolean = true) {
         if (!accounts.setup(player, client, displayMode, viewport)) {
             logger.warn { "Error setting up account" }
             client.disconnect(Response.WORLD_FULL)
             return
         }
-        logger.info { "login_connect_setup username=${player.accountName} viewport=$viewport display_mode=$displayMode" }
         withContext(gameContext) {
-            logger.info { "login_connect_queue_wait username=${player.accountName}" }
             queue.await()
-            logger.info { "login_connect_queue_ready username=${player.accountName}" }
             logger.info { "${if (viewport) "Player" else "Bot"} logged in ${player.accountName} index ${player.index}." }
             client.login(player.name, player.index, player.rights.ordinal, member = World.members, membersWorld = World.members)
-            logger.info { "login_connect_client_login_sent username=${player.accountName} index=${player.index}" }
             accounts.spawn(player, client)
-            logger.info { "login_connect_spawn_complete username=${player.accountName} tile=${player.tile}" }
             AuditLog.event(player, "connected", player.tile)
         }
     }

@@ -1,7 +1,6 @@
 package content.area.karamja.tzhaar_city
 
 import com.github.michaelbull.logging.InlineLogger
-import content.entity.combat.dead
 import content.entity.combat.hit.damage
 import content.entity.combat.killer
 import content.entity.player.dialogue.Angry
@@ -52,10 +51,6 @@ import java.util.concurrent.TimeUnit
 class TzhaarFightCave(
     val accountManager: AccountManager,
 ) : Script {
-    companion object {
-        private const val DEMO_DEATH_RESET_POLL_TICKS = 1
-        private const val DEMO_DEATH_RESET_MAX_WAIT_TICKS = 50
-    }
 
     val centre = Tile(2400, 5088)
     val entrance = Tile(2413, 5117)
@@ -63,7 +58,6 @@ class TzhaarFightCave(
     val region = Region(9551)
 
     val waves = TzhaarFightCaveWaves()
-    private val episodeInitializer = FightCaveEpisodeInitializer(this)
 
     val logger = InlineLogger()
 
@@ -77,11 +71,6 @@ class TzhaarFightCave(
          */
 
         objectOperate("Enter", "cave_entrance_fight_cave") {
-            if (isFightCavesDemoProfile(this)) {
-                FightCaveDemoObservability.recordEntry(this, cause = "object_enter")
-                resetDemoEpisode(this, cause = "object_enter")
-                return@objectOperate
-            }
             if (!isAdmin() && hasClock("fight_cave_cooldown", epochSeconds())) {
                 val seconds = remaining("fight_cave_cooldown", epochSeconds())
                 val minutes = seconds / 60
@@ -106,11 +95,6 @@ class TzhaarFightCave(
         }
 
         objectOperate("Enter", "cave_exit_fight_cave") {
-            if (isFightCavesDemoProfile(this)) {
-                FightCaveDemoObservability.recordLeave(this, cause = "exit_object", wave = wave)
-                scheduleDemoEpisodeReset(this, cause = "exit_object")
-                return@objectOperate
-            }
             choice("Really leave?") {
                 option("Yes - really leave.") { leave(wave) }
                 option("No, I'll stay.")
@@ -118,13 +102,6 @@ class TzhaarFightCave(
         }
 
         exited("tzhaar_fight_cave_multi_area") {
-            if (isFightCavesDemoProfile(this) && !get("logged_out", false)) {
-                message("Fight Caves demo resets if you leave the cave.")
-                FightCaveDemoObservability.recordWorldAccessViolation(this, cause = "area_exit", tile = tile)
-                AuditLog.event(this, "fight_cave_demo_world_access_violation", "area_exit", tile)
-                scheduleDemoEpisodeReset(this, cause = "area_exit")
-                return@exited
-            }
             close("tzhaar_fight_cave")
             clearInstance()
             if (get("logged_out", false)) {
@@ -197,11 +174,6 @@ class TzhaarFightCave(
          */
 
         playerSpawn {
-            if (isFightCavesDemoProfile(this)) {
-                FightCaveDemoObservability.recordEntry(this, cause = "player_spawn")
-                resetDemoEpisode(this, cause = "player_spawn")
-                return@playerSpawn
-            }
             if (wave == -1) {
                 return@playerSpawn
             }
@@ -227,12 +199,6 @@ class TzhaarFightCave(
                 return@playerDeath
             }
             it.dropItems = false
-            if (isFightCavesDemoProfile(this)) {
-                FightCaveDemoObservability.recordLeave(this, cause = "player_death", wave = wave)
-                it.teleport = centre.add(instanceOffset())
-                scheduleDemoDeathReset(this@playerDeath)
-                return@playerDeath
-            }
             it.teleport = outside
             softQueue("fire_cave_death", 3) {
                 leave(wave)
@@ -241,13 +207,6 @@ class TzhaarFightCave(
     }
 
     fun Player.leave(wave: Int, defeatedJad: Boolean = false) {
-        if (isFightCavesDemoProfile(this)) {
-            val cause = if (defeatedJad) "cave_complete" else "leave"
-            FightCaveDemoObservability.recordLeave(this, cause = cause, wave = wave)
-            AuditLog.event(this, "fight_cave_demo_recycle", cause, wave)
-            scheduleDemoEpisodeReset(this, cause = cause)
-            return
-        }
         clear("fight_cave_wave")
         start("fight_cave_cooldown", TimeUnit.MINUTES.toSeconds(2).toInt(), epochSeconds())
         tele(outside)
@@ -291,8 +250,7 @@ class TzhaarFightCave(
             Script.launch { accountManager.logout(player, false) }
             return
         }
-        val skipIntroDialogue = player["headless_episode", false] || player["fight_cave_demo_episode", false]
-        if (start && wave != 63 && !skipIntroDialogue) {
+        if (start && wave != 63) {
             player.queue("fight_cave_warning") {
                 player.npc<Angry>("tzhaar_mej_jal", "You're on your own now JalYt, prepare to fight for your life!")
             }
@@ -303,7 +261,7 @@ class TzhaarFightCave(
             player["fight_cave_rotation"] = rotation
             player["fight_cave_start_time"] = start
             AuditLog.event(player, "start_fight_cave", start, wave, rotation)
-        } else if (wave == 63 && !skipIntroDialogue) {
+        } else if (wave == 63) {
             player.queue("fight_cave_warning") {
                 player.npc<Angry>("tzhaar_mej_jal", "Look out, here comes TzTok-Jad!")
             }
@@ -349,49 +307,6 @@ class TzhaarFightCave(
         npc.interactPlayer(target, "Attack")
         if (id == "tztok_jad") {
             npc["healed"] = true
-        }
-    }
-
-    private fun isFightCavesDemoProfile(player: Player): Boolean = player["fight_cave_demo_profile", false]
-
-    private fun demoEpisodeConfig(): FightCaveEpisodeConfig {
-        val seed = Settings.getOrNull("fightCave.demo.seed")?.toLongOrNull() ?: System.currentTimeMillis()
-        return FightCaveEpisodeConfig(
-            seed = seed,
-            startWave = Settings["fightCave.startWave", 1].coerceIn(1..63),
-            ammo = Settings["fightCave.demo.ammo", 1000].coerceAtLeast(1),
-            prayerPotions = Settings["fightCave.demo.prayerPotions", 8].coerceAtLeast(0),
-            sharks = Settings["fightCave.demo.sharks", 20].coerceAtLeast(0),
-        )
-    }
-
-    private fun resetDemoEpisode(player: Player, cause: String) {
-        val config = demoEpisodeConfig()
-        val state = episodeInitializer.reset(player, config)
-        FightCaveDemoObservability.recordReset(player, cause, config, state)
-        AuditLog.event(player, "fight_cave_demo_reset", cause, state.seed, state.wave, state.rotation, state.remaining, state.instanceId)
-    }
-
-    private fun scheduleDemoDeathReset(player: Player) {
-        player.softQueue("fight_cave_demo_death_reset", DEMO_DEATH_RESET_POLL_TICKS) {
-            var waitedTicks = 0
-            while ((player.dead || player.queue.contains("death")) && waitedTicks < DEMO_DEATH_RESET_MAX_WAIT_TICKS) {
-                pause(DEMO_DEATH_RESET_POLL_TICKS)
-                waitedTicks += DEMO_DEATH_RESET_POLL_TICKS
-            }
-            val deathQueueActive = player.queue.contains("death")
-            val disconnected = player.client?.disconnected == true
-            FightCaveDemoObservability.recordDeathResetReady(player, waitedTicks, player.dead, deathQueueActive, disconnected)
-            if (player["logged_out", false] || disconnected) {
-                return@softQueue
-            }
-            resetDemoEpisode(player, cause = "player_death")
-        }
-    }
-
-    private fun scheduleDemoEpisodeReset(player: Player, cause: String, delayTicks: Int = 1) {
-        player.softQueue("fight_cave_demo_reset_$cause", delayTicks) {
-            resetDemoEpisode(player, cause)
         }
     }
 

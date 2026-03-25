@@ -9,6 +9,7 @@ import content.entity.player.dialogue.type.startQuest
 import content.quest.quest
 import content.quest.questComplete
 import content.quest.refreshQuestJournal
+import content.quest.setInstanceLogout
 import content.quest.startCutscene
 import world.gregs.voidps.engine.Script
 import world.gregs.voidps.engine.client.clearCamera
@@ -21,6 +22,7 @@ import world.gregs.voidps.engine.entity.character.move.tele
 import world.gregs.voidps.engine.entity.character.npc.NPCs
 import world.gregs.voidps.engine.entity.character.player.Player
 import world.gregs.voidps.engine.entity.character.player.skill.Skill
+import world.gregs.voidps.engine.entity.character.player.skill.exp.exp
 import world.gregs.voidps.engine.entity.character.sound
 import world.gregs.voidps.engine.entity.item.floor.FloorItems
 import world.gregs.voidps.engine.entity.obj.GameObjects
@@ -30,6 +32,7 @@ import world.gregs.voidps.engine.inv.carriesItem
 import world.gregs.voidps.engine.inv.inventory
 import world.gregs.voidps.type.Direction
 import world.gregs.voidps.type.Region
+import world.gregs.voidps.type.Tile
 
 class Edmond : Script {
 
@@ -198,6 +201,7 @@ class Edmond : Script {
         set("plague_city", "grill_open")
         open("fade_out")
         val cutscene = startCutscene("grill", region)
+        setInstanceLogout(Tile(2514, 9740))
         cutscene.onEnd {
             open("fade_out")
             delay(3)
@@ -245,7 +249,7 @@ class Edmond : Script {
     suspend fun Player.questComplete() {
         set("plague_city", "completed")
         jingle("quest_complete_2")
-        experience.add(Skill.Mining, 2425.0)
+        exp(Skill.Mining, 2425.0)
         inventory.add("a_magic_scroll")
         refreshQuestJournal()
         inc("quest_points")

@@ -14,14 +14,6 @@ class TaskList(
 
     init {
         playerSpawn {
-            if (this["fight_cave_demo_profile", false]) {
-                set("task_disable_popups", true)
-                set("task_dont_show_again", true)
-                set("task_popup", 0)
-                set("task_previous_popup", 0)
-                set("task_area", "empty")
-                return@playerSpawn
-            }
             sendVariable("task_disable_popups")
             set("task_popup", 0)
             set("task_previous_popup", 0)

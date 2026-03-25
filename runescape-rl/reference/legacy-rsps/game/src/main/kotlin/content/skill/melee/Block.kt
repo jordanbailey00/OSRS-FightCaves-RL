@@ -1,9 +1,11 @@
 package content.skill.melee
 
 import content.skill.melee.weapon.weapon
+import world.gregs.voidps.cache.definition.Params
 import world.gregs.voidps.engine.Script
 import world.gregs.voidps.engine.data.definition.AnimationDefinitions
 import world.gregs.voidps.engine.data.definition.CombatDefinitions
+import world.gregs.voidps.engine.data.definition.NPCDefinitions
 import world.gregs.voidps.engine.data.definition.WeaponAnimationDefinitions
 import world.gregs.voidps.engine.data.definition.WeaponStyleDefinitions
 import world.gregs.voidps.engine.entity.character.Character
@@ -44,7 +46,7 @@ class Block(
             } else {
                 val type: String? = target.weapon.def.getOrNull("weapon_type")
                 val definition = if (type != null) weaponDefinitions.get(type) else null
-                var animation = definition?.attackTypes?.get("defend")
+                var animation = definition?.attackTypes?.get(Params.DEFEND)
                 if (animation == null) {
                     val id = target.weapon.def["weapon_style", -1]
                     val style = styleDefinitions.get(id)
@@ -54,9 +56,10 @@ class Block(
             }
         } else if (target is NPC) {
             val id = if (source is Player) target.def(source).stringId else target.id
-            val definition = combatDefinitions.get(target.def["combat_def", id])
-            target.anim(definition.defendAnim, delay)
-            source.sound(definition.defendSound?.id ?: return, delay)
+            val def = NPCDefinitions.get(id)
+            val combat = combatDefinitions.get(def["combat_def", id])
+            target.anim(combat.defendAnim, delay)
+            source.sound(combat.defendSound?.id ?: return, delay)
         }
     }
 

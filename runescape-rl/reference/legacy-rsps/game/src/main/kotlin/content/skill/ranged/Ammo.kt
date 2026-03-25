@@ -10,6 +10,7 @@ import content.entity.effect.toxin.poisoned
 import content.entity.player.equip.Equipment
 import content.skill.slayer.undead
 import org.rsmod.game.pathfinder.flag.CollisionFlag
+import world.gregs.voidps.cache.definition.Params
 import world.gregs.voidps.engine.client.message
 import world.gregs.voidps.engine.client.variable.start
 import world.gregs.voidps.engine.entity.character.Character
@@ -30,7 +31,9 @@ import world.gregs.voidps.type.random
 import java.util.concurrent.TimeUnit
 
 object Ammo {
-    fun required(item: Item) = item.def["ammo_group", "none"] != "none" && !item.id.endsWith("chinchompa")
+    private const val AMMO_GROUP_NONE = 106
+
+    fun required(item: Item) = item.def[Params.AMMO_GROUP, AMMO_GROUP_NONE] != AMMO_GROUP_NONE && !item.id.endsWith("chinchompa")
 
     fun requiredAmount(weapon: Item, special: Boolean) = if (weapon.id.startsWith("dark_bow") || (weapon.id.startsWith("magic_shortbow") && special)) 2 else 1
 
@@ -49,10 +52,10 @@ object Ammo {
             }
             return
         }
-        when {
-            player.equipped(EquipSlot.Cape).id == "avas_attractor" && !exceptions(ammo) -> remove(player, target, ammo, required, 0.6, 0.2)
-            player.equipped(EquipSlot.Cape).id == "avas_accumulator" && !exceptions(ammo) -> remove(player, target, ammo, required, 0.72, 0.08)
-            player.equipped(EquipSlot.Cape).id == "avas_alerter" -> remove(player, target, ammo, required, 0.8, 0.0)
+        when (player.equipped(EquipSlot.Cape).id) {
+            "avas_attractor" if !exceptions(ammo) -> remove(player, target, ammo, required, 0.6, 0.2)
+            "avas_accumulator" if !exceptions(ammo) -> remove(player, target, ammo, required, 0.72, 0.08)
+            "avas_alerter" -> remove(player, target, ammo, required, 0.8, 0.0)
             else -> remove(player, target, ammo, required, 0.0, 1.0)
         }
     }

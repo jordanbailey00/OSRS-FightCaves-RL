@@ -57,12 +57,12 @@ class NPCDeath(
             val npc = this
             strongQueue(name = "death", 1) {
                 val killer = killer
-                val tile = tile
+                val tile = if (transformId == "wall_beast") tile.addY(-1) else tile
                 npc["death_tile"] = tile
-                val definition = combatDefinitions.get(npc.def["combat_def", npc.id])
-                val ticks = anim(definition.deathAnim)
-                if (definition.deathSound != null) {
-                    (killer as? Player)?.sound(definition.deathSound!!.id)
+                val combat = combatDefinitions.get(transformDef["combat_def", transformId])
+                val ticks = anim(combat.deathAnim)
+                if (combat.deathSound != null) {
+                    (killer as? Player)?.sound(combat.deathSound!!.id)
                 }
                 delay(if (ticks <= 0) 4 else ticks)
                 if (killer is Player) {
@@ -112,9 +112,16 @@ class NPCDeath(
         if (npc.inMultiCombat && killer is Player && killer["loot_share", false]) {
             shareLoot(killer, npc, tile, drops)
         } else {
-            drops.forEach { item ->
-                if (!item.id.contains("clue_scroll") && item.amount > 0) {
-                    FloorItems.add(tile, item.id, item.amount, charges = item.charges(), revealTicks = if (item.tradeable) 60 else FloorItems.NEVER, disappearTicks = 120, owner = if (killer is Player) killer else null)
+            for (item in drops) {
+                if (item.id.contains("clue_scroll") || item.amount <= 0) {
+                    continue
+                }
+                if (item.def.stackable == 0 && item.amount > 1) {
+                    for (i in 0 until item.amount) {
+                        FloorItems.add(tile, item.id, 1, charges = item.charges(), revealTicks = if (item.tradeable) 60 else FloorItems.NEVER, disappearTicks = 120, owner = killer as? Player)
+                    }
+                } else {
+                    FloorItems.add(tile, item.id, item.amount, charges = item.charges(), revealTicks = if (item.tradeable) 60 else FloorItems.NEVER, disappearTicks = 120, owner = killer as? Player)
                 }
             }
         }

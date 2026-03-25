@@ -21,10 +21,6 @@ class Introduction : Script {
 
     fun welcome(player: Player) {
         player.message("Welcome to ${Settings["server.name"]}.", ChatType.Welcome)
-        if (player["fight_cave_demo_profile", false]) {
-            player.stop("delay")
-            return
-        }
         if (player.contains("creation")) {
             return
         }

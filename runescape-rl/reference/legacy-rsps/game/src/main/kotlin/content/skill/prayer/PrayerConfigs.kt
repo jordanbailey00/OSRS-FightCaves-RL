@@ -6,8 +6,6 @@ import world.gregs.voidps.engine.entity.character.player.skill.Skill
 
 object PrayerConfigs {
     const val PRAYERS = "prayers"
-    const val BOOK_PRAYERS = "normal"
-    const val BOOK_CURSES = "curses"
 
     const val SELECTING_QUICK_PRAYERS = "select_quick_prayers"
     const val USING_QUICK_PRAYERS = "using_quick_prayers"
@@ -20,15 +18,14 @@ object PrayerConfigs {
     const val QUICK_CURSES = "quick_curses"
 }
 
-fun Character.praying(name: String): Boolean = if (this is Player) {
-    containsVarbit(getActivePrayerVarKey(), name)
-} else {
-    false
+fun Character.praying(name: String): Boolean = when (this) {
+    is Player -> containsVarbit(getActivePrayerVarKey(), name)
+    else -> false
 }
 
 fun Player.getActivePrayerVarKey(): String = if (isCurses()) PrayerConfigs.ACTIVE_CURSES else PrayerConfigs.ACTIVE_PRAYERS
 
-fun Player.isCurses(): Boolean = get(PrayerConfigs.PRAYERS, PrayerConfigs.BOOK_PRAYERS) == PrayerConfigs.BOOK_CURSES
+fun Player.isCurses(): Boolean = get(PrayerConfigs.PRAYERS, "") == "curses"
 
 /**
  * Bonus' are a value between 11..42 to represent -25%..15% with 30=0%

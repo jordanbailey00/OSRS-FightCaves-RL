@@ -70,7 +70,7 @@ ticks = 1
 id = 8939
 ticks = 3
 
-[teleport_land_modern]
+[`teleport_land_modern`]
 id = 8941
 ticks = 2
 
@@ -116,6 +116,14 @@ id = 2140
 [teleport_jewellery]
 id = 9603
 ticks = 4
+
+[teleport_fairy]
+id = 3265
+ticks = 3
+
+[teleport_land_fairy]
+id = 3266
+ticks = 2
 
 [teleport_pharaohs_sceptre]
 id = 9596

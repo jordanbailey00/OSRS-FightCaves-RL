@@ -10,7 +10,6 @@ import content.entity.player.modal.tab.Emotes
 import content.entity.world.music.MusicUnlock
 import content.quest.quests
 import content.quest.refreshQuestJournal
-import content.skill.prayer.PrayerConfigs
 import content.skill.prayer.PrayerConfigs.PRAYERS
 import content.social.trade.exchange.GrandExchange
 import world.gregs.voidps.engine.GameLoop
@@ -151,15 +150,11 @@ class PlayerCommands(
 
     fun prayers(player: Player, args: List<String>) {
         val target = Players.find(player, args.getOrNull(1)) ?: return
-        val name =
-            when (args.getOrNull(0)?.lowercase()) {
-                null, "normal", "normals", "regular", "regulars", "prayer", "prayers" -> PrayerConfigs.BOOK_PRAYERS
-                "curse", "curses" -> PrayerConfigs.BOOK_CURSES
-                else -> {
-                    player.message("Unknown prayer type '${args[0]}'. Did you mean 'normal' or 'curses'?", ChatType.Console)
-                    return
-                }
-            }
+        val name = args.getOrNull(0)?.removeSuffix("s") ?: "normal"
+        if (name == "regular" || name == "modern") {
+            player.message("Unknown prayer type '$name'. Did you mean 'normal'?", ChatType.Console)
+            return
+        }
         target[PRAYERS] = name
     }
 
@@ -327,6 +322,7 @@ class PlayerCommands(
                 target[quest] = "completed"
             }
             target["recipe_for_disaster"] = "completed"
+            target["lunar_diplomacy"] = "completed"
             target["quest_points"] = target["quest_points_total", 1]
             target.refreshQuestJournal()
             target.message("All quests unlocked.")

@@ -24,7 +24,6 @@ import world.gregs.voidps.type.Tile
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class PlayerAccountLoaderTest : KoinMock() {
@@ -36,12 +35,10 @@ internal class PlayerAccountLoaderTest : KoinMock() {
     private lateinit var definitions: AccountDefinitions
     private lateinit var loader: PlayerAccountLoader
     private var playerSave: PlayerSave? = null
-    private val saved = mutableMapOf<String, PlayerSave>()
 
     @BeforeEach
     fun setup() {
         playerSave = null
-        saved.clear()
         queue = mockk(relaxed = true)
         storage = object : Storage {
             override fun names(): Map<String, AccountDefinition> = emptyMap()
@@ -49,9 +46,6 @@ internal class PlayerAccountLoaderTest : KoinMock() {
             override fun clans(): Map<String, Clan> = emptyMap()
 
             override fun save(accounts: List<PlayerSave>) {
-                for (account in accounts) {
-                    saved[account.name.lowercase()] = account
-                }
             }
 
             override fun offers(days: Int): OpenOffers = OpenOffers()
@@ -69,9 +63,9 @@ internal class PlayerAccountLoaderTest : KoinMock() {
             override fun savePriceHistory(history: Map<String, PriceHistory>) {
             }
 
-            override fun exists(accountName: String): Boolean = saved.containsKey(accountName.lowercase())
+            override fun exists(accountName: String): Boolean = false
 
-            override fun load(accountName: String): PlayerSave? = playerSave ?: saved[accountName.lowercase()]
+            override fun load(accountName: String): PlayerSave? = playerSave
         }
         saveQueue = SaveQueue(storage, scope = TestScope())
         definitions = AccountDefinitions(mutableMapOf("name" to AccountDefinition("name", "oldName", "", "hash")))
@@ -93,24 +87,6 @@ internal class PlayerAccountLoaderTest : KoinMock() {
 
         val instructions = loader.load(client, "name", "pass", 2)
         assertNotNull(instructions)
-    }
-
-    @Test
-    fun `New account is persisted before waiting for login queue`() = runTest {
-        mockkStatic("world.gregs.voidps.network.login.protocol.encode.LoginEncoderKt")
-        Settings.clear()
-        Settings.load(mapOf("development.accountCreation" to "true"))
-        val client: Client = mockk(relaxed = true)
-        val player = Player(accountName = "newbie", passwordHash = "hash")
-        every { accounts.create("newbie", "hash") } returns player
-        every { accounts.setup(player, client, 2, true) } returns true
-        coEvery { queue.await() } just Runs
-
-        val instructions = loader.load(client, "newbie", "hash", 2)
-
-        assertNotNull(instructions)
-        assertTrue(storage.exists("newbie"))
-        assertNotNull(storage.load("newbie"))
     }
 
     @Test

@@ -1,5 +1,3 @@
-import content.area.karamja.tzhaar_city.FightCaveBackendActionAdapter
-import content.area.karamja.tzhaar_city.FightCaveDemoBackendControl
 import content.bot.BotManager
 import content.bot.behaviour.loadGraph
 import content.entity.obj.ship.CharterShips
@@ -23,8 +21,6 @@ fun gameModule(files: ConfigFiles) = module {
     single { ItemSpawns() }
     single { BotManager().load(files) }
     single { loadGraph(files) }
-    single { FightCaveBackendActionAdapter() }
-    single { FightCaveDemoBackendControl(get()) }
     single(createdAtStart = true) { Books().load(files.list(Settings["definitions.books"])) }
     single(createdAtStart = true) { MusicTracks().load(files.find(Settings["map.music"])) }
     single(createdAtStart = true) { FairyRingCodes().load(files.find(Settings["definitions.fairyCodes"])) }

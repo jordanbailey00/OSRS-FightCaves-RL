@@ -102,14 +102,6 @@ tasks {
         }
     }
 
-    register<JavaExec>("runFightCavesDemo") {
-        group = "application"
-        description = "Run the Fight Caves demo RSPS profile."
-        classpath = sourceSets["main"].runtimeClasspath
-        mainClass.set("FightCavesDemoMain")
-        workingDir = rootProject.projectDir
-    }
-
     register("printCacheVersion") {
         doLast {
             println(libs.versions.cacheVersion.get())
@@ -128,16 +120,22 @@ distributions {
             from(tasks["shadowJar"])
 
             val emptyDirs = setOf("cache", "saves")
-            val configs =
+            val data =
                 parent!!
                     .rootDir
                     .resolve("data")
-                    .list()!!
-                    .toMutableList()
-            configs.removeAll(emptyDirs)
-            for (config in configs) {
-                from("../data/$config/") {
-                    into("data/$config")
+            for (config in data.list()) {
+                if (emptyDirs.contains(config) || config == ".temp") {
+                    continue
+                }
+                if (config.contains(".")) {
+                    from("../data/$config") {
+                        into("data")
+                    }
+                } else {
+                    from("../data/$config/") {
+                        into("data/$config")
+                    }
                 }
             }
             for (dir in emptyDirs) {

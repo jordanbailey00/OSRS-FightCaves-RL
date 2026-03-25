@@ -1,4 +1,3 @@
-import content.area.karamja.tzhaar_city.FightCaveDemoBackendControl
 import com.github.michaelbull.logging.InlineLogger
 import content.bot.BotManager
 import content.social.trade.exchange.GrandExchange
@@ -45,19 +44,14 @@ fun getTickStages(
     handlers: InstructionHandlers = get(),
     dynamicZones: DynamicZones = get(),
     botManager: BotManager = get(),
-    fightCaveDemoBackendControl: FightCaveDemoBackendControl = get(),
 ): List<Runnable> {
     val sequentialNpc: TaskIterator<NPC> = SequentialIterator()
     val sequentialPlayer: TaskIterator<Player> = SequentialIterator()
     val iterator: TaskIterator<Player> = if (sequential) SequentialIterator() else ParallelIterator()
-    val stages = mutableListOf<Runnable>(
+    return listOf(
         PlayerResetTask(sequentialPlayer),
         NPCResetTask(sequentialNpc),
-    )
-    if (!Settings["fightCave.demo.skipBotTick", false]) {
-        stages += botManager // Bot must go after reset otherwise flags aren't seen when debugging bots
-    }
-    stages += listOf(
+        botManager, // Bot must go after reset otherwise flags aren't seen when debugging bots
         hunting,
         grandExchange,
         // Connections/Tick Input
@@ -65,7 +59,6 @@ fun getTickStages(
         NPCs,
         FloorItems,
         // Tick
-        fightCaveDemoBackendControl,
         InstructionTask(handlers),
         World,
         NPCTask(sequentialNpc),
@@ -83,7 +76,6 @@ fun getTickStages(
         accountSave,
         SaveLogs(),
     )
-    return stages
 }
 
 private class SaveLogs : Runnable {

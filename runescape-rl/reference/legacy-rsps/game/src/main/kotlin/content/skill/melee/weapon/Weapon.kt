@@ -74,6 +74,8 @@ object Weapon {
             return true
         } else if (type == "range" && source is NPC && target is Player && source.id.startsWith("thrower_troll") && target.equipped(EquipSlot.Shield).id != "fremennik_round_shield") {
             return true
+        } else if ((type == "range" || type == "magic") && source is NPC && source.id == "kalphite_queen") {
+            return true
         }
         return false
     }
@@ -161,10 +163,10 @@ object Weapon {
         }
     }
 
-    fun strengthBonus(source: Character, type: String, weapon: Item?) = when {
-        type == "blaze" -> weapon?.def?.getOrNull<Double>("magic_strength")?.toInt() ?: 0
+    fun strengthBonus(source: Character, type: String, weapon: Item?) = when (type) {
+        "blaze" -> weapon?.def?.getOrNull<Double>("magic_strength")?.toInt() ?: 0
         // Is thrown or no ammo required
-        type == "range" && source is Player && weapon != null && (weapon.id == source.ammo || !Ammo.required(weapon)) -> weapon.def["ranged_strength", 0]
+        "range" if source is Player && weapon != null && (weapon.id == source.ammo || !Ammo.required(weapon)) -> weapon.def["ranged_strength", 0]
         else -> source[if (type == "range") "ranged_strength" else "strength", 0]
     } + 64
 
@@ -247,7 +249,15 @@ val Character.attackSpeed: Int
     }
 
 var Character.attackRange: Int
-    get() = get("attack_range", if (this is NPC) def["attack_range", get<CombatDefinitions>().get(def["combat_def", id]).attackRange] else 1)
+    get() {
+        val default = if (this is NPC) {
+            val combatDefinition = get<CombatDefinitions>().get(transformDef["combat_def", id])
+            transformDef["attack_range", combatDefinition.attackRange]
+        } else {
+            1
+        }
+        return get("attack_range", default)
+    }
     set(value) = set("attack_range", value)
 
 // E.g "accurate"

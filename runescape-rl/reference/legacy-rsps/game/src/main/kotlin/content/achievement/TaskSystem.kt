@@ -200,11 +200,6 @@ class TaskSystem(
         Task completion
      */
     fun completeTask(player: Player, id: String) {
-        if (player["fight_cave_demo_profile", false]) {
-            player["task_popup"] = 0
-            player["task_previous_popup"] = 0
-            return
-        }
         val definition = StructDefinitions.get(id)
         AuditLog.event(player, "task_completed", id)
         val index = definition["task_index", -1]

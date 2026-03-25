@@ -41,13 +41,7 @@ class GameLoop(
 
     fun tick(stage: Runnable) {
         val stageStart = System.nanoTime()
-        try {
-            stage.run()
-        } catch (e: Exception) {
-            if (e !is CancellationException) {
-                logger.error(e) { "Error in game loop stage ${stage::class.simpleName ?: stage.javaClass.simpleName}!" }
-            }
-        }
+        stage.run()
         val stageTook = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stageStart)
         if (stageTook > MILLI_WARNING_THRESHOLD) {
             logger.warn { "${stage::class.simpleName} took ${stageTook}ms" }

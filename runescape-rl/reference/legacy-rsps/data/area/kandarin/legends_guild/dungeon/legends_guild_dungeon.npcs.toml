@@ -1,4 +1,4 @@
-[shadow_warrior_legends_guild_dungeon]
+[shadow_warrior]
 id = 158
 hitpoints = 670
 att = 36
@@ -6,8 +6,7 @@ str = 33
 def = 36
 mage = 0
 range = 0
-style = "slash"
-max_hit_melee = 60
+combat_def = "ice_warrior"
 attack_bonus = 20
 hunt_mode = "cowardly"
 slayer_xp = 67.0
