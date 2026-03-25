@@ -5,6 +5,8 @@ No environment semantics in Python. Reward features are transported in the
 obs buffer but separated from policy input.
 
 All contract constants are read from the C library at import time.
+
+PR7: Uses batched C path (fc_capi_batch_step_flat) instead of per-env Python loop.
 """
 
 import ctypes
@@ -57,83 +59,70 @@ assert FC_NUM_ACTION_HEADS == len(FC_ACTION_DIMS)
 assert sum(FC_ACTION_DIMS) == FC_ACTION_MASK_SIZE
 
 # ======================================================================== #
-# C function signatures                                                     #
+# C function signatures — batch interface (PR7)                              #
 # ======================================================================== #
 
-_EnvPtr = ctypes.c_void_p
+_BatchPtr = ctypes.c_void_p
+_FloatPtr = ctypes.POINTER(ctypes.c_float)
+_IntPtr = ctypes.POINTER(ctypes.c_int)
 
-_lib.fc_capi_create.restype = _EnvPtr
-_lib.fc_capi_create.argtypes = []
+_lib.fc_capi_batch_create.restype = _BatchPtr
+_lib.fc_capi_batch_create.argtypes = [ctypes.c_int]
 
-_lib.fc_capi_destroy.restype = None
-_lib.fc_capi_destroy.argtypes = [_EnvPtr]
+_lib.fc_capi_batch_destroy.restype = None
+_lib.fc_capi_batch_destroy.argtypes = [_BatchPtr]
 
-_lib.fc_capi_reset.restype = None
-_lib.fc_capi_reset.argtypes = [_EnvPtr, ctypes.c_uint]
+_lib.fc_capi_batch_reset.restype = None
+_lib.fc_capi_batch_reset.argtypes = [_BatchPtr, ctypes.c_uint]
 
-_lib.fc_capi_step.restype = ctypes.c_int
-_lib.fc_capi_step.argtypes = [_EnvPtr, ctypes.POINTER(ctypes.c_int)]
+_lib.fc_capi_batch_step_flat.restype = None
+_lib.fc_capi_batch_step_flat.argtypes = [_BatchPtr, _IntPtr, _FloatPtr, _FloatPtr, _IntPtr]
 
-_lib.fc_capi_get_obs.restype = ctypes.POINTER(ctypes.c_float)
-_lib.fc_capi_get_obs.argtypes = [_EnvPtr]
-
-_lib.fc_capi_get_reward.restype = ctypes.c_float
-_lib.fc_capi_get_reward.argtypes = [_EnvPtr]
-
-_lib.fc_capi_get_terminal.restype = ctypes.c_int
-_lib.fc_capi_get_terminal.argtypes = [_EnvPtr]
+_lib.fc_capi_batch_get_obs.restype = None
+_lib.fc_capi_batch_get_obs.argtypes = [_BatchPtr, _FloatPtr]
 
 # ======================================================================== #
-# Vectorized environment                                                    #
+# Vectorized environment (batched C path)                                    #
 # ======================================================================== #
 
 class FightCavesVecEnv:
-    """Vectorized Fight Caves environment using ctypes C backend.
+    """Vectorized Fight Caves environment using batched C backend.
 
     Obs buffer layout per env: [policy_obs (126)] [reward_features (16)] [action_mask (36)]
     Policy receives only policy_obs. Reward features are for shaping/logging.
+
+    PR7: Single C call per step (fc_capi_batch_step_flat) replaces per-env Python loop.
     """
 
     def __init__(self, num_envs=1, seed=42):
         self.num_envs = num_envs
-        self._envs = []
-        for i in range(num_envs):
-            env = _lib.fc_capi_create()
-            _lib.fc_capi_reset(env, seed + i)
-            self._envs.append(env)
+        self._batch = _lib.fc_capi_batch_create(num_envs)
 
-        # Allocate numpy arrays for batch interface
+        # Allocate contiguous numpy arrays for zero-copy C interop
         self.observations = np.zeros((num_envs, FC_OBS_SIZE), dtype=np.float32)
         self.rewards = np.zeros(num_envs, dtype=np.float32)
         self.terminals = np.zeros(num_envs, dtype=np.int32)
 
-        # Read initial observations
-        self._read_all_obs()
-
-    def _read_obs(self, env_idx):
-        """Copy obs from C env into numpy array."""
-        obs_ptr = _lib.fc_capi_get_obs(self._envs[env_idx])
-        ctypes.memmove(
-            self.observations[env_idx:env_idx+1].ctypes.data,
-            obs_ptr,
-            FC_OBS_SIZE * 4,  # float32 = 4 bytes
+        # Reset and read initial obs
+        _lib.fc_capi_batch_reset(self._batch, seed)
+        _lib.fc_capi_batch_get_obs(
+            self._batch,
+            self.observations.ctypes.data_as(_FloatPtr),
         )
 
-    def _read_all_obs(self):
-        for i in range(self.num_envs):
-            self._read_obs(i)
-
     def reset(self, seed=None):
-        for i in range(self.num_envs):
-            s = (seed + i) if seed is not None else (42 + i)
-            _lib.fc_capi_reset(self._envs[i], s)
-        self._read_all_obs()
+        s = seed if seed is not None else 42
+        _lib.fc_capi_batch_reset(self._batch, s)
+        _lib.fc_capi_batch_get_obs(
+            self._batch,
+            self.observations.ctypes.data_as(_FloatPtr),
+        )
         self.rewards[:] = 0.0
         self.terminals[:] = 0
         return self.observations
 
     def step(self, actions):
-        """Step all environments.
+        """Step all environments in one C call.
 
         Args:
             actions: int32 array of shape (num_envs, FC_NUM_ACTION_HEADS)
@@ -141,20 +130,24 @@ class FightCavesVecEnv:
         Returns:
             observations, rewards, terminals (numpy arrays)
         """
-        actions = np.asarray(actions, dtype=np.int32).reshape(self.num_envs, FC_NUM_ACTION_HEADS)
+        actions = np.ascontiguousarray(actions, dtype=np.int32).reshape(
+            self.num_envs, FC_NUM_ACTION_HEADS
+        )
 
-        for i in range(self.num_envs):
-            act_arr = (ctypes.c_int * FC_NUM_ACTION_HEADS)(*actions[i])
-            self.terminals[i] = _lib.fc_capi_step(self._envs[i], act_arr)
-            self.rewards[i] = _lib.fc_capi_get_reward(self._envs[i])
-            self._read_obs(i)
+        _lib.fc_capi_batch_step_flat(
+            self._batch,
+            actions.ctypes.data_as(_IntPtr),
+            self.observations.ctypes.data_as(_FloatPtr),
+            self.rewards.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            self.terminals.ctypes.data_as(_IntPtr),
+        )
 
         return self.observations, self.rewards, self.terminals
 
     def close(self):
-        for env in self._envs:
-            _lib.fc_capi_destroy(env)
-        self._envs = []
+        if self._batch:
+            _lib.fc_capi_batch_destroy(self._batch)
+            self._batch = None
 
     @staticmethod
     def split_obs(obs):
@@ -214,15 +207,12 @@ def test_vectorized(num_envs=16, num_steps=50):
     env = FightCavesVecEnv(num_envs=num_envs, seed=100)
     obs = env.reset(seed=100)
 
-    # Different envs should have different initial observations (different rotations)
-    # At minimum, env[0] and env[1] should differ due to seed offset
     idle = np.zeros((num_envs, FC_NUM_ACTION_HEADS), dtype=np.int32)
     for _ in range(num_steps):
         obs, _, _ = env.step(idle)
 
-    # Check that envs diverged (different RNG seeds → different NPC behavior)
-    # Compare player HP across envs — with different seeds, NPC attacks land differently
-    player_hp = obs[:, 0]  # FC_OBS_PLAYER_HP is index 0
+    # Check that envs diverged
+    player_hp = obs[:, 0]
     unique_hp = len(set(player_hp.tolist()))
     assert unique_hp > 1, "vectorized envs should diverge with different seeds"
 
@@ -231,8 +221,38 @@ def test_vectorized(num_envs=16, num_steps=50):
     return True
 
 
+def test_batch_independence(num_envs=8):
+    """Test that batch envs produce identical results to individual envs."""
+    seed = 777
+
+    # Batch path
+    batch_env = FightCavesVecEnv(num_envs=num_envs, seed=seed)
+    batch_env.reset(seed=seed)
+    actions = np.zeros((num_envs, FC_NUM_ACTION_HEADS), dtype=np.int32)
+    actions[:, 1] = 1  # attack slot 0
+    for _ in range(20):
+        batch_obs, batch_rwd, batch_term = batch_env.step(actions)
+
+    # Single env path (using batch of 1 for each)
+    for i in range(num_envs):
+        single = FightCavesVecEnv(num_envs=1, seed=seed + i)
+        single.reset(seed=seed + i)
+        act1 = np.zeros((1, FC_NUM_ACTION_HEADS), dtype=np.int32)
+        act1[:, 1] = 1
+        for _ in range(20):
+            s_obs, s_rwd, s_term = single.step(act1)
+        # Compare
+        assert np.allclose(batch_obs[i], s_obs[0], atol=1e-6), \
+            f"env {i} obs mismatch"
+        single.close()
+
+    batch_env.close()
+    print(f"Batch independence test passed: {num_envs} envs match individual")
+    return True
+
+
 def test_sps(num_envs=64, duration=5.0):
-    """Measure steps per second (Python↔C round-trip)."""
+    """Measure steps per second (batched C path)."""
     env = FightCavesVecEnv(num_envs=num_envs, seed=42)
     env.reset()
 
@@ -257,6 +277,18 @@ def test_sps(num_envs=64, duration=5.0):
     return sps
 
 
+def benchmark_scaling(duration=5.0):
+    """Benchmark SPS across env counts."""
+    print("\n=== SPS Scaling Benchmark ===")
+    results = {}
+    for n in [1, 16, 64, 256, 1024]:
+        sps = test_sps(num_envs=n, duration=duration)
+        results[n] = sps
+        per_env = sps / n
+        print(f"  {n:>5d} envs: {sps:>12,.0f} SPS  ({per_env:>8,.0f} per-env)")
+    return results
+
+
 def test_constants():
     """Verify contract constants match expected values from fc_contracts.h."""
     assert FC_OBS_SIZE == 178, f"FC_OBS_SIZE={FC_OBS_SIZE}"
@@ -273,4 +305,6 @@ if __name__ == "__main__":
     test_constants()
     test_smoke()
     test_vectorized()
-    test_sps()
+    test_batch_independence()
+    print()
+    benchmark_scaling()

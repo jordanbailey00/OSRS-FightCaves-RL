@@ -1,0 +1,24 @@
+# Headless Fight Caves script allowlist.
+# This list is intentionally minimal and must stay in parity with [scripts].required_classes in config/headless_manifest.toml.
+
+content.area.karamja.tzhaar_city.TzhaarFightCave
+content.area.karamja.tzhaar_city.TzTokJad
+content.area.karamja.tzhaar_city.TzHaarHealers
+content.entity.Movement
+content.entity.world.RegionLoading
+content.entity.combat.Combat
+content.entity.combat.hit.CombatHitsplats
+content.entity.npc.combat.Attack
+content.entity.npc.combat.Aggression
+content.entity.death.CharacterDeath
+content.entity.death.NPCDeath
+content.entity.death.PlayerDeath
+content.entity.player.Login
+content.skill.ranged.Ranged
+content.skill.prayer.Prayers
+content.skill.prayer.active.PrayerDrain
+content.skill.prayer.list.PrayerToggle
+content.skill.constitution.Eating
+content.skill.constitution.drink.Potions
+content.entity.player.effect.energy.Energy
+

@@ -3,6 +3,7 @@
 #include "fc_prayer.h"
 #include "fc_pathfinding.h"
 #include "fc_npc.h"
+#include "fc_wave.h"
 #include "fc_contracts.h"
 #include "fc_debug.h"
 
@@ -176,7 +177,8 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
             int weapon_range = 7;
             if (dist <= weapon_range) {
                 int att_roll = fc_player_ranged_attack_roll(p);
-                int def_roll = 1;  /* NPCs have minimal ranged defence for now */
+                const FcNpcStats* tstats = fc_npc_get_stats(target->npc_type);
+                int def_roll = fc_npc_def_roll(tstats->def_level, tstats->def_bonus);
                 float chance = fc_hit_chance(att_roll, def_roll);
 
                 int hit = (fc_rng_float(state) < chance) ? 1 : 0;
@@ -210,6 +212,51 @@ static void decrement_player_timers(FcPlayer* p) {
 /* Check terminal conditions                                                 */
 /* ======================================================================== */
 
+/* ======================================================================== */
+/* Jad healer auto-spawn                                                     */
+/* ======================================================================== */
+
+static void check_jad_healers(FcState* state) {
+    if (state->jad_healers_spawned) return;
+    if (state->current_wave != FC_NUM_WAVES) return;  /* only on wave 63 */
+
+    /* Find Jad */
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        FcNpc* jad = &state->npcs[i];
+        if (jad->npc_type != NPC_TZTOK_JAD || !jad->active || jad->is_dead) continue;
+
+        float hp_frac = (float)jad->current_hp / (float)jad->max_hp;
+        if (hp_frac < FC_JAD_HEALER_THRESHOLD_FRAC) {
+            /* Spawn 4 Yt-HurKot near Jad */
+            int offsets[4][2] = {{-2, 0}, {2, 0}, {0, -2}, {0, 2}};
+            for (int h = 0; h < FC_JAD_NUM_HEALERS; h++) {
+                int hx = jad->x + offsets[h][0];
+                int hy = jad->y + offsets[h][1];
+                /* Clamp to arena */
+                if (hx < 1) hx = 1;
+                if (hy < 1) hy = 1;
+                if (hx >= FC_ARENA_WIDTH - 1) hx = FC_ARENA_WIDTH - 2;
+                if (hy >= FC_ARENA_HEIGHT - 1) hy = FC_ARENA_HEIGHT - 2;
+
+                for (int slot = 0; slot < FC_MAX_NPCS; slot++) {
+                    if (!state->npcs[slot].active) {
+                        fc_npc_spawn(&state->npcs[slot], NPC_YT_HURKOT, hx, hy,
+                                     state->next_spawn_index++);
+                        state->npcs_remaining++;
+                        break;
+                    }
+                }
+            }
+            state->jad_healers_spawned = 1;
+        }
+        return;
+    }
+}
+
+/* ======================================================================== */
+/* Check terminal conditions                                                 */
+/* ======================================================================== */
+
 static void check_terminal(FcState* state) {
     if (state->terminal != TERMINAL_NONE) return;
 
@@ -219,16 +266,11 @@ static void check_terminal(FcState* state) {
         return;
     }
 
-    /* Wave clear: all NPCs dead and current_wave was active */
-    if (state->npcs_remaining <= 0 && state->current_wave > 0) {
-        state->wave_just_cleared = 1;
+    /* Wave advancement (handles wave-clear and cave-complete) */
+    fc_wave_check_advance(state);
 
-        if (state->current_wave >= FC_NUM_WAVES) {
-            /* All 63 waves + Jad cleared */
-            state->terminal = TERMINAL_CAVE_COMPLETE;
-        }
-        /* Otherwise PR 6 handles wave transition */
-    }
+    /* Jad healer spawn check */
+    check_jad_healers(state);
 
     /* Tick cap */
     if (state->tick >= FC_MAX_EPISODE_TICKS) {

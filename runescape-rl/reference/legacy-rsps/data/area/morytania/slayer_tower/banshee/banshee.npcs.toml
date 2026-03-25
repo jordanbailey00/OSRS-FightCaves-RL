@@ -1,0 +1,24 @@
+[banshee]
+id = 1612
+hitpoints = 220
+regen_rate_ticks = 5
+att = 22
+str = 15
+def = 22
+combat_def = "banshee"
+slayer_xp = 22.0
+slayer_level = 15
+respawn_delay = 15
+wander_range = 13
+drop_table = "banshee"
+hunt_mode = "cowardly"
+categories = ["banshees", "undead"]
+examine = "A tortured screaming soul."
+
+[mighty_banshee]
+id = 7786
+clone = "banshee"
+hitpoints = 820
+max_hit_melee = 90
+slayer_xp = 85.0
+examine = "Not the best of vocalists."

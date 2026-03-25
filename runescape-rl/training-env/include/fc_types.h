@@ -261,15 +261,10 @@ typedef struct {
 /* Wave entry (spawn table row)                                              */
 /* ======================================================================== */
 
-typedef struct {
-    int npc_type;   /* FcNpcType */
-    int spawn_dir;  /* FcSpawnDir */
-} FcWaveSpawn;
-
 #define FC_MAX_SPAWNS_PER_WAVE 6
 
 typedef struct {
-    FcWaveSpawn spawns[FC_MAX_SPAWNS_PER_WAVE];
+    int npc_types[FC_MAX_SPAWNS_PER_WAVE];  /* FcNpcType per spawn */
     int num_spawns;
 } FcWaveEntry;
 
@@ -329,6 +324,9 @@ typedef struct {
 
     /* Arena walkability (1 = walkable, 0 = obstacle) */
     uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
+
+    /* Jad healer state */
+    int jad_healers_spawned;  /* 1 if Yt-HurKot healers already spawned this wave */
 
     /* Per-tick aggregated event flags (for reward features) */
     int damage_dealt_this_tick;

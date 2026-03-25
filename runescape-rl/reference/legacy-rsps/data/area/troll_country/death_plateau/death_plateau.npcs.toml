@@ -1,0 +1,64 @@
+[ash]
+id = 1100
+wander_range = 6
+categories = ["trolls"]
+examine = "Human is his speciality."
+
+[dung]
+id = 1099
+categories = ["trolls"]
+examine = "Human is his speciality."
+
+[kraka]
+id = 1098
+hitpoints = 1200
+att = 50
+str = 100
+def = 50
+mage = 0
+range = 0
+attack_speed = 6
+style = "crush"
+max_hit_melee = 230
+attack_bonus = 40
+xp_bonus = 0.5
+hunt_mode = "cowardly"
+slayer_xp = 126.0
+categories = ["trolls"]
+respawn_delay = 50
+drop_table = "rock_troll"
+examine = "A nasty looking troll."
+
+[pee_hat]
+id = 1097
+clone = "kraka"
+
+[stick]
+id = 1096
+hitpoints = 1350
+att = 60
+str = 110
+def = 60
+mage = 0
+range = 0
+attack_speed = 6
+style = "crush"
+max_hit_melee = 270
+attack_bonus = 50
+xp_bonus = 0.5
+hunt_mode = "cowardly"
+slayer_xp = 141.5
+categories = ["trolls"]
+respawn_delay = 50
+drop_table = "rock_troll"
+examine = "A big, bad troll."
+
+[rock_troll]
+id = 1095
+categories = ["trolls"]
+drop_table = "rock_troll"
+examine = "The biggest and baddest troll."
+
+[billy]
+id = 1093
+examine = "Billy is a baa-a-a-d goat."

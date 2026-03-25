@@ -1,0 +1,245 @@
+[commander_colby_wilderness]
+id = 12311
+
+[dark_wizard_wilderness]
+id = 172
+hitpoints = 240
+att = 17
+str = 17
+def = 14
+mage = 22
+style = "magic"
+max_hit_magic = 60
+hunt_mode = "cowardly"
+respawn_delay = 50
+examine = "A practicer of dark arts."
+
+[dark_wizard_wilderness_2]
+id = 174
+hitpoints = 120
+att = 5
+str = 2
+def = 5
+mage = 6
+style = "magic"
+max_hit_magic = 60
+hunt_mode = "cowardly"
+respawn_delay = 50
+examine = "He works evil magic."
+
+[william]
+id = 1778
+shop = "williams_wilderness_cape_shop"
+wander_range = 15
+examine = "A very brave merchant."
+
+[ian]
+id = 1779
+shop = "ians_wilderness_cape_shop"
+wander_range = 15
+examine = "A very brave merchant."
+
+[larry]
+id = 1780
+shop = "larrys_wilderness_cape_shop"
+examine = "A very brave merchant."
+
+[darren]
+id = 1781
+shop = "darrens_wilderness_cape_shop"
+examine = "A very brave merchant."
+
+[edmond_wilderness]
+id = 1785
+shop = "edmonds_wilderness_cape_shop"
+examine = "A very brave merchant."
+
+[simon_wilderness]
+id = 1786
+shop = "simons_wilderness_cape_shop"
+examine = "A very brave merchant."
+
+[pirate_wilderness]
+id = 184
+examine = "This one's had too much to drink!"
+
+[mysterious_ghost_wilderness]
+id = 2382
+
+[mysterious_ghost_wilderness_2]
+id = 2388
+
+[mysterious_ghost_wilderness_3]
+id = 2389
+
+[mysterious_ghost_wilderness_4]
+id = 2390
+
+[mysterious_ghost_wilderness_5]
+id = 2394
+
+[fishing_spot_wilderness]
+id = 3804
+
+[giant_rat_wilderness]
+id = 4927
+att = 6
+str = 5
+def = 2
+categories = ["rats"]
+examine = "Overgrown vermin."
+hitpoints = 100
+slayer_xp = 10.0
+combat_def = "giant_rat"
+wander_range = 10
+drop_table = "giant_rat"
+categories = ["giant_rats", "rats"]
+examine = "Overgrown vermin."
+
+[black_salamander]
+id = 5116
+examine = "Slightly slimy and somewhat menacing."
+
+[pirate_wilderness_2]
+id = 6351
+examine = "This one's had too much to drink!"
+
+[pirate_wilderness_3]
+id = 6352
+examine = "This one's had too much to drink!"
+
+[pirate_wilderness_4]
+id = 6353
+examine = "This one's had too much to drink!"
+
+[pirate_wilderness_5]
+id = 6354
+examine = "This one's had too much to drink!"
+
+[pirate_wilderness_6]
+id = 6355
+
+[pirate_wilderness_7]
+id = 6356
+examine = "This one's had too much to drink!"
+
+[goth_leprechaun_wilderness]
+id = 8000
+examine = "Looks after your Farming tools."
+
+[goth_leprechaun_wilderness_2]
+id = 8001
+
+[orry_wilderness]
+id = 8067
+
+[ube_wilderness]
+id = 8068
+
+[waldo_wilderness]
+id = 8069
+
+[crate_wilderness]
+id = 8074
+
+[rogue_wilderness]
+id = 8123
+
+[giant_rat_wilderness_2]
+id = 87
+
+[battle_mage_zamorak]
+id = 912
+hitpoints = 1200
+mage = 50
+style = "magic"
+max_hit_melee = 200
+immune_cannon = true
+respawn_delay = 150
+drop_table = "bones"
+examine = "He kills in the name of Zamorak."
+
+[battle_mage_saradomin]
+id = 913
+hitpoints = 1200
+mage = 50
+style = "magic"
+max_hit_melee = 200
+immune_cannon = true
+respawn_delay = 150
+drop_table = "bones"
+examine = "He kills in the name of Saradomin."
+
+[battle_mage_guthix]
+id = 914
+hitpoints = 1200
+mage = 50
+style = "magic"
+max_hit_melee = 200
+immune_cannon = true
+respawn_delay = 150
+drop_table = "bones"
+examine = "He kills in the name of Guthix."
+
+[mound_wilderness]
+id = 9462
+
+[gull_wilderness]
+id = 9717
+
+[lobster_wilderness]
+id = 9720
+examine = "He looks really cold."
+
+[mysterious_ghost_wilderness_6]
+id = 2397
+
+[mysterious_ghost_wilderness_2_2]
+id = 2400
+
+[mysterious_ghost_wilderness_5_2]
+id = 2402
+
+[orry_wilderness_2]
+id = 8044
+
+[orry_wilderness_3]
+id = 8045
+
+[ube_wilderness_2]
+id = 8046
+
+[ube_wilderness_3]
+id = 8047
+
+[waldo_wilderness_2]
+id = 8048
+
+[waldo_wilderness_3]
+id = 8049
+
+[crate_wilderness_2]
+id = 8059
+
+[crate_wilderness_3]
+id = 8060
+
+[rogue_wilderness_2]
+id = 8122
+
+[commander_colby_wilderness_2]
+id = 12312
+
+[rogue_castle]
+id = 187
+hitpoints = 170
+att = 13
+str = 13
+def = 13
+style = "stab"
+max_hit_melee = 20
+attack_bonus = 5
+slayer_xp = 17.0
+categories = ["rogues"]
+respawn_delay = 50
+examine = "Rogueish."

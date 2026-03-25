@@ -1,4 +1,5 @@
 #include "fc_api.h"
+#include "fc_wave.h"
 #include <string.h>
 
 /*
@@ -103,9 +104,10 @@ void fc_reset(FcState* state, uint32_t seed) {
     /* Initialize player */
     init_player(&state->player);
 
-    /* Wave 1 ready (NPCs spawned by fc_step/wave logic in PR 2+) */
+    /* Spawn wave 1 NPCs */
     state->current_wave = 1;
     state->next_spawn_index = 0;
+    fc_wave_spawn(state, 1);
 }
 
 void fc_step(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {

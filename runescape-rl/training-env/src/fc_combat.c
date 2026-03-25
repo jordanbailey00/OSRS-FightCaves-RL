@@ -1,4 +1,5 @@
 #include "fc_api.h"
+#include "fc_npc.h"
 #include "fc_debug.h"
 
 /*
@@ -109,6 +110,20 @@ int fc_ranged_hit_delay(int distance) {
     return (3 + distance) / 6 + 2;
 }
 
+int fc_magic_hit_delay(int distance) {
+    /* Magic: 1 + floor((1 + distance) / 3) ticks */
+    return 1 + (1 + distance) / 3;
+}
+
+/* ======================================================================== */
+/* NPC defence roll (for player attack accuracy against NPC)                 */
+/* ======================================================================== */
+
+int fc_npc_def_roll(int def_level, int def_bonus) {
+    /* NPC defence: (def_level + 9) × (def_bonus + 64) */
+    return (def_level + 9) * (def_bonus + 64);
+}
+
 /* ======================================================================== */
 /* Queue a pending hit                                                       */
 /* ======================================================================== */
@@ -200,6 +215,11 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
                 state->jad_damage_this_tick += h->damage;
             }
 
+            /* Yt-HurKot: player attack distracts healer */
+            if (npc->npc_type == NPC_YT_HURKOT && h->damage > 0) {
+                npc->healer_distracted = 1;
+            }
+
             /* NPC death */
             if (npc->current_hp <= 0 && !npc->is_dead) {
                 npc->is_dead = 1;
@@ -211,6 +231,11 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
 
                 if (npc->npc_type == NPC_TZTOK_JAD) {
                     state->jad_killed = 1;
+                }
+
+                /* Tz-Kek: split into 2 small Tz-Kek */
+                if (npc->npc_type == NPC_TZ_KEK) {
+                    fc_npc_tz_kek_split(state, npc->x, npc->y);
                 }
             }
 

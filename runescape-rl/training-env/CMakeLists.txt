@@ -12,6 +12,7 @@ add_library(fc_core STATIC
     src/fc_prayer.c
     src/fc_pathfinding.c
     src/fc_npc.c
+    src/fc_wave.c
 )
 
 target_include_directories(fc_core PUBLIC
@@ -38,3 +39,13 @@ add_executable(test_pr2 tests/test_pr2.c)
 target_link_libraries(test_pr2 PRIVATE fc_core)
 target_link_libraries(test_pr2 PRIVATE m)
 add_test(NAME pr2_combat_slice COMMAND test_pr2)
+
+add_executable(test_pr5 tests/test_pr5.c)
+target_link_libraries(test_pr5 PRIVATE fc_core)
+target_link_libraries(test_pr5 PRIVATE m)
+add_test(NAME pr5_all_npc_types COMMAND test_pr5)
+
+add_executable(test_pr6 tests/test_pr6.c)
+target_link_libraries(test_pr6 PRIVATE fc_core)
+target_link_libraries(test_pr6 PRIVATE m)
+add_test(NAME pr6_wave_system COMMAND test_pr6)

@@ -309,10 +309,13 @@ static void test_observation_output(void) {
     /* Sharks normalized */
     ASSERT_FLOAT_EQ(obs[FC_OBS_PLAYER_SHARKS], 1.0f, "sharks = 1.0 at full");
 
-    /* All NPC slots should be empty (no NPCs spawned yet) */
-    for (int slot = 0; slot < FC_OBS_NPC_SLOTS; slot++) {
+    /* NPC slot 0 should be valid (wave 1 spawns 1 Tz-Kih) */
+    float npc0_valid = obs[FC_OBS_NPC_START + 0 * FC_OBS_NPC_STRIDE + FC_NPC_VALID];
+    ASSERT_FLOAT_EQ(npc0_valid, 1.0f, "NPC slot 0 valid (wave 1 Tz-Kih)");
+    /* Remaining slots should be empty */
+    for (int slot = 1; slot < FC_OBS_NPC_SLOTS; slot++) {
         float valid = obs[FC_OBS_NPC_START + slot * FC_OBS_NPC_STRIDE + FC_NPC_VALID];
-        ASSERT_FLOAT_EQ(valid, 0.0f, "NPC slot empty (no spawns)");
+        ASSERT_FLOAT_EQ(valid, 0.0f, "NPC slot empty after wave 1");
     }
 
     /* Wave meta */
@@ -341,10 +344,12 @@ static void test_observation_output(void) {
     float mask_atk_none = obs[FC_TOTAL_OBS + FC_MASK_ATTACK_START + FC_ATTACK_NONE];
     ASSERT_FLOAT_EQ(mask_atk_none, 1.0f, "attack none always valid");
 
-    /* Mask: all NPC attack slots should be masked (no NPCs) */
-    for (int slot = 0; slot < FC_VISIBLE_NPCS; slot++) {
+    /* Mask: slot 0 should be valid (wave 1 Tz-Kih), rest masked */
+    float mask_atk0 = obs[FC_TOTAL_OBS + FC_MASK_ATTACK_START + 1];
+    ASSERT_FLOAT_EQ(mask_atk0, 1.0f, "NPC attack slot 0 valid (wave 1)");
+    for (int slot = 1; slot < FC_VISIBLE_NPCS; slot++) {
         float m = obs[FC_TOTAL_OBS + FC_MASK_ATTACK_START + 1 + slot];
-        ASSERT_FLOAT_EQ(m, 0.0f, "NPC attack slot masked (no NPCs)");
+        ASSERT_FLOAT_EQ(m, 0.0f, "NPC attack slot masked (no NPC)");
     }
 
     /* Mask values should be 0 or 1 */

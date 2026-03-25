@@ -52,20 +52,9 @@ void fc_capi_destroy(FcEnvCtx* ctx) {
     }
 }
 
-/* Reset with seed. Spawns a Tz-Kih for the combat slice. */
+/* Reset with seed. Wave 1 NPCs are auto-spawned by fc_reset. */
 void fc_capi_reset(FcEnvCtx* ctx, unsigned int seed) {
     fc_reset(&ctx->state, (uint32_t)seed);
-
-    /* Spawn Tz-Kih (PR 6 replaces with wave table) */
-    for (int i = 0; i < FC_MAX_NPCS; i++) {
-        if (!ctx->state.npcs[i].active) {
-            fc_npc_spawn(&ctx->state.npcs[i], NPC_TZ_KIH,
-                         ctx->state.player.x + 1, ctx->state.player.y,
-                         ctx->state.next_spawn_index++);
-            ctx->state.npcs_remaining++;
-            break;
-        }
-    }
 
     fc_write_obs(&ctx->state, ctx->obs);
     fc_write_mask(&ctx->state, ctx->obs + FC_TOTAL_OBS);
@@ -115,18 +104,76 @@ const float* fc_capi_get_obs(const FcEnvCtx* ctx) { return ctx->obs; }
 float fc_capi_get_reward(const FcEnvCtx* ctx) { return ctx->reward; }
 int fc_capi_get_terminal(const FcEnvCtx* ctx) { return ctx->terminal; }
 
-/* Batch interface: step N envs at once (for vectorized training) */
-void fc_capi_batch_step(FcEnvCtx** envs, int num_envs,
-                        const int* all_actions, /* flat: [env0_h0..h4, env1_h0..h4, ...] */
-                        float* all_obs,         /* flat: [env0_obs, env1_obs, ...] */
-                        float* all_rewards,
-                        int* all_terminals) {
-    for (int e = 0; e < num_envs; e++) {
-        const int* acts = all_actions + e * FC_NUM_ACTION_HEADS;
-        fc_capi_step(envs[e], acts);
+/* ======================================================================== */
+/* Batch interface — contiguous array of envs                                */
+/* ======================================================================== */
 
-        memcpy(all_obs + e * FC_OBS_SIZE, envs[e]->obs, sizeof(float) * FC_OBS_SIZE);
-        all_rewards[e] = envs[e]->reward;
-        all_terminals[e] = envs[e]->terminal;
+/*
+ * Batch context: N environments in a contiguous allocation.
+ * Python creates one batch, then passes the handle to batch_step/reset.
+ * This avoids pointer-to-pointer indirection and per-env ctypes calls.
+ */
+typedef struct {
+    int num_envs;
+    FcEnvCtx* envs;  /* contiguous array of FcEnvCtx[num_envs] */
+} FcBatchCtx;
+
+FcBatchCtx* fc_capi_batch_create(int num_envs) {
+    FcBatchCtx* batch = (FcBatchCtx*)calloc(1, sizeof(FcBatchCtx));
+    batch->num_envs = num_envs;
+    batch->envs = (FcEnvCtx*)calloc((size_t)num_envs, sizeof(FcEnvCtx));
+    for (int i = 0; i < num_envs; i++) {
+        fc_init(&batch->envs[i].state);
+    }
+    return batch;
+}
+
+void fc_capi_batch_destroy(FcBatchCtx* batch) {
+    if (batch) {
+        if (batch->envs) {
+            for (int i = 0; i < batch->num_envs; i++) {
+                fc_destroy(&batch->envs[i].state);
+            }
+            free(batch->envs);
+        }
+        free(batch);
+    }
+}
+
+void fc_capi_batch_reset(FcBatchCtx* batch, unsigned int base_seed) {
+    for (int i = 0; i < batch->num_envs; i++) {
+        fc_capi_reset(&batch->envs[i], base_seed + (unsigned int)i);
+    }
+}
+
+/*
+ * Batch step: all N envs in one C call.
+ *
+ * all_actions: flat int32 array [num_envs × FC_NUM_ACTION_HEADS]
+ * all_obs:     flat float32 array [num_envs × FC_OBS_SIZE] (written)
+ * all_rewards: flat float32 array [num_envs] (written)
+ * all_terminals: flat int32 array [num_envs] (written)
+ */
+void fc_capi_batch_step_flat(FcBatchCtx* batch,
+                              const int* all_actions,
+                              float* all_obs,
+                              float* all_rewards,
+                              int* all_terminals) {
+    for (int e = 0; e < batch->num_envs; e++) {
+        FcEnvCtx* ctx = &batch->envs[e];
+        const int* acts = all_actions + e * FC_NUM_ACTION_HEADS;
+
+        fc_capi_step(ctx, acts);
+
+        memcpy(all_obs + e * FC_OBS_SIZE, ctx->obs, sizeof(float) * FC_OBS_SIZE);
+        all_rewards[e] = ctx->reward;
+        all_terminals[e] = ctx->terminal;
+    }
+}
+
+/* Read all obs from batch into flat array (for initial reset) */
+void fc_capi_batch_get_obs(const FcBatchCtx* batch, float* all_obs) {
+    for (int e = 0; e < batch->num_envs; e++) {
+        memcpy(all_obs + e * FC_OBS_SIZE, batch->envs[e].obs, sizeof(float) * FC_OBS_SIZE);
     }
 }

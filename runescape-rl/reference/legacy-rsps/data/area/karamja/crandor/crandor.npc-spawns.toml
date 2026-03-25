@@ -1,0 +1,23 @@
+spawns = [
+  { id = "moss_giant", x = 2831, y = 3243 },
+  { id = "moss_giant_2", x = 2834, y = 3242 },
+  { id = "moss_giant_3", x = 2827, y = 3246 },
+  { id = "hobgoblin_unarmed", x = 2834, y = 3305 },
+  { id = "hobgoblin_unarmed", x = 2824, y = 3298 },
+  { id = "hobgoblin_unarmed", x = 2818, y = 3291 },
+  { id = "hobgoblin_unarmed", x = 2822, y = 3288 },
+  { id = "hobgoblin_unarmed", x = 2822, y = 3282 },
+  # 11315
+  { id = "lesser_demon_3", x = 2837, y = 3280 },
+  { id = "lesser_demon_5", x = 2832, y = 3278 },
+  { id = "skeleton_axe_shield", x = 2832, y = 3234 },
+  { id = "skeleton_axe_shield", x = 2854, y = 3249 },
+  { id = "skeleton_sword_shield", x = 2840, y = 3238 },
+  { id = "skeleton_sword_shield", x = 2852, y = 3260 },
+  { id = "skeleton_longsword", x = 2846, y = 3249 },
+  { id = "skeleton_flail", x = 2850, y = 3247 },
+  { id = "ned_crandor", x = 2849, y = 3235, level = 1, members = true },
+  { id = "skeleton_mace_shield", x = 2820, y = 3259 },
+  { id = "skeleton_mace_shield", x = 2824, y = 3237 },
+  { id = "skeleton_mace_shield", x = 2850, y = 3256 },
+]

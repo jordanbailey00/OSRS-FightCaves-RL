@@ -1,0 +1,23 @@
+package content.area.kandarin.ardougne.west_ardougne
+
+import content.entity.player.dialogue.*
+import content.entity.player.dialogue.type.npc
+import content.entity.player.dialogue.type.statement
+import world.gregs.voidps.engine.Script
+import world.gregs.voidps.engine.entity.character.sound
+import world.gregs.voidps.engine.entity.item.floor.FloorItems
+
+class Recruiter : Script {
+
+    init {
+        npcOperate("Talk-to", "recruiter") { (target) ->
+            npc<Idle>("Citizens of West Ardougne! King Tyras needs you for his Royal Army! Who will join this noble cause?")
+            npc<Angry>("w_ardougnecitizen3", "Plague bringer!")
+            npc<Angry>("w_ardougnecitizen3", "King Tyras is scum!")
+            npc<Shock>("Tyras will be informed of these words of treason!")
+            sound("plague_tomato")
+            FloorItems.add(target.tile, "tomato", disappearTicks = 300)
+            statement("Someone throws a tomato at the recruiter.")
+        }
+    }
+}

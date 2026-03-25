@@ -1,0 +1,20 @@
+[cyclops_god_wars]
+id = 6269
+hitpoints = 110
+att = 60
+str = 70
+def = 48
+attack_bonus = 22
+combat_def = "cyclops"
+hunt_mode = "anti_zamorak_aggressive"
+respawn_delay = 25
+slayer_xp = 110.0
+drop_table = "cyclops_god_wars"
+categories = ["cyclops"]
+wander_range = 6
+god = "bandos"
+examine = "A one-eyed man-eater."
+
+[cyclops_god_wars_grey]
+id = 6270
+clone = "cyclops_god_wars"

@@ -114,6 +114,19 @@ static void* nh_pvp_get_entity(EncounterState* state, int index) {
 }
 
 /* ======================================================================== */
+/* render entity population                                                  */
+/* ======================================================================== */
+
+static void nh_pvp_fill_render_entities(EncounterState* state, RenderEntity* out, int max_entities, int* count) {
+    NhPvpState* s = (NhPvpState*)state;
+    int n = NUM_AGENTS < max_entities ? NUM_AGENTS : max_entities;
+    for (int i = 0; i < n; i++) {
+        render_entity_from_player(&s->env.players[i], &out[i]);
+    }
+    *count = n;
+}
+
+/* ======================================================================== */
 /* config                                                                    */
 /* ======================================================================== */
 
@@ -189,6 +202,7 @@ static const EncounterDef ENCOUNTER_NH_PVP = {
 
     .get_entity_count = nh_pvp_get_entity_count,
     .get_entity = nh_pvp_get_entity,
+    .fill_render_entities = nh_pvp_fill_render_entities,
 
     .put_int = nh_pvp_put_int,
     .put_float = nh_pvp_put_float,
@@ -198,6 +212,18 @@ static const EncounterDef ENCOUNTER_NH_PVP = {
     .get_log = nh_pvp_get_log,
     .get_tick = nh_pvp_get_tick,
     .get_winner = nh_pvp_get_winner,
+
+    /* NH PvP uses its own human_to_pvp_actions translator, not the generic one.
+       head indices set to -1 since PvP action layout doesn't map to encounter heads. */
+    .head_move = -1,
+    .head_prayer = -1,
+    .head_target = -1,
+    .head_gear = -1,
+    .head_eat = -1,
+    .head_potion = -1,
+    .head_spell = -1,
+    .head_spec = -1,
+    .head_attack = -1,
 };
 
 /* auto-register on include */

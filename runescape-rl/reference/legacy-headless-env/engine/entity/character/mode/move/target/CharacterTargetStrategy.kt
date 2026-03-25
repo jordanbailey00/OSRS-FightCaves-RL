@@ -1,0 +1,22 @@
+package sim.engine.entity.character.mode.move.target
+
+import sim.engine.entity.character.Character
+import sim.types.Tile
+
+data class CharacterTargetStrategy(
+    private val character: Character,
+) : TargetStrategy {
+    override val bitMask = 0
+    override val tile: Tile
+        get() = character.tile
+    override val width: Int
+        get() = character.size
+    override val height: Int
+        get() = character.size
+    override val rotation = 0
+    override val shape = -2
+    override val sizeX: Int
+        get() = character.size
+    override val sizeY: Int
+        get() = character.size
+}

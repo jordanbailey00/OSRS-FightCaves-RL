@@ -35,6 +35,7 @@
 #include "../osrs_encounter.h"
 #include "../osrs_pvp_types.h"
 #include "../osrs_pvp_items.h"
+#include "../osrs_combat_shared.h"
 #include "../osrs_pvp_collision.h"
 #include "../osrs_pvp_pathfinding.h"
 #include "../data/npc_models.h"
@@ -169,9 +170,9 @@ static const int ZUL_POSITIONS[ZUL_NUM_POSITIONS][2] = {
 #define ZUL_NUM_OBS           81
 #define ZUL_NUM_ACTION_HEADS  6
 
-#define ZUL_MOVE_DIM    9
+#define ZUL_MOVE_DIM    ENCOUNTER_MOVE_ACTIONS
 #define ZUL_ATTACK_DIM  3
-#define ZUL_PRAYER_DIM  4
+#define ZUL_PRAYER_DIM  ENCOUNTER_PRAYER_DIM
 #define ZUL_FOOD_DIM    3   /* none, shark, karambwan */
 #define ZUL_POTION_DIM  3   /* none, restore, antivenom */
 #define ZUL_SPEC_DIM    2
@@ -190,10 +191,6 @@ static const int ZUL_POSITIONS[ZUL_NUM_POSITIONS][2] = {
 #define ZUL_ATK_NONE  0
 #define ZUL_ATK_MAGE  1
 #define ZUL_ATK_RANGE 2
-#define ZUL_PRAY_NONE    0
-#define ZUL_PRAY_MAGIC   1
-#define ZUL_PRAY_RANGED  2
-#define ZUL_PRAY_MELEE   3
 
 /* ======================================================================== */
 /* enums                                                                     */
@@ -381,8 +378,7 @@ static const int ZUL_ACTION_HEAD_DIMS[ZUL_NUM_ACTION_HEADS] = {
     ZUL_FOOD_DIM, ZUL_POTION_DIM, ZUL_SPEC_DIM,
 };
 
-static const int ZUL_MOVE_DX[9] = { 0, 0, 1, 1, 1, 0, -1, -1, -1 };
-static const int ZUL_MOVE_DY[9] = { 0, 1, 1, 0, -1, -1, -1, 0, 1 };
+/* movement uses shared encounter_move_to_target + ENCOUNTER_MOVE_TARGET_DX/DY from osrs_encounter.h */
 
 /* ======================================================================== */
 /* gear tier precomputed stats — from wiki strategy guide loadouts           */
@@ -499,34 +495,14 @@ static const uint8_t ZUL_RANGE_LOADOUT[ZUL_NUM_GEAR_TIERS][NUM_GEAR_SLOTS] = {
       ITEM_ZARYTE_VAMBRACES, ITEM_AVERNIC_TREADS, ITEM_RING_OF_SUFFERING_RI },
 };
 
-/* helper: populate equipped[] from a loadout table (uses Player directly
-   since this is defined before ZulrahState) */
-static void zul_equip_loadout_player(Player* p, const uint8_t loadout[NUM_GEAR_SLOTS]) {
-    memcpy(p->equipped, loadout, NUM_GEAR_SLOTS);
-}
-
-/** Populate player inventory[][] with all items from both mage and range loadouts.
-    The GUI filters out currently equipped items, showing only swap gear. */
+/* gear switching uses shared helpers from osrs_encounter.h:
+   encounter_apply_loadout() and encounter_populate_inventory(). */
 static void zul_populate_player_inventory(Player* p, int gear_tier) {
-    memset(p->inventory, ITEM_NONE, sizeof(p->inventory));
-    memset(p->num_items_in_slot, 0, sizeof(p->num_items_in_slot));
-
-    const uint8_t* mage = ZUL_MAGE_LOADOUT[gear_tier];
-    const uint8_t* range = ZUL_RANGE_LOADOUT[gear_tier];
-
-    /* collect unique items from both loadouts into per-slot inventories */
-    for (int s = 0; s < NUM_GEAR_SLOTS; s++) {
-        int n = 0;
-        /* add mage item for this slot */
-        if (mage[s] != ITEM_NONE && n < MAX_ITEMS_PER_SLOT) {
-            p->inventory[s][n++] = mage[s];
-        }
-        /* add range item if different */
-        if (range[s] != ITEM_NONE && range[s] != mage[s] && n < MAX_ITEMS_PER_SLOT) {
-            p->inventory[s][n++] = range[s];
-        }
-        p->num_items_in_slot[s] = n;
-    }
+    const uint8_t* loadouts[] = {
+        ZUL_MAGE_LOADOUT[gear_tier],
+        ZUL_RANGE_LOADOUT[gear_tier],
+    };
+    encounter_populate_inventory(p, loadouts, 2, NULL);
 }
 
 /* snakeling spawn positions (shifted +6x for new base offset 2254,3060) */
@@ -625,6 +601,7 @@ typedef struct {
     int player_food_timer;
     int player_potion_timer;
     OverheadPrayer player_prayer;
+    int prayer_drain_counter;  /* shared drain system counter (see encounter_drain_prayer) */
     int player_special_energy;
     int player_dest_x, player_dest_y;   /* click destination for 2-tile run clamping */
     int player_dest_explicit;            /* 1 = dest set via put_int (human click), skip direction-based override */
@@ -666,6 +643,7 @@ typedef struct {
 
     /* reward tracking */
     float reward;
+    float episode_return;  /* running sum of reward across all ticks */
     float damage_dealt_this_tick;
     float damage_received_this_tick;
     int prayer_blocked_this_tick;
@@ -690,23 +668,7 @@ typedef struct {
     Log log;
 } ZulrahState;
 
-/* ======================================================================== */
-/* RNG                                                                       */
-/* ======================================================================== */
-
-static inline uint32_t zul_xorshift(uint32_t* state) {
-    uint32_t x = *state;
-    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
-    *state = x;
-    return x;
-}
-static inline int zul_rand_int(ZulrahState* s, int max) {
-    if (max <= 0) return 0;
-    return zul_xorshift(&s->rng_state) % max;
-}
-static inline float zul_rand_float(ZulrahState* s) {
-    return (float)zul_xorshift(&s->rng_state) / (float)UINT32_MAX;
-}
+/* RNG: use shared encounter_rand_int(), encounter_rand_float() from osrs_combat_shared.h */
 
 /** Sync encounter consumable counts into Player struct for GUI display.
     The GUI reads Player.food_count/brew_doses/etc — encounters that track
@@ -736,23 +698,14 @@ static inline int zul_on_platform(ZulrahState* s, int x, int y) {
     return collision_tile_walkable((const CollisionMap*)s->collision_map, 0, wx, wy);
 }
 
-/* BFS pathfinding on the zulrah arena. converts local coords to world coords
-   for the pathfinder, then returns the first step direction in local space. */
-static inline PathResult zul_pathfind(ZulrahState* s, int src_x, int src_y,
-                                       int dst_x, int dst_y) {
-    if (!s->collision_map) {
-        /* no collision map — greedy fallback */
-        PathResult r = {0, 0, 0, dst_x, dst_y};
-        if (src_x == dst_x && src_y == dst_y) { r.found = 1; return r; }
-        int dx = dst_x - src_x, dy = dst_y - src_y;
-        r.found = 1;
-        r.next_dx = (dx > 0) ? 1 : (dx < 0) ? -1 : 0;
-        r.next_dy = (dy > 0) ? 1 : (dy < 0) ? -1 : 0;
-        return r;
-    }
-    int ox = s->world_offset_x, oy = s->world_offset_y;
-    return pathfind_step((const CollisionMap*)s->collision_map, 0,
-                         src_x + ox, src_y + oy, dst_x + ox, dst_y + oy);
+/* BFS pathfinding uses shared encounter_pathfind from osrs_encounter.h */
+#define zul_pathfind(s, sx, sy, dx, dy) \
+    encounter_pathfind((const CollisionMap*)(s)->collision_map, \
+        (s)->world_offset_x, (s)->world_offset_y, (sx), (sy), (dx), (dy), NULL, NULL)
+
+/* walkability callback for encounter_move_toward_dest */
+static int zul_tile_walkable(void* ctx, int x, int y) {
+    return zul_on_platform((ZulrahState*)ctx, x, y);
 }
 
 /* cloud overlap: player (1x1) inside cloud (3x3) */
@@ -761,13 +714,6 @@ static inline int zul_player_in_cloud(int cx, int cy, int px, int py) {
            py >= cy && py < cy + ZUL_CLOUD_SIZE;
 }
 
-static inline int zul_dist_to_zulrah(ZulrahState* s) {
-    int px = s->player.x, py = s->player.y;
-    int zx = s->zulrah.x, zy = s->zulrah.y;
-    int cx = clamp(px, zx, zx + ZUL_NPC_SIZE - 1);
-    int cy = clamp(py, zy, zy + ZUL_NPC_SIZE - 1);
-    return max_int(abs_int(px - cx), abs_int(py - cy));
-}
 
 static int zul_form_npc_id(ZulrahForm f) {
     return (f == ZUL_FORM_GREEN) ? 2042 : (f == ZUL_FORM_RED) ? 2043 : 2044;
@@ -776,7 +722,7 @@ static int zul_form_npc_id(ZulrahForm f) {
 /* apply damage cap: hits over 50 → random 45-50 */
 static inline int zul_cap_damage(ZulrahState* s, int damage) {
     if (damage > ZUL_DAMAGE_CAP) {
-        return ZUL_DAMAGE_CAP_MIN + zul_rand_int(s, ZUL_DAMAGE_CAP - ZUL_DAMAGE_CAP_MIN + 1);
+        return ZUL_DAMAGE_CAP_MIN + encounter_rand_int(&s->rng_state, ZUL_DAMAGE_CAP - ZUL_DAMAGE_CAP_MIN + 1);
     }
     return damage;
 }
@@ -796,12 +742,8 @@ static inline int zul_has_recoil_effect(Player* p) {
 static void zul_apply_player_damage(ZulrahState* s, int damage, AttackStyle style,
                                     Player* attacker) {
     if (damage <= 0) return;
-    s->player.current_hitpoints -= damage;
-    s->damage_received_this_tick += damage;
+    encounter_damage_player(&s->player, damage, &s->damage_received_this_tick);
     s->total_damage_received += damage;
-    if (s->player.current_hitpoints < 0) s->player.current_hitpoints = 0;
-    s->player.hit_landed_this_tick = 1;
-    s->player.hit_damage = damage;
     s->player.hit_style = style;
 
     /* ring of recoil / ring of suffering (i) */
@@ -810,8 +752,7 @@ static void zul_apply_player_damage(ZulrahState* s, int damage, AttackStyle styl
         if (recoil > s->player.recoil_charges) {
             recoil = s->player.recoil_charges;
         }
-        attacker->current_hitpoints -= recoil;
-        if (attacker->current_hitpoints < 0) attacker->current_hitpoints = 0;
+        encounter_damage_player(attacker, recoil, NULL);
 
         if (s->player.equipped[GEAR_SLOT_RING] == ITEM_RING_OF_RECOIL) {
             s->player.recoil_charges -= recoil;
@@ -828,7 +769,7 @@ static void zul_apply_player_damage(ZulrahState* s, int damage, AttackStyle styl
 static void zul_try_envenom(ZulrahState* s) {
     if (s->venom_counter > 0) return;                /* already venomed */
     if (s->antivenom_timer > 0) return;               /* anti-venom active */
-    if (zul_rand_int(s, 4) != 0) return;              /* 25% chance */
+    if (encounter_rand_int(&s->rng_state, 4) != 0) return;              /* 25% chance */
     s->venom_counter = 1;
     s->venom_timer = ZUL_VENOM_INTERVAL;
 }
@@ -838,11 +779,7 @@ static void zul_try_envenom(ZulrahState* s) {
 /* ======================================================================== */
 
 /* OSRS accuracy formula: if att > def: 1 - (def+2)/(2*(att+1)), else att/(2*(def+1)) */
-static float zul_hit_chance(int att_roll, int def_roll) {
-    if (att_roll > def_roll)
-        return 1.0f - ((float)(def_roll + 2) / (2.0f * (att_roll + 1)));
-    return (float)att_roll / (2.0f * (def_roll + 1));
-}
+/* hit chance: use shared OSRS accuracy formula from osrs_combat_shared.h */
 
 /* confliction gauntlets double accuracy roll (same formula as osmumten's fang).
  * on a primed magic attack, accuracy is rolled twice — hitting if either roll succeeds. */
@@ -912,11 +849,11 @@ static void zul_record_attack(ZulrahState* s, int src_x, int src_y,
 static void zul_attack_ranged(ZulrahState* s) {
     int dmg = 0;
     int did_hit = 0;
-    if (s->player_prayer == PRAYER_PROTECT_RANGED) {
+    if (encounter_prayer_correct_for_style(s->player_prayer, ATTACK_STYLE_RANGED)) {
         /* prayer blocks damage but venom still applies (unless miss) */
         int def_roll = zul_player_def_roll(s, ATTACK_STYLE_RANGED);
-        float chance = zul_hit_chance(ZUL_NPC_RANGED_ATT_ROLL, def_roll);
-        did_hit = (zul_rand_float(s) < chance);
+        float chance = osrs_hit_chance(ZUL_NPC_RANGED_ATT_ROLL, def_roll);
+        did_hit = (encounter_rand_float(&s->rng_state) < chance);
         if (did_hit) {
             s->prayer_blocked_this_tick = 1;
             /* damage blocked by prayer, but attack didn't "miss" */
@@ -924,10 +861,10 @@ static void zul_attack_ranged(ZulrahState* s) {
     } else {
         /* accuracy roll: NPC ranged att vs player ranged def */
         int def_roll = zul_player_def_roll(s, ATTACK_STYLE_RANGED);
-        float chance = zul_hit_chance(ZUL_NPC_RANGED_ATT_ROLL, def_roll);
-        if (zul_rand_float(s) < chance) {
+        float chance = osrs_hit_chance(ZUL_NPC_RANGED_ATT_ROLL, def_roll);
+        if (encounter_rand_float(&s->rng_state) < chance) {
             did_hit = 1;
-            dmg = zul_rand_int(s, ZUL_MAX_HIT + 1);
+            dmg = encounter_rand_int(&s->rng_state, ZUL_MAX_HIT + 1);
             zul_apply_player_damage(s, dmg, ATTACK_STYLE_RANGED, &s->zulrah);
         }
     }
@@ -941,10 +878,10 @@ static void zul_attack_ranged(ZulrahState* s) {
    even if blocked by a protection prayer." magic never misses → always envenoms. */
 static void zul_attack_magic(ZulrahState* s) {
     int dmg = 0;
-    if (s->player_prayer == PRAYER_PROTECT_MAGIC) {
+    if (encounter_prayer_correct_for_style(s->player_prayer, ATTACK_STYLE_MAGIC)) {
         s->prayer_blocked_this_tick = 1;
     } else {
-        dmg = zul_rand_int(s, ZUL_MAX_HIT + 1);
+        dmg = encounter_rand_int(&s->rng_state, ZUL_MAX_HIT + 1);
         zul_apply_player_damage(s, dmg, ATTACK_STYLE_MAGIC, &s->zulrah);
     }
     /* magic always hits → always try envenom (even if prayer blocked damage) */
@@ -955,7 +892,7 @@ static void zul_attack_magic(ZulrahState* s) {
 
 /* blue/tanzanite form: random magic or ranged. wiki says magic more frequent. */
 static void zul_attack_magic_ranged(ZulrahState* s) {
-    if (zul_rand_int(s, 4) < 3) {  /* 75% magic, 25% ranged */
+    if (encounter_rand_int(&s->rng_state, 4) < 3) {  /* 75% magic, 25% ranged */
         zul_attack_magic(s);
     } else {
         zul_attack_ranged(s);
@@ -989,10 +926,10 @@ static void zul_melee_hit(ZulrahState* s) {
     int dmg = 0;
     if (s->player.x == s->melee_target_x && s->player.y == s->melee_target_y
         && !zul_on_pillar_safespot(s->player.x, s->player.y)) {
-        if (s->player_prayer == PRAYER_PROTECT_MELEE) {
+        if (encounter_prayer_correct_for_style(s->player_prayer, ATTACK_STYLE_MELEE)) {
             s->prayer_blocked_this_tick = 1;
         } else {
-            dmg = 20 + zul_rand_int(s, 11);  /* 20-30 per wiki */
+            dmg = 20 + encounter_rand_int(&s->rng_state, 11);  /* 20-30 per wiki */
             zul_apply_player_damage(s, dmg, ATTACK_STYLE_MELEE, &s->zulrah);
             s->player_stunned_ticks = ZUL_MELEE_STUN_TICKS;
         }
@@ -1015,6 +952,15 @@ static void zul_attack_jad(ZulrahState* s) {
 /* player attacks zulrah                                                     */
 /* ======================================================================== */
 
+/* per-form defence bonuses — called from normal attacks and spec handler */
+static inline void zul_form_def_bonuses(ZulrahForm form, int* def_magic, int* def_ranged) {
+    switch (form) {
+        case ZUL_FORM_GREEN: *def_magic = ZUL_GREEN_DEF_MAGIC; *def_ranged = ZUL_GREEN_DEF_RANGED; break;
+        case ZUL_FORM_RED:   *def_magic = ZUL_RED_DEF_MAGIC;   *def_ranged = ZUL_RED_DEF_RANGED;   break;
+        case ZUL_FORM_BLUE:  *def_magic = ZUL_BLUE_DEF_MAGIC;  *def_ranged = ZUL_BLUE_DEF_RANGED;  break;
+    }
+}
+
 static int zul_player_attack_hits(ZulrahState* s, int is_mage) {
     const ZulGearTierStats* t = &ZUL_GEAR_TIERS[s->gear_tier];
     int eff_level = is_mage ? t->eff_mage_level : t->eff_range_level;
@@ -1025,11 +971,7 @@ static int zul_player_attack_hits(ZulrahState* s, int is_mage) {
         att_roll = att_roll * 130 / 100;
 
     int def_magic = 0, def_ranged = 0;
-    switch (s->current_form) {
-        case ZUL_FORM_GREEN: def_magic = ZUL_GREEN_DEF_MAGIC; def_ranged = ZUL_GREEN_DEF_RANGED; break;
-        case ZUL_FORM_RED:   def_magic = ZUL_RED_DEF_MAGIC;   def_ranged = ZUL_RED_DEF_RANGED;   break;
-        case ZUL_FORM_BLUE:  def_magic = ZUL_BLUE_DEF_MAGIC;  def_ranged = ZUL_BLUE_DEF_RANGED;  break;
-    }
+    zul_form_def_bonuses(s->current_form, &def_magic, &def_ranged);
     /* apply eye of ayak magic defence drain (carries across forms) */
     if (is_mage) {
         def_magic -= s->magic_def_drain;
@@ -1043,10 +985,10 @@ static int zul_player_attack_hits(ZulrahState* s, int is_mage) {
      * primed = previous magic attack missed. eye of ayak is one-handed so effect applies. */
     if (is_mage && s->confliction_primed && s->gear_tier == 2) {
         s->confliction_primed = 0;
-        return zul_rand_float(s) < zul_hit_chance_double(att_roll, def_roll);
+        return encounter_rand_float(&s->rng_state) < zul_hit_chance_double(att_roll, def_roll);
     }
 
-    return zul_rand_float(s) < zul_hit_chance(att_roll, def_roll);
+    return encounter_rand_float(&s->rng_state) < osrs_hit_chance(att_roll, def_roll);
 }
 
 static void zul_player_attack(ZulrahState* s, int is_mage) {
@@ -1064,14 +1006,12 @@ static void zul_player_attack(ZulrahState* s, int is_mage) {
     int dmg = 0;
     int hit = zul_player_attack_hits(s, is_mage);
     if (hit) {
-        dmg = zul_rand_int(s, max_hit + 1);
+        dmg = encounter_rand_int(&s->rng_state, max_hit + 1);
         dmg = zul_cap_damage(s, dmg);
-        s->zulrah.current_hitpoints -= dmg;
-        s->damage_dealt_this_tick += dmg;
+        encounter_damage_player(&s->zulrah, dmg, &s->damage_dealt_this_tick);
         s->total_damage_dealt += dmg;
-        if (s->zulrah.current_hitpoints < 0) s->zulrah.current_hitpoints = 0;
         /* sang staff passive (tier 1 mage): 1/6 chance to heal 50% of damage dealt */
-        if (is_mage && s->gear_tier == 1 && dmg > 0 && zul_rand_int(s, 6) == 0) {
+        if (is_mage && s->gear_tier == 1 && dmg > 0 && encounter_rand_int(&s->rng_state, 6) == 0) {
             int heal = dmg / 2;
             s->player.current_hitpoints += heal;
             if (s->player.current_hitpoints > s->player.base_hitpoints)
@@ -1125,12 +1065,8 @@ static void zul_player_spec(ZulrahState* s) {
         s->player.attack_style_this_tick = ATTACK_STYLE_RANGED;
         s->player_attack_timer = 3;
 
-        int def_ranged = 0;
-        switch (s->current_form) {
-            case ZUL_FORM_GREEN: def_ranged = ZUL_GREEN_DEF_RANGED; break;
-            case ZUL_FORM_RED:   def_ranged = ZUL_RED_DEF_RANGED; break;
-            case ZUL_FORM_BLUE:  def_ranged = ZUL_BLUE_DEF_RANGED; break;
-        }
+        int _dm1 = 0, def_ranged = 0;
+        zul_form_def_bonuses(s->current_form, &_dm1, &def_ranged);
         int def_roll = (ZUL_DEF_LEVEL + 8) * (def_ranged + 64);
         if (def_roll < 0) def_roll = 0;
 
@@ -1139,11 +1075,10 @@ static void zul_player_spec(ZulrahState* s) {
         int att_roll_spec = att_roll_base * 10 / 7;
 
         for (int arrow = 0; arrow < 2; arrow++) {
-            if (zul_rand_float(s) < zul_hit_chance(att_roll_spec, def_roll)) {
-                int dmg = zul_rand_int(s, msb_max_hit + 1);
+            if (encounter_rand_float(&s->rng_state) < osrs_hit_chance(att_roll_spec, def_roll)) {
+                int dmg = encounter_rand_int(&s->rng_state, msb_max_hit + 1);
                 dmg = zul_cap_damage(s, dmg);
-                s->zulrah.current_hitpoints -= dmg;
-                if (s->zulrah.current_hitpoints < 0) s->zulrah.current_hitpoints = 0;
+                encounter_damage_player(&s->zulrah, dmg, NULL);
                 total_dmg += dmg;
             }
         }
@@ -1153,21 +1088,16 @@ static void zul_player_spec(ZulrahState* s) {
         s->player.attack_style_this_tick = ATTACK_STYLE_RANGED;
         s->player_attack_timer = 3;
 
-        int def_ranged = 0;
-        switch (s->current_form) {
-            case ZUL_FORM_GREEN: def_ranged = ZUL_GREEN_DEF_RANGED; break;
-            case ZUL_FORM_RED:   def_ranged = ZUL_RED_DEF_RANGED; break;
-            case ZUL_FORM_BLUE:  def_ranged = ZUL_BLUE_DEF_RANGED; break;
-        }
+        int _dm2 = 0, def_ranged = 0;
+        zul_form_def_bonuses(s->current_form, &_dm2, &def_ranged);
         int def_roll = (ZUL_DEF_LEVEL + 8) * (def_ranged + 64);
         if (def_roll < 0) def_roll = 0;
 
         int att_roll = t->eff_range_level * (t->bp_att_bonus + 64);
-        if (zul_rand_float(s) < zul_hit_chance(att_roll, def_roll)) {
-            int dmg = zul_rand_int(s, t->bp_max_hit + 1);
+        if (encounter_rand_float(&s->rng_state) < osrs_hit_chance(att_roll, def_roll)) {
+            int dmg = encounter_rand_int(&s->rng_state, t->bp_max_hit + 1);
             dmg = zul_cap_damage(s, dmg);
-            s->zulrah.current_hitpoints -= dmg;
-            if (s->zulrah.current_hitpoints < 0) s->zulrah.current_hitpoints = 0;
+            encounter_damage_player(&s->zulrah, dmg, NULL);
             total_dmg = dmg;
             int heal = dmg * ZUL_SPEC_HEAL_PCT / 100;
             s->player.current_hitpoints += heal;
@@ -1181,12 +1111,8 @@ static void zul_player_spec(ZulrahState* s) {
         s->player.attack_style_this_tick = ATTACK_STYLE_MAGIC;
         s->player_attack_timer = 5;  /* slower than normal 3-tick */
 
-        int def_magic = 0;
-        switch (s->current_form) {
-            case ZUL_FORM_GREEN: def_magic = ZUL_GREEN_DEF_MAGIC; break;
-            case ZUL_FORM_RED:   def_magic = ZUL_RED_DEF_MAGIC; break;
-            case ZUL_FORM_BLUE:  def_magic = ZUL_BLUE_DEF_MAGIC; break;
-        }
+        int def_magic = 0, _dr3 = 0;
+        zul_form_def_bonuses(s->current_form, &def_magic, &_dr3);
         def_magic -= s->magic_def_drain;
         if (def_magic < -64) def_magic = -64;
         int def_roll = (ZUL_DEF_LEVEL + 8) * (def_magic + 64);
@@ -1195,11 +1121,10 @@ static void zul_player_spec(ZulrahState* s) {
         int att_roll = t->eff_mage_level * (t->mage_att_bonus + 64) * 2;  /* 2x accuracy */
         int spec_max_hit = t->mage_max_hit * 130 / 100;  /* 1.3x max hit */
 
-        if (zul_rand_float(s) < zul_hit_chance(att_roll, def_roll)) {
-            int dmg = zul_rand_int(s, spec_max_hit + 1);
+        if (encounter_rand_float(&s->rng_state) < osrs_hit_chance(att_roll, def_roll)) {
+            int dmg = encounter_rand_int(&s->rng_state, spec_max_hit + 1);
             dmg = zul_cap_damage(s, dmg);
-            s->zulrah.current_hitpoints -= dmg;
-            if (s->zulrah.current_hitpoints < 0) s->zulrah.current_hitpoints = 0;
+            encounter_damage_player(&s->zulrah, dmg, NULL);
             total_dmg = dmg;
             /* drain target magic defence by damage dealt */
             s->magic_def_drain += dmg;
@@ -1222,10 +1147,7 @@ static void zul_pick_snakeling_pos(ZulrahState* s, int* ox, int* oy) {
     /* try predefined positions in random order */
     int order[ZUL_NUM_SNAKELING_POSITIONS];
     for (int i = 0; i < ZUL_NUM_SNAKELING_POSITIONS; i++) order[i] = i;
-    for (int i = ZUL_NUM_SNAKELING_POSITIONS - 1; i > 0; i--) {
-        int j = zul_rand_int(s, i + 1);
-        int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-    }
+    encounter_shuffle(order, ZUL_NUM_SNAKELING_POSITIONS, &s->rng_state);
     for (int i = 0; i < ZUL_NUM_SNAKELING_POSITIONS; i++) {
         int px = ZUL_SNAKELING_POSITIONS[order[i]][0];
         int py = ZUL_SNAKELING_POSITIONS[order[i]][1];
@@ -1248,7 +1170,7 @@ static void zul_spawn_snakeling(ZulrahState* s) {
         sn->entity.entity_type = ENTITY_NPC;
         sn->entity.npc_size = 1;
         sn->entity.npc_visible = 1;
-        sn->is_magic = zul_rand_int(s, 2);
+        sn->is_magic = encounter_rand_int(&s->rng_state, 2);
         sn->entity.npc_def_id = sn->is_magic ? 2046 : 2045;
         sn->entity.npc_anim_id = SNAKELING_ANIM_IDLE;
         zul_pick_snakeling_pos(s, &sn->entity.x, &sn->entity.y);
@@ -1307,10 +1229,12 @@ static void zul_snakeling_tick(ZulrahState* s) {
 
         sn->attack_timer = ZUL_SNAKELING_SPEED;
         sn->entity.npc_anim_id = sn->is_magic ? SNAKELING_ANIM_MAGIC : SNAKELING_ANIM_MELEE;
-        OverheadPrayer block = sn->is_magic ? PRAYER_PROTECT_MAGIC : PRAYER_PROTECT_MELEE;
-        if (s->player_prayer == block) { s->prayer_blocked_this_tick = 1; continue; }
+        AttackStyle sn_style = sn->is_magic ? ATTACK_STYLE_MAGIC : ATTACK_STYLE_MELEE;
+        if (encounter_prayer_correct_for_style(s->player_prayer, sn_style)) {
+            s->prayer_blocked_this_tick = 1; continue;
+        }
         int sn_max = sn->is_magic ? ZUL_SNAKELING_MAGIC_MAX_HIT : ZUL_SNAKELING_MELEE_MAX_HIT;
-        int dmg = zul_rand_int(s, sn_max + 1);
+        int dmg = encounter_rand_int(&s->rng_state, sn_max + 1);
         AttackStyle st = sn->is_magic ? ATTACK_STYLE_MAGIC : ATTACK_STYLE_MELEE;
         zul_apply_player_damage(s, dmg, st, &sn->entity);
 
@@ -1350,8 +1274,8 @@ static int zul_cloud_fits(ZulrahState* s, int x, int y) {
 static int zul_pick_cloud_pos(ZulrahState* s, int stand, int stall, int* ox, int* oy) {
     int attempts = 0;
     while (attempts++ < 100) {
-        int x = ZUL_PLATFORM_MIN + zul_rand_int(s, ZUL_PLATFORM_MAX - ZUL_PLATFORM_MIN + 1);
-        int y = ZUL_PLATFORM_MIN + zul_rand_int(s, ZUL_PLATFORM_MAX - ZUL_PLATFORM_MIN + 1);
+        int x = ZUL_PLATFORM_MIN + encounter_rand_int(&s->rng_state, ZUL_PLATFORM_MAX - ZUL_PLATFORM_MIN + 1);
+        int y = ZUL_PLATFORM_MIN + encounter_rand_int(&s->rng_state, ZUL_PLATFORM_MAX - ZUL_PLATFORM_MIN + 1);
 
         if (!zul_cloud_fits(s, x, y)) continue;
         if (zul_tile_is_safe(x, y, stand, stall)) continue;
@@ -1453,7 +1377,7 @@ static void zul_cloud_tick(ZulrahState* s) {
         if (zul_player_in_cloud(s->clouds[i].x, s->clouds[i].y,
                                 s->player.x, s->player.y)) {
             int dmg = ZUL_CLOUD_DAMAGE_MIN +
-                      zul_rand_int(s, ZUL_CLOUD_DAMAGE_MAX - ZUL_CLOUD_DAMAGE_MIN + 1);
+                      encounter_rand_int(&s->rng_state, ZUL_CLOUD_DAMAGE_MAX - ZUL_CLOUD_DAMAGE_MIN + 1);
             zul_apply_player_damage(s, dmg, ATTACK_STYLE_MAGIC, NULL);
         }
     }
@@ -1505,11 +1429,9 @@ static void zul_thrall_tick(ZulrahState* s) {
 
     if (!s->zulrah_visible || s->is_diving) return;
 
-    int dmg = zul_rand_int(s, ZUL_THRALL_MAX_HIT + 1);
+    int dmg = encounter_rand_int(&s->rng_state, ZUL_THRALL_MAX_HIT + 1);
     dmg = zul_cap_damage(s, dmg);
-    s->zulrah.current_hitpoints -= dmg;
-    if (s->zulrah.current_hitpoints < 0) s->zulrah.current_hitpoints = 0;
-    s->damage_dealt_this_tick += dmg;
+    encounter_damage_player(&s->zulrah, dmg, &s->damage_dealt_this_tick);
     s->total_damage_dealt += dmg;
 }
 
@@ -1628,7 +1550,7 @@ static void zul_next_phase(ZulrahState* s) {
         /* rotation complete — pick new random rotation, start from phase 1.
            the last phase already did ranged+clouds which counts as phase 1
            of the next rotation, so we skip to phase 1 (index 1). */
-        s->rotation_index = zul_rand_int(s, ZUL_NUM_ROTATIONS);
+        s->rotation_index = encounter_rand_int(&s->rng_state, ZUL_NUM_ROTATIONS);
         s->phase_index = 1; /* skip cloud-only phase 1 since last phase covered it */
     }
 
@@ -1712,56 +1634,18 @@ static void zul_phase_tick(ZulrahState* s) {
 /* player action processing                                                  */
 /* ======================================================================== */
 
-static void zul_process_movement(ZulrahState* s, int move) {
-    if (move <= 0 || move >= ZUL_MOVE_DIM) return;
+static void zul_process_movement(ZulrahState* s) {
+    if (s->player_dest_x < 0 || s->player_dest_y < 0) return;
     if (s->player_stunned_ticks > 0) return;
 
-    int steps_taken = 0;
-    for (int step = 0; step < 2; step++) {
-        /* reached click destination — stop (walk, don't overshoot) */
-        if (s->player.x == s->player_dest_x && s->player.y == s->player_dest_y) break;
-
-        /* BFS pathfind toward destination if we have one, otherwise use raw direction */
-        int dx, dy;
-        if (s->player_dest_x >= 0 && s->player_dest_y >= 0) {
-            PathResult pr = zul_pathfind(s, s->player.x, s->player.y,
-                                          s->player_dest_x, s->player_dest_y);
-            if (!pr.found || (pr.next_dx == 0 && pr.next_dy == 0)) break;
-            dx = pr.next_dx;
-            dy = pr.next_dy;
-        } else {
-            dx = ZUL_MOVE_DX[move];
-            dy = ZUL_MOVE_DY[move];
-        }
-
-        int px = s->player.x, py = s->player.y;
-        if (s->collision_map) {
-            int wx = px + s->world_offset_x;
-            int wy = py + s->world_offset_y;
-            if (collision_traversable_step((const CollisionMap*)s->collision_map,
-                                            0, wx, wy, dx, dy)) {
-                s->player.x = px + dx;
-                s->player.y = py + dy;
-                steps_taken++;
-            }
-        } else {
-            int nx = px + dx, ny = py + dy;
-            if (zul_on_platform(s, nx, ny)) {
-                s->player.x = nx; s->player.y = ny;
-                steps_taken++;
-            }
-        }
-    }
-    s->player.is_running = (steps_taken == 2);
+    /* shared BFS click-to-move: runs (2 steps) when dest > 1 tile away */
+    encounter_move_toward_dest(&s->player, &s->player_dest_x, &s->player_dest_y,
+        (const CollisionMap*)s->collision_map, s->world_offset_x, s->world_offset_y,
+        zul_tile_walkable, s, NULL, NULL);
 }
 
 static void zul_process_prayer(ZulrahState* s, int p) {
-    switch (p) {
-        case ZUL_PRAY_NONE:   s->player_prayer = PRAYER_NONE; break;
-        case ZUL_PRAY_MAGIC:  s->player_prayer = PRAYER_PROTECT_MAGIC; break;
-        case ZUL_PRAY_RANGED: s->player_prayer = PRAYER_PROTECT_RANGED; break;
-        case ZUL_PRAY_MELEE:  s->player_prayer = PRAYER_PROTECT_MELEE; break;
-    }
+    encounter_apply_prayer_action(&s->player_prayer, p);
     s->player.prayer = s->player_prayer;
 }
 
@@ -1810,33 +1694,13 @@ static void zul_process_potion(ZulrahState* s, int a) {
 static void zul_process_gear(ZulrahState* s, int atk) {
     if (atk == ZUL_ATK_MAGE && s->player_gear != ZUL_GEAR_MAGE) {
         s->player_gear = ZUL_GEAR_MAGE;
-        s->player.current_gear = GEAR_MAGE;
-        s->player.visible_gear = GEAR_MAGE;
-        zul_equip_loadout_player(&s->player, ZUL_MAGE_LOADOUT[s->gear_tier]);
+        encounter_apply_loadout(&s->player, ZUL_MAGE_LOADOUT[s->gear_tier], GEAR_MAGE);
     } else if (atk == ZUL_ATK_RANGE && s->player_gear != ZUL_GEAR_RANGE) {
         s->player_gear = ZUL_GEAR_RANGE;
-        s->player.current_gear = GEAR_RANGED;
-        s->player.visible_gear = GEAR_RANGED;
-        zul_equip_loadout_player(&s->player, ZUL_RANGE_LOADOUT[s->gear_tier]);
+        encounter_apply_loadout(&s->player, ZUL_RANGE_LOADOUT[s->gear_tier], GEAR_RANGED);
     }
 }
 
-static void zul_drain_prayer(ZulrahState* s) {
-    if (s->player_prayer == PRAYER_NONE) return;
-    if (s->player.current_prayer <= 0) {
-        s->player_prayer = PRAYER_NONE;
-        s->player.prayer = PRAYER_NONE;
-        return;
-    }
-    if (s->tick % 3 == 0) {
-        s->player.current_prayer--;
-        if (s->player.current_prayer <= 0) {
-            s->player.current_prayer = 0;
-            s->player_prayer = PRAYER_NONE;
-            s->player.prayer = PRAYER_NONE;
-        }
-    }
-}
 
 /* ======================================================================== */
 /* observations                                                              */
@@ -1876,7 +1740,7 @@ static void zul_write_obs(EncounterState* state, float* obs) {
     obs[i++] = s->is_diving ? 1.0f : 0.0f;
     obs[i++] = s->zulrah_attacking ? 1.0f : 0.0f;
     obs[i++] = (float)s->action_timer / ZUL_ATTACK_SPEED;
-    obs[i++] = (float)zul_dist_to_zulrah(s) / ZUL_ARENA_SIZE;
+    obs[i++] = (float)encounter_dist_to_npc(s->player.x, s->player.y, s->zulrah.x, s->zulrah.y, ZUL_NPC_SIZE) / ZUL_ARENA_SIZE;
     obs[i++] = (float)s->rotation_index / (ZUL_NUM_ROTATIONS - 1);
     obs[i++] = (float)s->phase_index / 12.0f;
     obs[i++] = (s->melee_pending) ? 1.0f : 0.0f;
@@ -1941,13 +1805,13 @@ static void zul_write_mask(EncounterState* state, float* mask) {
     for (int i = 0; i < ZUL_ACTION_MASK_SIZE; i++) mask[i] = 1.0f;
     int off = 0;
 
-    /* movement */
+    /* movement: 25-action system (idle + 8 walk + 16 run) */
     for (int m = 0; m < ZUL_MOVE_DIM; m++) {
         if (m > 0) {
             if (s->player_stunned_ticks > 0) { mask[off] = 0.0f; }
             else {
-                int nx = s->player.x + ZUL_MOVE_DX[m] * 2;
-                int ny = s->player.y + ZUL_MOVE_DY[m] * 2;
+                int nx = s->player.x + ENCOUNTER_MOVE_TARGET_DX[m];
+                int ny = s->player.y + ENCOUNTER_MOVE_TARGET_DY[m];
                 if (!zul_on_platform(s, nx, ny)) mask[off] = 0.0f;
             }
         }
@@ -1959,9 +1823,11 @@ static void zul_write_mask(EncounterState* state, float* mask) {
             mask[off] = 0.0f;
         off++;
     }
-    /* prayer */
+    /* prayer: 0=no_change (always valid), 1=off (always valid),
+       2-4=melee/ranged/magic (require prayer points) */
     for (int p = 0; p < ZUL_PRAYER_DIM; p++) {
-        if (p > 0 && s->player.current_prayer <= 0) mask[off] = 0.0f;
+        if (p >= ENCOUNTER_PRAYER_MELEE && s->player.current_prayer <= 0)
+            mask[off] = 0.0f;
         off++;
     }
     /* food (none=0, shark=1, karambwan=2) */
@@ -2053,12 +1919,7 @@ static void zul_reset(EncounterState* state, uint32_t seed) {
     s->world_offset_x = saved_wx;
     s->world_offset_y = saved_wy;
     s->gear_tier = saved_tier;
-    /* RNG priority: explicit seed > preserved state > default.
-     * preserving RNG across resets gives episode variety (same pattern as PvP). */
-    uint32_t rng = 12345;
-    if (saved_rng != 0) rng = saved_rng;
-    if (seed != 0) rng = seed;
-    s->rng_state = rng;
+    s->rng_state = encounter_resolve_seed(saved_rng, seed);
 
     /* player */
     s->player.entity_type = ENTITY_PLAYER;
@@ -2081,9 +1942,7 @@ static void zul_reset(EncounterState* state, uint32_t seed) {
         s->thrall_attack_timer = ZUL_THRALL_SPEED;
     }
     s->player_gear = ZUL_GEAR_MAGE;
-    s->player.current_gear = GEAR_MAGE;
-    s->player.visible_gear = GEAR_MAGE;
-    zul_equip_loadout_player(&s->player, ZUL_MAGE_LOADOUT[s->gear_tier]);
+    encounter_apply_loadout(&s->player, ZUL_MAGE_LOADOUT[s->gear_tier], GEAR_MAGE);
     zul_populate_player_inventory(&s->player, s->gear_tier);
     s->player.recoil_charges =
         zul_has_recoil_effect(&s->player) ? RECOIL_MAX_CHARGES : 0;
@@ -2097,7 +1956,7 @@ static void zul_reset(EncounterState* state, uint32_t seed) {
     s->zulrah.current_hitpoints = ZUL_BASE_HP;
 
     /* pick random rotation, start at phase 0 (cloud-only intro) */
-    s->rotation_index = zul_rand_int(s, ZUL_NUM_ROTATIONS);
+    s->rotation_index = encounter_rand_int(&s->rng_state, ZUL_NUM_ROTATIONS);
     s->phase_index = 0;
 
     zul_enter_phase(s);
@@ -2142,20 +2001,22 @@ static void zul_step(EncounterState* state, const int* actions) {
     zul_process_potion(s, actions[ZUL_HEAD_POTION]);
     zul_process_gear(s, actions[ZUL_HEAD_ATTACK]);
 
-    /* set dest: if human click set an explicit dest via put_int, use that.
-       otherwise default to 2 tiles in move direction (RL agent).
-       heuristic overrides via player_dest_x/y for walk-to-tile (stops at dest). */
+    /* set dest: explicit (human click or heuristic) takes priority,
+       then RL action offset, then idle (action 0) clears dest. */
     if (s->player_dest_explicit) {
-        /* dest already set by put_int — clear flag for next tick */
         s->player_dest_explicit = 0;
     } else {
         int m = actions[ZUL_HEAD_MOVE];
         if (m > 0 && m < ZUL_MOVE_DIM) {
-            s->player_dest_x = s->player.x + 2 * ZUL_MOVE_DX[m];
-            s->player_dest_y = s->player.y + 2 * ZUL_MOVE_DY[m];
+            s->player_dest_x = s->player.x + ENCOUNTER_MOVE_TARGET_DX[m];
+            s->player_dest_y = s->player.y + ENCOUNTER_MOVE_TARGET_DY[m];
+        } else {
+            /* idle: clear destination */
+            s->player_dest_x = -1;
+            s->player_dest_y = -1;
         }
     }
-    zul_process_movement(s, actions[ZUL_HEAD_MOVE]);
+    zul_process_movement(s);
 
     /* spec takes priority over normal attack if requested */
     if (actions[ZUL_HEAD_SPEC] == 1) zul_player_spec(s);
@@ -2164,7 +2025,7 @@ static void zul_step(EncounterState* state, const int* actions) {
 
     if (s->zulrah.current_hitpoints <= 0) {
         s->episode_over = 1; s->winner = 0;
-        s->reward = zul_compute_reward(s); return;
+        s->reward = zul_compute_reward(s); s->episode_return += s->reward; return;
     }
 
     /* resolve pending cloud projectiles, then tick active clouds */
@@ -2172,7 +2033,7 @@ static void zul_step(EncounterState* state, const int* actions) {
     zul_cloud_tick(s);
     if (s->player.current_hitpoints <= 0) {
         s->episode_over = 1; s->winner = 1;
-        s->reward = zul_compute_reward(s); return;
+        s->reward = zul_compute_reward(s); s->episode_return += s->reward; return;
     }
 
     /* phase machine */
@@ -2187,18 +2048,20 @@ static void zul_step(EncounterState* state, const int* actions) {
     /* venom */
     zul_venom_tick(s);
 
-    /* prayer drain */
-    zul_drain_prayer(s);
+    /* prayer drain (shared OSRS formula) */
+    encounter_drain_prayer(&s->player.current_prayer, &s->player_prayer, 0, &s->prayer_drain_counter);
+    s->player.prayer = s->player_prayer;
 
     if (s->player.current_hitpoints <= 0) {
         s->episode_over = 1; s->winner = 1;
-        s->reward = zul_compute_reward(s); return;
+        s->reward = zul_compute_reward(s); s->episode_return += s->reward; return;
     }
     if (s->tick >= ZUL_MAX_TICKS) {
         s->episode_over = 1; s->winner = 1;
-        s->reward = zul_compute_reward(s); return;
+        s->reward = zul_compute_reward(s); s->episode_return += s->reward; return;
     }
     s->reward = zul_compute_reward(s);
+    s->episode_return += s->reward;
     zul_sync_player_consumables(s);
 
 }
@@ -2216,9 +2079,9 @@ static void zul_heuristic_actions(ZulrahState* s, int* actions) {
     /* prayer: match form. GREEN=ranged, BLUE=magic, RED=melee */
     if (s->zulrah_visible && !s->is_diving) {
         switch (s->current_form) {
-            case ZUL_FORM_GREEN: actions[ZUL_HEAD_PRAYER] = ZUL_PRAY_RANGED; break;
-            case ZUL_FORM_BLUE:  actions[ZUL_HEAD_PRAYER] = ZUL_PRAY_MAGIC; break;
-            case ZUL_FORM_RED:   actions[ZUL_HEAD_PRAYER] = ZUL_PRAY_MELEE; break;
+            case ZUL_FORM_GREEN: actions[ZUL_HEAD_PRAYER] = ENCOUNTER_PRAYER_RANGED; break;
+            case ZUL_FORM_BLUE:  actions[ZUL_HEAD_PRAYER] = ENCOUNTER_PRAYER_MAGIC; break;
+            case ZUL_FORM_RED:   actions[ZUL_HEAD_PRAYER] = ENCOUNTER_PRAYER_MELEE; break;
         }
     }
 
@@ -2246,26 +2109,18 @@ static void zul_heuristic_actions(ZulrahState* s, int* actions) {
         actions[ZUL_HEAD_POTION] = 1;  /* prayer pot */
     }
 
-    /* movement: BFS pathfind toward current phase's safe spot */
+    /* movement: set dest to current phase's safe spot.
+       zul_process_movement BFS-paths there, running when > 1 tile away. */
     {
         const ZulRotationPhase* phase = zul_current_phase(s);
         int stand = phase->stand;
         if (stand < ZUL_NUM_STAND_LOCATIONS) {
             int tx = ZUL_STAND_COORDS[stand][0];
             int ty = ZUL_STAND_COORDS[stand][1];
-            /* set click destination so movement stops at safe spot (no overshoot) */
-            s->player_dest_x = tx;
-            s->player_dest_y = ty;
             if (tx != s->player.x || ty != s->player.y) {
-                PathResult pr = zul_pathfind(s, s->player.x, s->player.y, tx, ty);
-                if (pr.found && (pr.next_dx != 0 || pr.next_dy != 0)) {
-                    for (int m = 1; m < ZUL_MOVE_DIM; m++) {
-                        if (ZUL_MOVE_DX[m] == pr.next_dx && ZUL_MOVE_DY[m] == pr.next_dy) {
-                            actions[ZUL_HEAD_MOVE] = m;
-                            break;
-                        }
-                    }
-                }
+                s->player_dest_x = tx;
+                s->player_dest_y = ty;
+                s->player_dest_explicit = 1;
             }
         }
     }
@@ -2318,6 +2173,20 @@ static void* zul_get_entity(EncounterState* state, int index) {
     return &s->player;
 }
 
+/* render entity population */
+static void zul_fill_render_entities(EncounterState* state, RenderEntity* out, int max_entities, int* count) {
+    ZulrahState* s = (ZulrahState*)state;
+    int n = 0;
+    if (n < max_entities) render_entity_from_player(&s->player, &out[n++]);
+    if (n < max_entities) render_entity_from_player(&s->zulrah, &out[n++]);
+    for (int i = 0; i < ZUL_MAX_SNAKELINGS && n < max_entities; i++) {
+        if (s->snakelings[i].active) {
+            render_entity_from_player(&s->snakelings[i].entity, &out[n++]);
+        }
+    }
+    *count = n;
+}
+
 /* config */
 static void zul_put_int(EncounterState* state, const char* key, int value) {
     ZulrahState* s = (ZulrahState*)state;
@@ -2329,7 +2198,6 @@ static void zul_put_int(EncounterState* state, const char* key, int value) {
     }
     else if (strcmp(key, "player_dest_x") == 0) { s->player_dest_x = value; s->player_dest_explicit = 1; }
     else if (strcmp(key, "player_dest_y") == 0) { s->player_dest_y = value; s->player_dest_explicit = 1; }
-    (void)s; (void)key; (void)value;
 }
 static void zul_put_float(EncounterState* st, const char* k, float v) { (void)st;(void)k;(void)v; }
 static void zul_put_ptr(EncounterState* st, const char* k, void* v) {
@@ -2341,7 +2209,7 @@ static void zul_put_ptr(EncounterState* st, const char* k, void* v) {
 static void* zul_get_log(EncounterState* state) {
     ZulrahState* s = (ZulrahState*)state;
     if (s->episode_over) {
-        s->log.episode_return += s->reward;
+        s->log.episode_return += s->episode_return;
         s->log.episode_length += (float)s->tick;
         s->log.wins += (s->winner == 0) ? 1.0f : 0.0f;
         s->log.damage_dealt += s->total_damage_dealt;
@@ -2391,27 +2259,37 @@ static void zul_render_post_tick(EncounterState* state, EncounterOverlay* ov) {
     ov->melee_target_x = s->melee_target_x;
     ov->melee_target_y = s->melee_target_y;
 
-    /* projectile events this tick (attacks + cloud spits) */
+    /* projectile events this tick (attacks + cloud spits).
+       zulrah is size 5: start_h = 5*0.75*128 = 480, end_h = 64 (player size 1) */
     ov->projectile_count = 0;
     for (int i = 0; i < s->attack_event_count && ov->projectile_count < ENCOUNTER_MAX_OVERLAY_PROJECTILES; i++) {
-        int pi = ov->projectile_count++;
-        ov->projectiles[pi].active = 1;
-        ov->projectiles[pi].src_x = s->attack_events[i].src_x;
-        ov->projectiles[pi].src_y = s->attack_events[i].src_y;
-        ov->projectiles[pi].dst_x = s->attack_events[i].dst_x;
-        ov->projectiles[pi].dst_y = s->attack_events[i].dst_y;
-        ov->projectiles[pi].style = s->attack_events[i].style;
-        ov->projectiles[pi].damage = s->attack_events[i].damage;
+        if (s->attack_events[i].style == 4) {
+            /* snakeling spawn orb: flies to spawn point, no tracking */
+            encounter_emit_projectile(ov,
+                s->attack_events[i].src_x, s->attack_events[i].src_y,
+                s->attack_events[i].dst_x, s->attack_events[i].dst_y,
+                4, 0,
+                40, 100, 0, 12, 0.0f, 0, ZUL_NPC_SIZE, 0);
+        } else {
+            /* ranged/magic attack: tracks player, zulrah height → player height */
+            uint32_t zul_proj_model = (s->attack_events[i].style == 0)
+                ? GFX_RANGED_PROJ_MODEL : GFX_MAGIC_PROJ_MODEL;
+            encounter_emit_projectile(ov,
+                s->attack_events[i].src_x, s->attack_events[i].src_y,
+                s->attack_events[i].dst_x, s->attack_events[i].dst_y,
+                s->attack_events[i].style, s->attack_events[i].damage,
+                35, 480, 64, 16, 0.0f, 1, ZUL_NPC_SIZE, zul_proj_model);
+        }
     }
     for (int i = 0; i < s->cloud_event_count && ov->projectile_count < ENCOUNTER_MAX_OVERLAY_PROJECTILES; i++) {
-        int pi = ov->projectile_count++;
-        ov->projectiles[pi].active = 1;
-        ov->projectiles[pi].src_x = s->cloud_events[i].src_x;
-        ov->projectiles[pi].src_y = s->cloud_events[i].src_y;
-        ov->projectiles[pi].dst_x = s->cloud_events[i].dst_x;
-        ov->projectiles[pi].dst_y = s->cloud_events[i].dst_y;
-        ov->projectiles[pi].style = 3;  /* cloud projectile */
-        ov->projectiles[pi].damage = s->cloud_events[i].flight_ticks;  /* repurpose: flight duration */
+        encounter_emit_projectile(ov,
+            s->cloud_events[i].src_x, s->cloud_events[i].src_y,
+            s->cloud_events[i].dst_x, s->cloud_events[i].dst_y,
+            3, 0,  /* style=cloud, damage=0 */
+            /* duration from flight_ticks * 30, high arc start, ground end,
+               curve=10, arc_height=3.0 (high sinusoidal), no tracking, src_size=5 */
+            s->cloud_events[i].flight_ticks * 30, 200, 0, 10, 3.0f, 0, ZUL_NPC_SIZE,
+            GFX_CLOUD_PROJ_MODEL);
     }
 }
 static int zul_get_winner(EncounterState* state) { return ((ZulrahState*)state)->winner; }
@@ -2436,6 +2314,7 @@ static const EncounterDef ENCOUNTER_ZULRAH = {
     .is_terminal = zul_is_terminal,
     .get_entity_count = zul_get_entity_count,
     .get_entity = zul_get_entity,
+    .fill_render_entities = zul_fill_render_entities,
     .put_int = zul_put_int,
     .put_float = zul_put_float,
     .put_ptr = zul_put_ptr,
@@ -2447,6 +2326,16 @@ static const EncounterDef ENCOUNTER_ZULRAH = {
     .get_log = zul_get_log,
     .get_tick = zul_get_tick,
     .get_winner = zul_get_winner,
+
+    .head_move = ZUL_HEAD_MOVE,
+    .head_prayer = ZUL_HEAD_PRAYER,
+    .head_target = -1,
+    .head_gear = -1,
+    .head_eat = ZUL_HEAD_FOOD,
+    .head_potion = ZUL_HEAD_POTION,
+    .head_spell = -1,
+    .head_spec = ZUL_HEAD_SPEC,
+    .head_attack = ZUL_HEAD_ATTACK,
 };
 
 __attribute__((constructor))

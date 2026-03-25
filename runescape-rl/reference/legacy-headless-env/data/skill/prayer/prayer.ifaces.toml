@@ -1,0 +1,18 @@
+[prayer_list]
+id = 271
+type = "prayer_list_tab"
+
+[.stat_adjustments]
+id = 12
+
+[.quick_prayers]
+id = 42
+options = { Select = 0 }
+
+[.regular_prayers]
+id = 8
+options = { Activate = 0 }
+
+[.confirm]
+id = 43
+

@@ -1,0 +1,139 @@
+package world.gregs.voidps.engine.entity.character.player.skill
+
+import io.mockk.*
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import world.gregs.voidps.engine.data.Settings
+import world.gregs.voidps.engine.entity.character.player.Player
+import world.gregs.voidps.engine.entity.character.player.skill.exp.Experience
+import world.gregs.voidps.engine.entity.character.player.skill.exp.exp
+
+internal class ExperienceTableTest {
+
+    private lateinit var experience: Experience
+    private lateinit var player: Player
+
+    @BeforeEach
+    fun setup() {
+        player = mockk(relaxed = true)
+        experience = Experience()
+        experience.player = player
+    }
+
+    @Test
+    fun `Get experience`() {
+        assertEquals(0.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Set experience`() {
+        experience.set(Skill.Attack, 100.0)
+        experience.set(Skill.Strength, 123.0)
+        assertEquals(100.0, experience.get(Skill.Attack))
+        assertEquals(123.0, experience.get(Skill.Strength))
+    }
+
+    @Test
+    fun `Add experience`() {
+        experience.add(Skill.Attack, 10.0)
+        experience.add(Skill.Attack, 10.0)
+        assertEquals(20.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Add experience with 10x rate`() {
+        Settings.load(mapOf("world.experienceRate" to "10.0"))
+        experience = Experience()
+        experience.player = player
+        experience.add(Skill.Attack, 10.0)
+        experience.add(Skill.Attack, 10.0)
+        assertEquals(200.0, experience.get(Skill.Attack))
+        Settings.clear()
+    }
+
+    @Test
+    fun `Can't set negative experience`() {
+        experience.set(Skill.Attack, -10.0)
+        assertEquals(0.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Can't add negative experience`() {
+        experience.add(Skill.Attack, 10.0)
+        experience.add(Skill.Attack, -10.0)
+        assertEquals(10.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Experience can't exceed maximum`() {
+        experience.set(Skill.Attack, 100)
+        experience.set(Skill.Attack, 2_100_000_000)
+        experience.add(Skill.Attack, 200_000_000.0)
+        assertEquals(10.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Experience can equal maximum`() {
+        experience.add(Skill.Attack, 200.0)
+        assertEquals(200.0, experience.get(Skill.Attack))
+    }
+
+    @Test
+    fun `Experience for blocked skills aren't changed`() {
+        mockkObject(Skills)
+        experience.set(Skill.Defence, 100.0)
+        experience.addBlock(Skill.Defence)
+        experience.add(Skill.Defence, 100.0)
+        assertEquals(100.0, experience.get(Skill.Defence))
+        verify {
+            Skills.exp(player, Skill.Defence, 0, 1000)
+        }
+        unmockkObject(Skills)
+    }
+
+    @Test
+    fun `Removed blocks give experience`() {
+        experience.addBlock(Skill.Defence)
+        experience.removeBlock(Skill.Defence)
+        experience.add(Skill.Defence, 100.0)
+        assertEquals(100.0, experience.get(Skill.Defence))
+    }
+
+    @Test
+    fun `Notified of change`() {
+        mockkObject(Skills)
+        experience.set(Skill.Attack, 100.0)
+        experience.add(Skill.Attack, 10.0)
+        verify { Skills.exp(player, Skill.Attack, 1000, 1100) }
+        unmockkObject(Skills)
+    }
+
+    @Test
+    fun `Listen for blocked exp`() {
+        mockkObject(Skills)
+        experience.set(Skill.Attack, 100.0)
+        experience.addBlock(Skill.Attack)
+        experience.add(Skill.Attack, 10.0)
+        verify { Skills.blocked(player, Skill.Attack, 100) }
+        unmockkObject(Skills)
+    }
+
+    @Test
+    fun `Check if blocked`() {
+        experience.addBlock(Skill.Attack)
+        assertTrue(experience.blocked(Skill.Attack))
+        experience.removeBlock(Skill.Attack)
+        assertFalse(experience.blocked(Skill.Attack))
+    }
+
+    @Test
+    fun `Add experience extension`() {
+        mockkStatic("world.gregs.voidps.engine.entity.character.player.skill.exp.ExperienceKt")
+        val player: Player = mockk(relaxed = true)
+        every { player.experience } returns experience
+        player.exp(Skill.Attack, 10.0)
+        player.exp(Skill.Attack, 10.0)
+        assertEquals(20.0, experience.get(Skill.Attack))
+    }
+}

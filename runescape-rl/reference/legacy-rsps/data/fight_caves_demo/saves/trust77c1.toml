@@ -1,0 +1,24 @@
+accountName = "trust77c1"
+passwordHash = "$2a$10$MIkWi7VXedaki3.cbRBvj.dqbsP9Dt8XiuajdXffTCQGNGNaJZxZ2"
+experience = [0, 0, 0, 11540, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+blocked_skills = []
+levels = [1, 1, 1, 100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+male = true
+looks = [0, 14, 18, 26, 34, 38, 42]
+colours = [0, 0, 0, 0, 0]
+
+[tile]
+x = 3221
+y = 3219
+
+[variables]
+
+[inventories]
+
+[social]
+friends = {}
+ignores = []
+
+[exchange]
+offers = [{}, {}, {}, {}, {}, {}]
+history = []

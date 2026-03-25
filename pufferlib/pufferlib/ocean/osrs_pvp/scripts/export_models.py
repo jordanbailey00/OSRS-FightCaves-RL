@@ -1850,6 +1850,12 @@ SIM_ITEM_IDS = [
     2497,   # Black d'hide chaps
     12788,  # Magic shortbow (i)
     10499,  # Ava's accumulator
+    # --- Inferno encounter items ---
+    22326,  # Justiciar faceguard
+    22327,  # Justiciar chestguard
+    22328,  # Justiciar legguards
+    4224,   # Crystal shield
+    13237,  # Pegasian boots
 ]
 
 
@@ -2046,6 +2052,11 @@ def main() -> None:
         11221,  # GFX 1045 cloud projectile
         26593,  # GFX 1046 magic projectile (zulrah)
         4086,   # object 11700 toxic cloud on ground
+        # inferno pillars — "Rocky support" objects 30284-30287 (4 HP levels)
+        33044,  # object 30284 — Rocky support (100% HP)
+        33043,  # object 30285 — Rocky support (75% HP)
+        33042,  # object 30286 — Rocky support (50% HP)
+        33045,  # object 30287 — Rocky support (25% HP)
         # player weapon projectiles
         20825,  # GFX 1040 trident of swamp projectile
         20824,  # GFX 1042 trident impact

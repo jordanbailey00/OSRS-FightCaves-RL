@@ -1,0 +1,34 @@
+[guard]
+attack_speed = 4
+retreat_range = 4
+defend_anim = "human_defend"
+death_anim = "human_death"
+
+[guard.melee]
+range = 1
+anim = "sword_lunge"
+target_hit = { offense = "stab", max = 30 }
+
+[guard_xbow]
+attack_speed = 6
+retreat_range = 4
+defend_anim = "human_defend"
+death_anim = "human_death"
+
+[guard_xbow.range]
+range = 5
+anim = "crossbow_accurate"
+target_sound = "crossbow_shoot"
+projectile = "crossbow_bolt"
+target_hit = { offense = "range", max = 40 }
+
+[white_knight]
+attack_speed = 7
+retreat_range = 4
+defend_anim = "human_defend"
+death_anim = "human_death"
+
+[white_knight.melee]
+range = 1
+anim = "2h_chop"
+target_hit = { offense = "slash", max = 60 }

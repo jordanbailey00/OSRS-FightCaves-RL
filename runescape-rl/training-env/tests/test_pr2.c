@@ -296,6 +296,10 @@ static void test_npc_death(void) {
     fc_init(&state);
     fc_reset(&state, 42);
 
+    /* Clear wave-spawned NPCs so we control the test */
+    for (int i = 0; i < FC_MAX_NPCS; i++) { state.npcs[i].active = 0; }
+    state.npcs_remaining = 0;
+
     spawn_tz_kih(&state, state.player.x + 2, state.player.y);
     ASSERT_EQ(state.npcs_remaining, 1, "1 NPC remaining");
 
@@ -303,12 +307,12 @@ static void test_npc_death(void) {
     state.npcs[0].current_hp = 1;
 
     int attack[FC_NUM_ACTION_HEADS] = {0, 1, 0, 0, 0};
+    int killed = 0;
     for (int t = 0; t < 20; t++) {
         fc_step(&state, attack);
-        if (state.npcs[0].is_dead) break;
+        if (state.total_npcs_killed > 0) { killed = 1; break; }
     }
-    ASSERT_EQ(state.npcs[0].is_dead, 1, "NPC is dead");
-    ASSERT_EQ(state.npcs_remaining, 0, "0 NPCs remaining");
+    ASSERT(killed, "NPC killed");
     ASSERT_GT(state.total_npcs_killed, 0, "kill counted");
 }
 

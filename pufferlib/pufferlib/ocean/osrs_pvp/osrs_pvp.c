@@ -14,6 +14,7 @@
 #include "osrs_encounter.h"
 #include "encounters/encounter_nh_pvp.h"
 #include "encounters/encounter_zulrah.h"
+#include "encounters/encounter_inferno.h"
 
 #ifdef OSRS_PVP_VISUAL
 #include "osrs_pvp_render.h"
@@ -136,7 +137,7 @@ static void replay_free(ReplayFile* rf) {
     if (rf) { free(rf->actions); free(rf); }
 }
 
-static void run_visual(OsrsPvp* env, const char* encounter_name, const char* replay_path, int gear_tier) {
+static void run_visual(OsrsPvp* env, const char* encounter_name, const char* replay_path) {
     env->client = NULL;
 
     /* set up encounter if specified, otherwise default to PvP */
@@ -149,8 +150,6 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
         env->encounter_def = (void*)edef;
         env->encounter_state = edef->create();
         edef->put_int(env->encounter_state, "seed", 42);
-        /* pass gear tier to encounter (--tier flag, default 0) */
-        if (gear_tier >= 0) edef->put_int(env->encounter_state, "gear_tier", gear_tier);
 
         /* load encounter-specific collision map.
            world offset translates encounter-local (0,0) → world coords for cmap lookup.
@@ -160,11 +159,20 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
             CollisionMap* cmap = collision_map_load("data/zulrah.cmap");
             if (cmap) {
                 edef->put_ptr(env->encounter_state, "collision_map", cmap);
-                /* local (0,0) = world (2254, 3060) per ZUL_POSITIONS anchor */
                 edef->put_int(env->encounter_state, "world_offset_x", 2256);
                 edef->put_int(env->encounter_state, "world_offset_y", 3061);
                 env->collision_map = cmap;
                 fprintf(stderr, "zulrah collision map: %d regions, offset (2256, 3061)\n",
+                        cmap->count);
+            }
+        } else if (strcmp(encounter_name, "inferno") == 0) {
+            CollisionMap* cmap = collision_map_load("data/inferno.cmap");
+            if (cmap) {
+                edef->put_ptr(env->encounter_state, "collision_map", cmap);
+                edef->put_int(env->encounter_state, "world_offset_x", 2246);
+                edef->put_int(env->encounter_state, "world_offset_y", 5315);
+                env->collision_map = cmap;
+                fprintf(stderr, "inferno collision map: %d regions, offset (2246, 5315)\n",
                         cmap->count);
             }
         }
@@ -246,6 +254,32 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
         rc->collision_map = (const CollisionMap*)env->collision_map;
         rc->collision_world_offset_x = 2256;
         rc->collision_world_offset_y = 3061;
+    } else if (encounter_name && strcmp(encounter_name, "inferno") == 0) {
+        rc->terrain = terrain_load("data/inferno.terrain");
+        rc->objects = objects_load("data/inferno.objects");
+        /* inferno region (35,83) starts at world (2240, 5312).
+           encounter uses region-local coords (10-40, 13-44).
+           offset terrain/objects so local coord 0 maps to world 2240. */
+        if (rc->terrain)
+            terrain_offset(rc->terrain, 2246, 5315);
+        if (rc->objects)
+            objects_offset(rc->objects, 2246, 5315);
+
+        rc->npc_model_cache = model_cache_load("data/inferno_npcs.models");
+        rc->npc_anim_cache = anim_cache_load("data/inferno_npcs.anims");
+
+        /* collision map for debug overlay (C key) */
+        if (env->collision_map) {
+            rc->collision_map = (const CollisionMap*)env->collision_map;
+            rc->collision_world_offset_x = 2246;
+            rc->collision_world_offset_y = 5315;
+        }
+
+        fprintf(stderr, "inferno: terrain=%s, cmap=%s, npc_models=%d, npc_anims=%d seqs\n",
+                rc->terrain ? "loaded" : "MISSING",
+                rc->collision_map ? "loaded" : "MISSING",
+                rc->npc_model_cache ? rc->npc_model_cache->count : 0,
+                rc->npc_anim_cache ? rc->npc_anim_cache->seq_count : 0);
     }
 
     /* populate entity pointers (also sets arena bounds from encounter) */
@@ -256,9 +290,9 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
     rc->cam_target_z = -((float)rc->arena_base_y + (float)rc->arena_height / 2.0f);
 
     for (int i = 0; i < rc->entity_count; i++) {
-        int size = rc->entities[i]->npc_size > 1 ? rc->entities[i]->npc_size : 1;
-        rc->sub_x[i] = rc->entities[i]->x * 128 + size * 64;
-        rc->sub_y[i] = rc->entities[i]->y * 128 + size * 64;
+        int size = rc->entities[i].npc_size > 1 ? rc->entities[i].npc_size : 1;
+        rc->sub_x[i] = rc->entities[i].x * 128 + size * 64;
+        rc->sub_y[i] = rc->entities[i].y * 128 + size * 64;
         rc->dest_x[i] = rc->sub_x[i];
         rc->dest_y[i] = rc->sub_y[i];
     }
@@ -322,12 +356,17 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
                 /* human control: translate staged clicks to encounter actions */
                 human_to_encounter_actions_generic(&rc->human_input, enc_actions,
                                                     edef, env->encounter_state);
-                /* set encounter destination from human click for proper pathfinding */
+                /* set encounter destination from human click for proper pathfinding.
+                   attacking an NPC cancels movement (OSRS: server stops walking
+                   to old dest and auto-walks toward target instead). */
                 if (rc->human_input.pending_move_x >= 0 && edef->put_int) {
                     edef->put_int(env->encounter_state, "player_dest_x",
                                   rc->human_input.pending_move_x);
                     edef->put_int(env->encounter_state, "player_dest_y",
                                   rc->human_input.pending_move_y);
+                } else if (rc->human_input.pending_attack && edef->put_int) {
+                    edef->put_int(env->encounter_state, "player_dest_x", -1);
+                    edef->put_int(env->encounter_state, "player_dest_y", -1);
                 }
                 human_input_clear_pending(&rc->human_input);
             } else if (replay && replay_get_actions(replay, enc_actions)) {
@@ -409,8 +448,8 @@ static void run_visual(OsrsPvp* env, const char* encounter_name, const char* rep
             }
             render_populate_entities(rc, env);
             for (int i = 0; i < rc->entity_count; i++) {
-                rc->sub_x[i] = rc->entities[i]->x * 128 + 64;
-                rc->sub_y[i] = rc->entities[i]->y * 128 + 64;
+                rc->sub_x[i] = rc->entities[i].x * 128 + 64;
+                rc->sub_y[i] = rc->entities[i].y * 128 + 64;
                 rc->dest_x[i] = rc->sub_x[i];
                 rc->dest_y[i] = rc->sub_y[i];
             }
@@ -492,7 +531,7 @@ int main(int argc, char** argv) {
         env.ocean_obs = env._obs_buf;
         env.ocean_rew = env.rewards;
         env.ocean_term = env.terminals;
-        run_visual(&env, encounter_name, replay_path, gear_tier);
+        run_visual(&env, encounter_name, replay_path);
         pvp_close(&env);
 #else
         fprintf(stderr, "not compiled with visual support (use: make visual)\n");

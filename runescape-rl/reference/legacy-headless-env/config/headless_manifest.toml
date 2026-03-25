@@ -1,0 +1,273 @@
+[manifest]
+name = "fight-caves-headless"
+version = "0.1.0"
+status = "step13-physically-pruned"
+source_repo = "Void RSPS v2.5.0"
+spec = "FCspec.md"
+plan = "FCplan.md"
+
+[scope]
+goal = "Headless Fight Caves simulator with 1:1 parity to oracle Void runtime"
+minigame = "tzhaar_fight_cave"
+wave_count = 63
+rotation_count = 15
+
+[modules]
+required = ["game", "engine", "cache", "types", "buffer", "config"]
+oracle_only = ["network"]
+optional = []
+excluded = []
+removed_in_step13 = ["database", "tools"]
+
+[tick_pipeline]
+required = [
+  "PlayerResetTask",
+  "NPCResetTask",
+  "InstructionTask",
+  "World",
+  "NPCTask",
+  "PlayerTask",
+  "FloorItemTracking",
+  "GameObjects.timers",
+  "DynamicZones",
+  "ZoneBatchUpdates",
+  "CharacterUpdateTask"
+]
+headless_candidate_excluded = [
+  "ConnectionQueue",
+  "SaveQueue",
+  "SaveLogs",
+  "BotManager",
+  "GrandExchange",
+  "FloorItems"
+]
+
+[code_paths]
+required_files = [
+  "game/content/area/karamja/tzhaar_city/TzhaarFightCave.kt",
+  "game/content/area/karamja/tzhaar_city/TzhaarFightCaveWaves.kt",
+  "game/content/area/karamja/tzhaar_city/TzTokJad.kt",
+  "game/content/area/karamja/tzhaar_city/TzHaarHealers.kt",
+  "game/content/quest/Cutscene.kt",
+  "game/content/entity/world/RegionLoading.kt",
+  "game/content/skill/constitution/Eating.kt",
+  "game/content/skill/constitution/drink/Potions.kt",
+  "game/content/skill/ranged/Ranged.kt",
+  "game/content/skill/ranged/Ammo.kt",
+  "game/content/entity/player/effect/energy/Energy.kt",
+  "game/content/entity/player/effect/energy/Running.kt",
+  "game/content/entity/player/inv/item/ItemExtensions.kt",
+  "game/content/entity/proj/ShootProjectile.kt",
+  "engine/data/ConfigFiles.kt",
+  "engine/map/instance/Instances.kt",
+  "engine/map/zone/DynamicZones.kt"
+]
+required_globs = [
+  "game/content/entity/combat/**",
+  "game/content/skill/prayer/**",
+  "engine/entity/character/mode/combat/**",
+  "engine/entity/character/mode/move/**",
+  "engine/map/collision/**",
+  "engine/inv/**"
+]
+oracle_only_globs = [
+  "game/content/area/karamja/tzhaar_city/TzHaar*.kt",
+  "game/content/area/karamja/tzhaar_city/TzHaarFightCaveGuard.kt"
+]
+excluded_globs = [
+  "game/content/social/**",
+  "game/content/activity/**",
+  "game/content/minigame/**",
+  "game/content/quest/**"
+]
+excluded_file_exceptions = [
+  "game/content/area/karamja/tzhaar_city/**",
+  "game/content/quest/Cutscene.kt"
+]
+
+[scripts]
+required_classes = [
+  "content.area.karamja.tzhaar_city.TzhaarFightCave",
+  "content.area.karamja.tzhaar_city.TzTokJad",
+  "content.area.karamja.tzhaar_city.TzHaarHealers",
+  "content.entity.Movement",
+  "content.entity.world.RegionLoading",
+  "content.entity.combat.Combat",
+  "content.entity.combat.hit.CombatHitsplats",
+  "content.entity.npc.combat.Attack",
+  "content.entity.npc.combat.Aggression",
+  "content.entity.death.CharacterDeath",
+  "content.entity.death.NPCDeath",
+  "content.entity.death.PlayerDeath",
+  "content.entity.player.Login",
+  "content.skill.ranged.Ranged",
+  "content.skill.prayer.Prayers",
+  "content.skill.prayer.active.PrayerDrain",
+  "content.skill.prayer.list.PrayerToggle",
+  "content.skill.constitution.Eating",
+  "content.skill.constitution.drink.Potions",
+  "content.entity.player.effect.energy.Energy",
+]
+oracle_only_classes = [
+  "content.area.karamja.tzhaar_city.TzHaarFightCaveGuard",
+  "content.area.karamja.tzhaar_city.TzHaarBanker",
+  "content.area.karamja.tzhaar_city.TzHaarShops",
+  "content.area.karamja.tzhaar_city.TzHaarMej",
+  "content.area.karamja.tzhaar_city.TzHaar"
+]
+
+[data_files]
+required = [
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave_waves.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.npcs.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.combat.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.areas.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.vars.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.varbits.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.ifaces.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.anims.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.gfx.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.sounds.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.jingles.toml",
+  "data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.scripts.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.objs.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.items.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.npcs.toml",
+  "data/skill/range/crossbow.items.toml",
+  "data/skill/range/bolt.items.toml",
+  "data/skill/range/ranged_armour.items.toml",
+  "data/skill/range/ammo_groups.toml",
+  "data/minigame/tai_bwo_wannai_cleanup/tai_bwo_wannai_cleanup.items.toml",
+  "data/skill/fishing/fish.items.toml",
+  "data/skill/herblore/potion.items.toml",
+  "data/entity/player/inventory/inventory.invs.toml",
+  "data/entity/player/equipment/worn_equipment.invs.toml",
+  "data/entity/player/combat/weapon_animations.toml",
+  "data/entity/player/combat/combat_styles/weapon_styles.toml",
+  "data/entity/player/combat/combat_styles/combat_style.varps.toml",
+  "data/entity/player/combat/weapon.anims.toml",
+  "data/entity/player/combat/combat.sounds.toml",
+  "data/skill/prayer/prayers.toml",
+  "data/skill/prayer/prayer.varps.toml",
+  "data/skill/prayer/prayer.varbits.toml",
+  "data/skill/prayer/prayer.sounds.toml",
+  "data/entity/player/modal/toplevel/gameframe.varps.toml",
+  "data/entity/player/human.anims.toml",
+  "data/entity/player/player.sounds.toml",
+  "data/entity/npc/hunt_modes.toml",
+  "data/client/categories.toml"
+]
+oracle_only = [
+  "data/area/karamja/tzhaar_city/tzhaar_city.npc-spawns.toml"
+]
+excluded_globs = [
+  "data/activity/**",
+  "data/social/**",
+  "data/quest/**",
+  "data/minigame/**",
+  "data/area/**"
+]
+excluded_file_exceptions = [
+  "data/minigame/tzhaar_fight_cave/**",
+  "data/minigame/tai_bwo_wannai_cleanup/tai_bwo_wannai_cleanup.items.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.objs.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.items.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.npcs.toml",
+  "data/area/karamja/tzhaar_city/tzhaar_city.npc-spawns.toml"
+]
+
+[npc_ids]
+required = [
+  "tz_kih",
+  "tz_kih_spawn_point",
+  "tz_kek",
+  "tz_kek_spawn_point",
+  "tz_kek_spawn",
+  "tok_xil",
+  "tok_xil_spawn_point",
+  "yt_mej_kot",
+  "yt_mej_kot_spawn_point",
+  "ket_zek",
+  "ket_zek_spawn_point",
+  "tztok_jad",
+  "yt_hur_kot"
+]
+
+[item_ids]
+required_loadout = [
+  "rune_crossbow",
+  "adamant_bolts",
+  "coif",
+  "black_dragonhide_body",
+  "black_dragonhide_chaps",
+  "black_dragonhide_vambraces",
+  "snakeskin_boots",
+  "shark",
+  "prayer_potion_4"
+]
+required_rewards = ["tokkul", "fire_cape"]
+
+[object_ids]
+required = ["cave_entrance_fight_cave", "cave_exit_fight_cave"]
+
+[variables]
+required = [
+  "fight_cave_wave",
+  "fight_cave_rotation",
+  "fight_cave_remaining",
+  "fight_cave_cooldown",
+  "movement",
+  "activated_prayers",
+  "activated_curses"
+]
+
+[cache]
+required_source_regions = [9551]
+oracle_only_regions = [9808]
+dynamic_instance_allocator = "Instances.small"
+dynamic_instance_levels = 3
+
+[settings_keys]
+required = [
+  "spawns.fight.cave.waves",
+  "fightCave.startWave",
+  "map.areas",
+  "definitions.npcs",
+  "definitions.combatAttacks",
+  "definitions.prayers",
+  "definitions.items",
+  "definitions.inventories",
+  "definitions.objects",
+  "definitions.variables.players",
+  "definitions.variables.bits",
+  "definitions.animations",
+  "definitions.graphics",
+  "definitions.sounds",
+  "definitions.jingles",
+  "definitions.weapons.styles",
+  "definitions.weapons.animations",
+  "definitions.ammoGroups"
+]
+
+[validation]
+required_step1_tests = [
+  "HeadlessManifestContainsFightCaveClosureTest",
+  "HeadlessManifestRejectsExcludedSystemsTest"
+]
+next_checks = [
+  "headless startup fails if required data file missing",
+  "headless startup fails if disallowed config file loaded",
+  "headless script registry matches required_classes"
+]
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,67 @@
+[brother_kojo_monastery]
+id = 223
+examine = "A peaceful monk."
+
+[torrell]
+id = 2338
+patch = "farming_bush_patch_ardougne"
+examine = "Perhaps this gardener might look after your crops for you."
+
+[lady_servil_monastery]
+id = 258
+
+[jeremy_servil]
+id = 7533
+examine = "A scared but defiant squire."
+
+[brother_omad_monastery]
+id = 279
+examine = "An old monk."
+
+[brother_cedric_monastery]
+id = 280
+examine = "An old drunk monk."
+
+[monk_monastery]
+id = 281
+hitpoints = 50
+att = 2
+str = 2
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+examine = "An Ardougne Monk."
+
+[ferret_monastery]
+id = 5139
+
+[justin_servil_monastery]
+id = 7541
+
+[tool_leprechaun_monastery]
+id = 7562
+examine = "Looks after your Farming tools."
+
+[chuck_monastery]
+id = 8677
+
+[lady_servil_monastery_2]
+id = 7529
+
+[lady_servil_monastery_3]
+id = 7530
+
+[jeremy_servil_2]
+id = 7534
+examine = "A scared but defiant squire."
+
+[justin_servil_monastery_2]
+id = 7542
+
+[chuck_monastery_2]
+id = 12188
+
+[chuck_monastery_3]
+id = 8678
+

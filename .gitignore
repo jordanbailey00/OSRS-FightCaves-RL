@@ -1,5 +1,16 @@
-/docs/
-/resources/
 .claude/
-runescape-rl-runtime/
-runescape-rl/.git-nested/
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+*.egg-info/
+runescape-rl/build/
+
+# Large binaries (>100MB, exceed GitHub file limit)
+runescape-rl/reference/legacy-headless-env/data/cache/
+runescape-rl/reference/legacy-headless-env/game/build/
+runescape-rl/reference/legacy-rsps/**/build/
+*.jar
+*.zip
+pufferlib/box2d-web/

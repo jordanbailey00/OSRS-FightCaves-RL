@@ -1,0 +1,15 @@
+[stronghold_shade]
+id = 8645
+hitpoints = 700
+# Used phrin shade values
+att = 64
+str = 47
+def = 42
+combat_def = "shade"
+respawn_delay = 40
+slayer_xp = 3.5
+wander_range = 9
+xp_bonus = -0.75
+drop_table = "stronghold_shade"
+categories = ["shades", "undead"]
+examine = "Dead, but not gone."

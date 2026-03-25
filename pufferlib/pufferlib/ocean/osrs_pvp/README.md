@@ -1,31 +1,20 @@
 # OSRS PvP Environment
 
 C implementation of Old School RuneScape NH PvP for reinforcement learning.
+~1.1M env steps/sec standalone, ~235K+ training SPS on Metal.
 
-## Build
+## Build and train
 
 ```bash
 python setup.py build_osrs_pvp --inplace --force
-```
+python train_pvp.py --no-wandb --total-timesteps 50000000
 
-Zulrah encounter is a separate env that shares headers with osrs_pvp:
-```bash
+# zulrah (separate build, overwrites _C.so)
 python setup.py build_osrs_zulrah --inplace --force
+python train_zulrah.py --no-wandb --total-timesteps 500000000
 ```
 
-## Visual mode
-
-Standalone headed viewer with raylib. supports human play, AI observation, and encounter selection.
-
-```bash
-cd pufferlib/ocean/osrs_pvp
-make visual
-./osrs_pvp_visual --visual                      # PvP (watch AI vs scripted opponent)
-./osrs_pvp_visual --visual --encounter zulrah   # Zulrah
-./osrs_pvp_visual --visual --human              # human control (click to move/attack)
-```
-
-requires raylib 5.5 — download from https://github.com/raysan5/raylib/releases and extract to `raylib-5.5_macos/` (or adjust `RAYLIB_DIR` in Makefile for linux).
+Two bindings: `binding.c` (metal vecenv.h) and `ocean_binding.c` (PufferLib env_binding.h).
 
 ## Data assets
 

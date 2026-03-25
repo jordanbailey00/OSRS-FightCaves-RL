@@ -24,6 +24,10 @@ int fc_distance_to_npc(int px, int py, const FcNpc* npc);
 /* Hit delay */
 int fc_melee_hit_delay(void);
 int fc_ranged_hit_delay(int distance);
+int fc_magic_hit_delay(int distance);
+
+/* NPC defence roll (for player accuracy against NPC) */
+int fc_npc_def_roll(int def_level, int def_bonus);
 
 /* Pending hit queue */
 int fc_queue_pending_hit(FcPendingHit hits[], int* num_hits, int max_hits,

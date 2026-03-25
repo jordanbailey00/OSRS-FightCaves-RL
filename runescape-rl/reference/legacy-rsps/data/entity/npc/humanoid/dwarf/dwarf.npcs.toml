@@ -1,0 +1,138 @@
+[doric]
+id = 284
+categories = ["dwarf"]
+wander_range = 2
+examine = "A dwarf smith. Quite handy with a hammer."
+
+[thurgo]
+id = 604
+dialogue = "old"
+categories = ["dwarf"]
+wander_range = 4
+examine = "Dwarvish."
+
+[thorgel]
+id = 2788
+
+[thorgel_normal]
+id = 2789
+categories = ["dwarf"]
+examine = "A short angry guy."
+
+[dororan_cutscene]
+id = 2863
+examine = "A dwarf in suspense."
+
+[dwarf]
+id = 118
+hitpoints = 160
+att = 8
+str = 8
+def = 8
+attack_bonus = 5
+combat_def = "dwarf"
+respawn_delay = 25
+slayer_xp = 16.0
+wander_range = 10
+drop_table = "dwarf"
+categories = ["dwarves"]
+examine = "Loves mining."
+
+[dwarf_hammer]
+id = 120
+hitpoints = 260
+att = 15
+str = 16
+def = 16
+attack_bonus = 11
+combat_def = "dwarf_hammer"
+respawn_delay = 25
+slayer_xp = 26.0
+wander_range = 10
+drop_table = "dwarf"
+categories = ["dwarves"]
+examine = "Loves mining, mountains and mining mountains."
+
+[dwarf_mining_guild]
+id = 3219
+hitpoints = 180
+att = 8
+str = 8
+def = 8
+attack_bonus = 5
+combat_def = "dwarf_mining_guild"
+respawn_delay = 25
+slayer_xp = 16.0
+wander_range = 10
+drop_table = "dwarf"
+categories = ["dwarves"]
+examine = "Loves mining."
+
+[dwarf_mining_guild_hammer]
+id = 3220
+clone = "dwarf_mining_guild"
+
+[dwarf_mining_guild_earrings]
+id = 3221
+clone = "dwarf"
+examine = "Loves mining."
+
+[dwarf_dwarven_mines_wrench_beard]
+id = 3268
+clone = "dwarf_mining_guild"
+examine = "A dwarven worker."
+
+[dwarf_dwarven_mines_wrench]
+id = 3269
+clone = "dwarf_mining_guild"
+
+[dwarf_dwarven_mines_wrench_apron_green]
+id = 3270
+clone = "dwarf_mining_guild"
+
+[dwarf_dwarven_mines_pickaxe]
+id = 3271
+clone = "dwarf_mining_guild"
+
+[dwarf_dwarven_mines_pickaxe_green]
+id = 3272
+clone = "dwarf"
+
+[dwarf_dwarven_mines_wrench_green]
+id = 3273
+clone = "dwarf_mining_guild"
+
+[dwarf_dwarven_mines_red]
+id = 3274
+clone = "dwarf_mining_guild"
+
+[dwarf_dwarven_mines_old]
+id = 3275
+hitpoints = 100
+att = 6
+str = 6
+def = 6
+attack_bonus = 5
+combat_def = "dwarf_mining_guild"
+respawn_delay = 50
+slayer_xp = 10.0
+wander_range = 10
+drop_table = "dwarf"
+categories = ["dwarves"]
+examine = "A dwarven worker."
+
+[chaos_dwarf]
+id = 119
+max_hit_melee = 60
+hitpoints = 610
+att = 38
+str = 42
+def = 28
+combat_def = "chaos_dwarf"
+wander_range = 9
+hunt_mode = "cowardly"
+respawn_delay = 90
+slayer_xp = 61.0
+drop_table = "chaos_dwarf"
+categories = ["chaos_dwarf", "dwarves"]
+examine = "A dwarf gone bad."

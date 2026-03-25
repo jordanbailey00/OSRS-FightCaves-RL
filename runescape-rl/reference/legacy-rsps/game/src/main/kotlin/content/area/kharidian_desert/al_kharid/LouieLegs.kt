@@ -1,0 +1,23 @@
+package content.area.kharidian_desert.al_kharid
+
+import content.entity.npc.shop.openShop
+import content.entity.player.dialogue.*
+import content.entity.player.dialogue.type.choice
+import content.entity.player.dialogue.type.npc
+import world.gregs.voidps.engine.Script
+
+class LouieLegs : Script {
+
+    init {
+        npcOperate("Talk-to", "louie_legs") {
+            npc<Idle>("Hey, wanna buy some armour?")
+            choice {
+                option<Idle>("What have you got?") {
+                    npc<Happy>("I provide items to help you keep your legs!")
+                    openShop("louies_armoured_legs_bazaar")
+                }
+                option<Idle>("No, thank you.")
+            }
+        }
+    }
+}

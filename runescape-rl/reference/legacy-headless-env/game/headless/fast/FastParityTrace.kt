@@ -1,0 +1,25 @@
+package headless.fast
+
+data class FastParityTrace(
+    val tickIndex: Int,
+    val actionName: String,
+    val actionAccepted: Boolean,
+    val rejectionCode: Int,
+    val playerHitpoints: Int,
+    val playerPrayerPoints: Int,
+    val runEnabled: Boolean,
+    val inventoryAmmo: Int,
+    val inventorySharks: Int,
+    val inventoryPrayerPotions: Int,
+    val waveId: Int,
+    val remainingNpcs: Int,
+    val visibleTargetOrder: IntArray,
+    val visibleNpcType: Array<String>,
+    val visibleNpcHitpoints: IntArray,
+    val visibleNpcAlive: BooleanArray,
+    val jadTelegraphState: Int,
+    val jadHitResolveOutcome: String,
+    val damageDealt: Float,
+    val damageTaken: Float,
+    val terminalCode: Int,
+)

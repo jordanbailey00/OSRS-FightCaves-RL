@@ -1,0 +1,29 @@
+[sling_rock]
+id = 32
+delay = 41
+height = 3
+curve = 15
+
+[toktz_xil_ul]
+id = 442
+delay = 40
+height = -15
+curve = 15
+
+[chinchompa]
+id = 908
+delay = 21
+height = 5
+curve = 15
+time_offset = 11
+
+[red_chinchompa]
+id = 909
+delay = 21
+height = 5
+curve = 15
+time_offset = 11
+
+[chinchompa_impact]
+id = 2739
+height = 50

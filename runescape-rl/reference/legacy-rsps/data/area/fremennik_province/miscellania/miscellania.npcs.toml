@@ -1,0 +1,424 @@
+[penguin_miscellania]
+id = 131
+hitpoints = 40
+str = 2
+def = 2
+style = "stab"
+max_hit_melee = 10
+slayer_xp = 4.0
+categories = ["birds"]
+respawn_delay = 30
+examine = "An inhabitant of icy regions."
+
+[gull_miscellania]
+id = 1325
+
+[queen_sigrid]
+id = 1359
+
+[queen_sigrid_hidden]
+id = 9349
+
+[queen_sigrid_normal]
+id = 9088
+
+[arnor]
+id = 1361
+examine = "A subject of Etceteria."
+
+[haming]
+id = 1362
+examine = "A subject of Etceteria."
+
+[moldof]
+id = 1363
+examine = "A subject of Etceteria."
+
+[helga]
+id = 1364
+examine = "A subject of Etceteria."
+
+[matilda]
+id = 1365
+examine = "A subject of Etceteria."
+
+[ashild]
+id = 1366
+examine = "A subject of Etceteria."
+
+[skraeling]
+id = 1367
+hitpoints = 10
+att = 3
+str = 3
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+drop_table = "bones"
+examine = "A warrior of Etceteria."
+
+[skraeling_battleaxe]
+id = 1368
+clone = "skraeling"
+
+[skraeling_brown_shirt]
+id = 1389
+clone = "skraeling"
+
+[skraeling_green_shirt]
+id = 1391
+clone = "skraeling"
+
+[fishmonger_etceteria]
+id = 1369
+shop = "etceteria_fish"
+examine = "Hmm, he smells."
+
+[greengrocer_etceteria]
+id = 1370
+shop = "island_greengrocer"
+examine = "At least he eats his greens."
+
+[prince_brand]
+id = 1371
+
+[prince_brand_normal]
+id = 757
+
+[princess_astrid]
+id = 1372
+
+[princess_astrid_normal]
+id = 3154
+
+[king_vargas]
+id = 1373
+
+[king_vargas_normal]
+id = 7402
+
+[guard_miscellania]
+id = 1374
+examine = "He's guarding the throne room."
+
+[advisor_ghrim]
+id = 1375
+
+[advisor_ghrim_1]
+id = 3119
+
+[advisor_ghrim_2]
+id = 3120
+
+[derrik]
+id = 1376
+examine = "Smithy for Sogthorpe."
+
+[farmer_miscellania]
+id = 1377
+examine = "He's cutting the wheat."
+
+[flower_girl_miscellania]
+id = 1378
+examine = "No-one would mistake her for a duchess."
+
+[ragnar]
+id = 1379
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 50
+examine = "A subject of Miscellania."
+
+[einar]
+id = 1380
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 50
+drop_table = "bones"
+examine = "A subject of Miscellania."
+
+[alrik]
+id = 1381
+examine = "A subject of Miscellania."
+
+[thorhild]
+id = 1382
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 50
+drop_table = "bones"
+examine = "A subject of Miscellania."
+
+[halla]
+id = 1383
+hitpoints = 10
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 50
+shop = "miscellanian_clothes_shop"
+examine = "A subject of Miscellania."
+
+[sailor_miscellania]
+id = 1385
+
+[rannveig]
+id = 1386
+hitpoints = 10
+att = 3
+str = 3
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+drop_table = "bones"
+examine = "A subject of Miscellania."
+
+[thora]
+id = 1387
+examine = "A subject of Miscellania."
+
+[valgerd]
+id = 1388
+hitpoints = 10
+att = 3
+str = 3
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+examine = "A subject of Miscellania."
+
+[broddi]
+id = 1390
+hitpoints = 10
+att = 3
+str = 3
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+drop_table = "bones"
+examine = "A subject of Miscellania."
+
+[ragnvald]
+id = 1392
+hitpoints = 10
+att = 3
+str = 3
+def = 3
+style = "crush"
+max_hit_melee = 10
+respawn_delay = 25
+drop_table = "bones"
+examine = "A subject of Miscellania."
+
+[fishmonger_miscellania]
+id = 1393
+shop = "island_fishmonger"
+examine = "Hmm, he smells."
+
+[greengrocer_miscellania]
+id = 1394
+shop = "greengrocer_of_miscellania"
+examine = "At least he eats his greens."
+
+[lumberjack_leif_miscellania]
+id = 1395
+examine = "He's a lumberjack, and he's okay."
+
+[miner_magnus_miscellania]
+id = 1396
+examine = "He's just mining his own business."
+
+[fisherman_frodi_miscellania]
+id = 1397
+examine = "There's something fishy about him."
+
+[gardener_gunnhild_miscellania]
+id = 1398
+examine = "She's looking a bit weedy."
+
+[fishing_spot_miscellania]
+id = 1399
+
+[chicken_miscellania]
+id = 1401
+categories = ["birds"]
+examine = "Yep. Definitely a chicken."
+
+[chicken_miscellania_2]
+id = 1402
+
+[rooster_miscellania]
+id = 1403
+hitpoints = 50
+max_hit_stab = 0
+attack_bonus = -47
+slayer_xp = 5.0
+categories = ["birds"]
+immune_poison = true
+respawn_delay = 25
+examine = "He rules the, er, roost."
+
+[rabbit_miscellania]
+id = 1404
+hitpoints = 50
+combat_def = "rabbit_miscellania"
+attack_bonus = -47
+respawn_delay = 25
+drop_table = "rabbit"
+examine = "A cute bunny rabbit."
+
+[rhazien]
+id = 2337
+patch = "farming_bush_patch_etceteria"
+examine = "Perhaps this gardener might look after your crops for you."
+
+[carpenter_kjallak_miscellania]
+id = 3916
+examine = "His bark's worse than his blight."
+
+[farmer_fromund_miscellania]
+id = 3917
+examine = "He looks a bit seedy."
+
+[runa]
+id = 3920
+shop = "the_esoterican_arms"
+examine = "The barmaid of the Esoterican Arms."
+
+[halla_2]
+id = 3921
+examine = "She owns the clothes shop."
+
+[finn]
+id = 3922
+shop = "miscellanian_general_store"
+examine = "Runs the general store."
+
+[osvald]
+id = 3923
+shop = "miscellanian_food_shop"
+examine = "If it's edible, he'll sell it."
+
+[runolf]
+id = 3924
+examine = "A subject of Miscellania."
+
+[tjorvi]
+id = 3925
+examine = "A subject of Miscellania."
+
+[ingrid]
+id = 3926
+examine = "A subject of Miscellania."
+
+[thora_2]
+id = 3927
+examine = "A subject of Miscellania."
+
+[signy]
+id = 3928
+examine = "A Fremennik teenager."
+
+[hild_miscellania]
+id = 3929
+examine = "A Fremennik teenager."
+
+[armod]
+id = 3930
+examine = "A Fremennik teenager."
+
+[beigarth]
+id = 3931
+examine = "A Fremennik teenager."
+
+[reinn]
+id = 3932
+examine = "A Fremennik teenager."
+
+[alviss]
+id = 3933
+examine = "A dwarf who's currently living in Miscellania."
+
+[fullangr]
+id = 3934
+examine = "A dwarf who's currently living in Miscellania."
+
+[jari]
+id = 3935
+examine = "A dwarf who's currently living in Miscellania."
+
+[thorodin]
+id = 3936
+examine = "A dwarf miner. He's digging holes in the walls."
+
+[ferd]
+id = 3937
+examine = "A dwarf miner. He's shoring up the walls."
+
+[donal]
+id = 3938
+examine = "A rather scared-looking dwarf. He doesn't seem all that drunk."
+
+[sea_snake_young]
+id = 3939
+hitpoints = 850
+att = 90
+str = 70
+def = 70
+style = "crush"
+max_hit_melee = 80
+slayer_xp = 85.0
+categories = ["sea_snakes"]
+respawn_delay = 50
+drop_table = "sea_snake_hatchling"
+examine = "Snake, snake, oh, it's a young snake..."
+
+[sea_snake_hatchling]
+id = 3940
+hitpoints = 500
+att = 60
+str = 55
+def = 50
+style = "crush"
+max_hit_melee = 60
+slayer_xp = 50.0
+categories = ["sea_snakes"]
+respawn_delay = 50
+drop_table = "sea_snake_hatchling"
+examine = "A baby sea snake. Snaaaaaaake!"
+
+[guard_miscellania_2]
+id = 3941
+
+[guard_miscellania_3]
+id = 3942
+examine = "He's guarding the entrance to the dungeons."
+
+[yulf_squecks]
+id = 4561
+patch = "farming_spirit_tree_patch_etceteria"
+examine = "Perhaps this gardener might look after your crops for you."
+
+[rabbit_miscellania_2]
+id = 5829
+
+[king_vargas_2]
+id = 7403
+
+[tool_leprechaun_miscellania]
+id = 7557
+examine = "Looks after your Farming tools."
+
+[macaroni_penguin]
+id = 4252
+examine = "Beak areful with this one, he looks shifty!"
+
+[king_vargas_2_2]
+id = 5185
+

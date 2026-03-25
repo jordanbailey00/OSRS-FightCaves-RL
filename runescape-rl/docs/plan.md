@@ -4,7 +4,7 @@
 
 Hard pivot from Kotlin/JVM to C. The Kotlin implementation is archived at branch `archive/kotlin-final` for historical reference only. No JVM code exists in this repo.
 
-The `runescape-rl/` directory is fully owned by the parent repository (`claude/`, branch `c-rewrite`). The nested `.git` from the Kotlin era has been removed; its history is preserved in `runescape-rl-nested-backup.bundle` at the repo root's parent directory.
+The `runescape-rl/` directory is fully owned by the parent repository (`claude/`, branch `v2Claude`). The nested `.git` from the Kotlin era has been removed; its history is preserved in `runescape-rl-nested-backup.bundle` at the repo root's parent directory. (Historical note: the branch was originally named `c-rewrite` and renamed to `v2Claude` at the PR1–PR4 checkpoint.)
 
 ## Goal
 
@@ -56,10 +56,10 @@ Domain knowledge from the abandoned Kotlin Fight Caves implementation:
 
 ### Asset Sources for Viewer
 
-- **PufferLib PvP render** (`osrs_pvp_render.h`, ~4000 lines): Complete Raylib viewer with 3D models exported from OSRS cache via Python scripts (`scripts/export_models.py`, `scripts/export_terrain.py`). Models stored as C header arrays. Animation data similarly exported.
+- **PufferLib PvP render** (`osrs_pvp_render.h`, ~4000 lines): Complete Raylib viewer with 3D models exported from OSRS cache via Python scripts (`scripts/export_models.py`, `scripts/export_terrain.py`). Models stored as C header arrays or MDL2/TERR binaries. Animation data similarly exported. Adopt render patterns directly.
 - **PufferLib collision maps**: Exported from OSRS cache. 104×104 local grid format with per-tile traversability flags.
-- **RSPS cache data**: Available in `archive/kotlin-final` under the headless-env data directory. Contains NPC definitions, item stats, map data.
-- **Placeholder art strategy**: The viewer can start with colored rectangles/circles (player=blue, NPCs=red by type shade, tiles=gray grid). PvP render shows this works — models are optional for functionality. Cache-exported sprites/models are a later enhancement.
+- **RSPS/Kotlin data** (`archive/kotlin-final`): NPC definitions (IDs 2734-2746), animation IDs (9230-9300), GFX/projectile IDs, combat definitions, arena coordinates, wave data. All in TOML format under `headless-env/data/minigame/tzhaar_fight_cave/`.
+- **OSRS binary cache** (`reference/legacy-headless-env/data/cache/`): Full modern OSRS cache (183MB .dat2 + 37 index files). Source for terrain meshes, 3D models, animations, sprites. PufferLib export scripts read this with a `.dat`→`.dat2` adapter.
 
 ## Architecture
 
@@ -70,14 +70,14 @@ All Fight Caves gameplay logic lives in one place: `training-env/fc_core`. This 
 ```
 training-env/
 ├── fc_core        (static lib)  — state, tick, NPC AI, combat, prayer, pathfinding, waves
-├── libfc_capi.so  (shared lib)  — plain C API for Python ctypes loading
-└── (future) fc_headless — batched episode runner (PR 7)
+├── libfc_capi.so  (shared lib)  — plain C API + FcBatchCtx batched stepping (PR7)
 
 demo-env/
-└── fc_viewer      (executable)  — Raylib shell: render, HUD, input, replay
+├── fc_viewer      (executable)  — Raylib shell: render, HUD, input, replay
+└── assets/        — exported terrain, models, sprites from OSRS cache
 
 RL/
-└── fc_env.py      — ctypes wrapper over libfc_capi.so, vectorized env
+└── fc_env.py      — ctypes wrapper over libfc_capi.so, batched vectorized env
 ```
 
 ### What Each Layer Owns
@@ -85,7 +85,7 @@ RL/
 | Component | Owns | Does NOT own |
 |-----------|------|-------------|
 | `fc_core` | All Fight Caves mechanics: state transitions, NPC behavior, combat math, prayer, pathfinding, wave spawning, hit resolution, deterministic RNG, debug/trace hooks | Rendering, I/O, Python bindings, batching |
-| `libfc_capi.so` | Plain C shared library API: create/destroy/reset/step/getters, contract constant exports. Wraps fc_core for any FFI consumer. | Mechanics (delegates to fc_core), Python-specific logic |
+| `libfc_capi.so` | Plain C shared library API: single-env and batched (FcBatchCtx) create/destroy/reset/step/getters, contract constant exports. Wraps fc_core for any FFI consumer. | Mechanics (delegates to fc_core), Python-specific logic |
 | `fc_viewer` | Raylib rendering, HUD, input handling, replay playback, rewind snapshots, debug overlays | Mechanics (calls fc_core for all state/tick) |
 | `RL/fc_env.py` | ctypes bridge to libfc_capi.so, vectorized env, obs splitting, SPS measurement | Environment mechanics, rendering |
 
@@ -189,9 +189,10 @@ Determinism and replay are first-class from PR 1, not deferred.
 - `fc_state_hash(state)` — FNV-1a hash over explicit field values (not raw struct bytes). Padding-independent. Called per tick to verify that two runs with the same (seed, actions) produce identical state hashes at every tick.
 - Determinism unit test: run episode twice with same seed+actions, assert per-tick state hash equality.
 
-**Replay recording** (infrastructure in place, file I/O deferred to PR 6/12):
+**Replay recording** (infrastructure in place, file I/O deferred to PR 7/12):
 - Format: `{seed: uint32, actions: int32[num_ticks][num_heads]}` — binary, compact.
-- `FcActionTrace` (fc_debug.h) records per-tick actions + state hashes in memory. Binary file I/O for persistent replays is deferred to the wave system (PR 6) and viewer replay mode (PR 12).
+- `FcActionTrace` (fc_debug.h) records per-tick actions + state hashes in memory. This is available from PR 1 for in-process determinism verification and test canaries.
+- Binary file I/O for persistent replays is deferred to PR 7 (headless kernel can write replay files during batch runs) or PR 12 (viewer replay mode loads replay files). PR 6 adds the wave system but does NOT add file I/O — it uses the existing in-memory `FcActionTrace` for determinism tests.
 - Replay playback reconstructs episode entirely from determinism — no state serialization needed.
 
 **Debug/trace hooks** (built into fc_core from PR 2):
@@ -199,12 +200,16 @@ Determinism and replay are first-class from PR 1, not deferred.
 - `fc_trace_actions` — records (tick, action_heads[]) for seed+action replay compatibility.
 - These hooks are sufficient to diagnose simulation drift, incorrect combat resolution, and policy misbehavior without the viewer.
 
-### Viewer: Asset and Render Planning
+### Viewer: Asset and Render Requirements
 
-**Asset provenance**:
-- **Phase 1 (placeholder)**: Colored shapes — player=blue circle, NPCs=colored by type (red=melee, green=ranged, cyan=magic, orange=Jad), tiles=gray grid, obstacles=dark gray, safe spots=light green. No external assets needed. Viewer work is never blocked on art.
-- **Phase 2 (cache export)**: OSRS cache sprites/models exported via Python scripts (pattern from PufferLib PvP `scripts/export_models.py`). Stored as C header arrays or binary blobs in `demo-env/assets/`. NPC models, player equipment, terrain tiles, prayer icons, hitsplat sprites.
-- **Phase 3 (polish)**: Animation sequences, projectile particles, death animations. Optional.
+**Priority**: Viewer completion (asset-backed rendering + human-playable mode + debug usability) is a **pre-training requirement**. Training does not begin until the viewer looks and plays similar to actual RuneScape Fight Caves. Policy playback depends on a trained checkpoint and can remain after training begins.
+
+**Asset provenance** (required path, not optional polish):
+- **Cache-exported / RSPS-derived assets**: OSRS cache sprites/models exported via Python scripts (pattern from PufferLib PvP `scripts/export_models.py`, `scripts/export_terrain.py`). Stored as C header arrays or binary blobs in `demo-env/assets/`. NPC models, player equipment, terrain tiles, prayer icons, hitsplat sprites, inventory icons.
+- **Kotlin demo-env reference**: UI layout, asset loading patterns, combat visual presentation from the archived Kotlin Fight Caves demo.
+- **PufferLib OSRS PvP viewer reference**: 3D render pipeline with Raylib, model/terrain export scripts, HUD layout, hit splats, prayer icons, debug overlays. Adopt render patterns directly where applicable.
+- **OSRS binary cache available**: Full modern OSRS cache at `/home/joe/projects/runescape-rl/reference/legacy-headless-env/data/cache/` (183MB `.dat2` + 37 index files). PufferLib export scripts can read this with a `.dat` → `.dat2` filename adapter. This unblocks terrain, model, animation, and sprite extraction for Fight Caves.
+- **Placeholders only where extraction is genuinely blocked**: Each remaining placeholder must be explicitly documented with the reason it could not be asset-backed.
 
 **Tile/world-to-screen coordinate ownership**:
 - fc_core owns the game-world coordinate system: integer tile grid (x, y). The Fight Caves arena is approximately 64×64 tiles.
@@ -316,21 +321,90 @@ These will be maintained in `docs/training_performance.md` and `docs/agent_perfo
 - All contract constants read from C at import time (no duplicated magic numbers).
 - Reward features separable: `split_obs()` returns (policy_obs[126], reward_features[16], action_mask[36]).
 - Auto-reset on terminal: C side resets with RNG-derived seed and writes fresh obs.
-- **SPS baseline: 335,800** (64 envs, ctypes per-env loop). PufferLib env_binding.h path deferred (python3-dev unavailable).
+- **SPS baseline: 335,800** (64 envs, per-env ctypes loop). PufferLib env_binding.h path deferred (python3-dev unavailable).
 - Smoke test: 4 envs × 100 steps, shapes/ranges/masks verified. Vectorized test: 16 envs diverge correctly.
+
+**PR 4 — Complete.** Minimal Raylib viewer shell.
+- `demo-env/src/viewer.c` (~435 lines): single-file viewer combining render, HUD, debug overlay, and controls.
+- Placeholder top-down tile grid rendering: player = blue circle, NPCs = type-colored rectangles (red=Tz-Kih, green=Tok-Xil, cyan=Yt-MejKot, purple=Ket-Zek, orange=Jad, yellow=Yt-HurKot), walkable tiles = dark gray, obstacles = darker.
+- Shared-backend rendering via `fc_fill_render_entities` — viewer never accesses FcState fields directly.
+- HP bars above all entities, prayer indicator above player (M/R/P text), Jad telegraph indicator (MAG/RNG text), hitsplat damage numbers on hit.
+- HUD overlay (toggleable with H): HP, prayer, active prayer name, sharks/doses, ammo, wave/kills/remaining, tick/episode, player position, timers, cumulative damage, pause/speed status.
+- Debug overlay (toggleable with D): state hash, seed/rotation, action head values, terminal/damage-this-tick, zoom level.
+- Controls: Space (pause/resume), Right (single-step while paused), Up/Down (tick speed ±, range 1–30 tps), R (reset episode), H (toggle HUD), D (toggle debug), Q/Esc (quit), scroll wheel (zoom 0.3x–5.0x), middle-mouse drag (camera pan).
+- Demo mode: random actions each tick with occasional idle for readability. Auto-pause on terminal.
+- Linked against `fc_core` static lib + Raylib 5.5 pre-built distribution.
+- Current limitations:
+  - No human-playable input (click-to-move, click-to-attack deferred to PR 10).
+  - No policy playback (deferred to PR 11).
+  - No replay file I/O or rewind (deferred to PR 12).
+  - No step-backward (forward only; snapshot rewind is a PR 12 feature).
+
+**PR 5 — Complete.** All NPC Types — AI and Special Mechanics.
+- All 8 NPC types have full AI: type-specific attack, movement, and special behavior.
+- Real NPC defence stats (`def_level`, `def_bonus`): player accuracy now varies by target (>80% vs Tz-Kih, <30% vs Ket-Zek).
+- `fc_magic_hit_delay(distance)`: 1 + floor((1+dist)/3).
+- Tz-Kek split-on-death: spawns 2 NPC_TZ_KEK_SM at death position, reuses dead NPC's slot.
+- Tok-Xil: ranged (range 6), projectile delay, blocked by protect range.
+- Yt-MejKot: melee + heals nearby NPCs (≤3 tiles) for 10 HP every 8 ticks.
+- Ket-Zek: magic (range 8), projectile delay, blocked by protect magic.
+- Jad: 3-state telegraph (IDLE → MAGIC_WINDUP/RANGED_WINDUP → fire), 3-tick windup, RNG style selection, magic max 970 / ranged max 950 tenths.
+- Yt-HurKot: walks to Jad and heals 10 HP/4 ticks; player attack distracts permanently.
+- 72 test assertions passing (504 total). PR5 golden trace: seed 55555, hash `0x8baf02d4`.
+- Outstanding: Yt-HurKot auto-spawn at Jad low HP is a wave-system feature (PR 6).
+
+**PR 6 — Complete.** Wave System (All 63 Waves + Jad).
+- `src/fc_wave.c` (~1250 lines): 63-wave spawn table + 15 rotations/wave. Wave data sourced from Kotlin archive TOML and embedded as static C arrays.
+- `fc_reset` auto-spawns wave 1. Wave-clear triggers `fc_wave_check_advance` → next wave spawn. All 63 waves → TERMINAL_CAVE_COMPLETE.
+- Wave-clear correctly accounts for Tz-Kek split spawns (splits increment `npcs_remaining`).
+- Jad (wave 63): spawns via wave table. When HP drops below 50%, 4 Yt-HurKot auto-spawn around Jad.
+- Spawn directions: SOUTH (32,5), SOUTH_WEST (8,8), NORTH_WEST (8,55), SOUTH_EAST (55,8), CENTER (32,32). Per-wave rotation selected at reset via RNG.
+- Full episode: reset → 63 waves of combat → Jad + healers → cave complete or player death. Deterministic given (seed, action_sequence).
+- 57 test assertions passing (560 total). PR6 golden trace: seed 66666, hash `0x7c0d19cd`.
+
+**PR 8 — Foundation complete, parity NOT yet complete (PR8a+PR8b+PR8c).**
+- **PR8a**: Identified all FC asset sources. Found OSRS binary cache at `reference/legacy-headless-env/data/cache/`. Decoded VoidPS NPC definitions to extract model IDs.
+- **PR8b**: Built asset export pipeline. Exported 8 NPC 3D models (686KB MDL2), 14 UI sprites (prayer icons, slots, tabs).
+- **PR8c**: Integrated NPC 3D models via MDL2 loader. Prayer icon sprites as Raylib textures. Dual 3D/2D mode.
+- **Not yet done** (required for viewer parity):
+  - Cache/RSPS-derived Fight Caves terrain and object rendering (procedural fallback not accepted as final).
+  - Actual player rendering with the fixed FC gear/loadout (blue cylinder not accepted).
+  - RS-like tabbed UI with inventory/prayer/combat panels and real item sprites.
+  - Clickable inventory items and prayer toggles in the UI.
+  - Human-playable controls through canonical actions.
+- Training (PR11) remains blocked until viewer parity is accepted (PR9a + PR9b).
+
+**PR 7 — Complete.** Batched Headless Kernel and Benchmarks.
+- `FcBatchCtx` in `fc_capi.c`: contiguous array of N `FcEnvCtx` structs. `fc_capi_batch_step_flat` steps all envs in one C call with flat numpy-compatible arrays.
+- `FightCavesVecEnv` rewritten to use batched C path — zero per-env Python loop in the hot path.
+- **SPS @ 64 envs: 3,353,676** (up from 335,800, +899%). Peak: 4,617,173 @ 1024 envs.
+- Batch independence verified: batch envs produce identical results to individually-run single envs.
 
 **Accepted tradeoffs and outstanding items:**
 - **8-visible-NPC overflow**: Observation slots are limited to the 8 closest active NPCs (Chebyshev distance, spawn_index tiebreak). Overflow NPCs (9+) are simulated but invisible to the policy and untargetable via ATTACK head. This covers the vast majority of waves; `FC_VISIBLE_NPCS` can be increased if testing reveals a need.
-- **Temporary NPC defence simplification**: Player ranged attacks use a hardcoded NPC defence roll of 1. PR 5 must add real NPC defence stats to the stat table.
 - **Observation slot-to-attack alignment**: ATTACK head value N targets the NPC in observation slot N-1. The slot ordering (distance, spawn_index) is identical in the obs writer and action resolver.
+
+## Required Viewer Features (pre-training)
+
+The viewer must reach the following bar before training begins:
+
+- **Terrain**: Cache/RSPS-derived Fight Caves arena, not procedural colored tiles.
+- **Player**: Actual player representation with the fixed FC gear (rune crossbow, black d'hide, etc.), not a primitive shape.
+- **NPCs**: 3D models from cache (done in PR8c).
+- **Tabbed UI**: RS-like right-side panel with switchable tabs (inventory, prayer, combat/stats). Not just a flat text panel.
+- **Inventory**: Visible item sprites for sharks, prayer potions, adamant bolts in inventory slots. Clickable to use.
+- **Prayer panel**: Prayer icons (on/off states) for the 3 protection prayers. Clickable to toggle.
+- **Human-playable controls**: Click-to-move, click-to-attack, click inventory item, click prayer toggle — all routed through canonical actions.
+- **Hitsplats, HP bars, overhead prayer**: Already partially done; must work in the final integrated view.
 
 ## Non-Goals
 
-- Pixel-perfect OSRS UI replication (clear and functional is sufficient)
+- Pixel-perfect OSRS UI replication (close and functional, not pixel-identical)
 - Full OSRS game implementation (Fight Caves only)
 - Java/Kotlin/JVM code in any form
 - Separate mechanics implementations for training vs. viewing
 - Python rebuilding environment semantics
+- Full OSRS client feature set (we need RS-like Fight Caves play/debug, not a general client)
 
 ## Docs Maintenance Rules
 

@@ -100,6 +100,9 @@ typedef struct {
     float height_accel;         /* quadratic height correction */
     float yaw;                  /* current facing direction (radians) */
     float pitch;                /* current vertical tilt (radians) */
+    float arc_height;           /* sinusoidal arc peak in tiles (0 = use quadratic) */
+    int tracks_target;          /* 1 = re-aim toward target each tick */
+    uint32_t model_id;          /* GFX model from cache (0 = style-based fallback) */
 } FlightProjectile;
 
 /* ======================================================================== */
@@ -245,6 +248,8 @@ typedef struct {
     /* 3D model rendering */
     ModelCache* model_cache;
     AnimCache* anim_cache;
+    ModelCache* npc_model_cache;  /* secondary cache for encounter-specific NPC models */
+    AnimCache* npc_anim_cache;    /* secondary cache for encounter-specific NPC anims */
     float model_scale;
 
     /* overhead prayer icon textures (from headicons_prayer sprites) */
@@ -268,9 +273,10 @@ typedef struct {
     /* ray info */
     Vector3 debug_ray_origin, debug_ray_dir;
 
-    /* entity pointers: populated per-frame from env->players or encounter vtable.
-       index 0 = agent, 1+ = opponents/NPCs/bosses */
-    Player* entities[MAX_RENDER_ENTITIES];
+    /* render entities: populated per-frame from env->players or encounter vtable.
+       index 0 = agent, 1+ = opponents/NPCs/bosses.
+       stored by value (not pointer) via fill_render_entities. */
+    RenderEntity entities[MAX_RENDER_ENTITIES];
     int entity_count;
 
     /* per-entity composite model (merged body + equipment, animated as one) */
@@ -293,6 +299,10 @@ typedef struct {
         int secondary_frame_idx;
         int secondary_ticks;
     } anim[MAX_RENDER_ENTITIES];
+
+    /* entity identity tracking — detect slot compaction shifts to reset stale anim/composite */
+    int prev_npc_slot[MAX_RENDER_ENTITIES];
+    int prev_entity_count;
 
     /* terrain */
     TerrainMesh* terrain;
@@ -355,10 +365,16 @@ typedef struct {
     Model ranged_proj_model; int ranged_proj_model_ready;
     Model magic_proj_model;  int magic_proj_model_ready;
     Model cloud_proj_model;  int cloud_proj_model_ready;
+    Model pillar_models[4];  int pillar_models_ready;  /* 0=100%, 1=75%, 2=50%, 3=25% HP */
 
     /* active projectile flights: interpolated at 50Hz between game ticks.
        spawned from encounter overlay events, auto-expired on arrival. */
     FlightProjectile flights[MAX_FLIGHT_PROJECTILES];
+
+    /* dynamic projectile model cache: lazily loads per-NPC-type projectile models */
+#define MAX_PROJ_MODELS 16
+    struct { uint32_t id; Model model; int ready; } proj_models[MAX_PROJ_MODELS];
+    int proj_model_count;
 
     /* collision map: pointer to env's CollisionMap (shared, not owned).
        world offset translates arena coords to collision map world coords. */
@@ -383,6 +399,35 @@ typedef struct {
 
 /* forward declarations */
 static Camera3D render_build_3d_camera(RenderClient* rc);
+
+/** Get the raw Player* for a given entity index (for GUI functions that need full Player state).
+    Returns the Player* from get_entity for encounters that use Player structs (PvP, Zulrah).
+    Returns NULL if no encounter or index is out of range. GUI code must NULL-check. */
+static Player* render_get_player_ptr(OsrsPvp* env, int index) {
+    if (env->encounter_def && env->encounter_state) {
+        const EncounterDef* def = (const EncounterDef*)env->encounter_def;
+        return (Player*)def->get_entity(env->encounter_state, index);
+    }
+    if (index >= 0 && index < NUM_AGENTS)
+        return &env->players[index];
+    return NULL;
+}
+
+/** Look up an animation sequence, checking secondary NPC cache as fallback. */
+static AnimSequence* render_get_anim_sequence(RenderClient* rc, uint16_t seq_id) {
+    AnimSequence* seq = NULL;
+    if (rc->anim_cache) seq = anim_get_sequence(rc->anim_cache, seq_id);
+    if (!seq && rc->npc_anim_cache) seq = anim_get_sequence(rc->npc_anim_cache, seq_id);
+    return seq;
+}
+
+/** Look up an animation framebase, checking secondary NPC cache as fallback. */
+static AnimFrameBase* render_get_framebase(RenderClient* rc, uint16_t base_id) {
+    AnimFrameBase* fb = NULL;
+    if (rc->anim_cache) fb = anim_get_framebase(rc->anim_cache, base_id);
+    if (!fb && rc->npc_anim_cache) fb = anim_get_framebase(rc->npc_anim_cache, base_id);
+    return fb;
+}
 
 /* ======================================================================== */
 /* coordinate helpers                                                        */
@@ -441,9 +486,11 @@ static RenderClient* render_make_client(void) {
     rc->history_count = 0;
     rc->history_cursor = -1;  /* -1 = live (not rewinding) */
     rc->entity_count = 0;  /* populated by render_populate_entities */
+    rc->prev_entity_count = 0;
     for (int i = 0; i < MAX_RENDER_ENTITIES; i++) {
         rc->anim[i].primary_seq_id = -1;
         rc->anim[i].secondary_seq_id = 808; /* ANIM_SEQ_IDLE */
+        rc->prev_npc_slot[i] = -1;
     }
 
     InitWindow(RENDER_WINDOW_W, RENDER_WINDOW_H, "OSRS PvP Debug Viewer");
@@ -552,6 +599,27 @@ static int render_build_static_model(ModelCache* cache, uint32_t model_id, Model
     return 1;
 }
 
+/** Lazily load and cache a projectile model by GFX model ID.
+ *  Searches both model_cache and npc_model_cache. Returns NULL if not found
+ *  or if model_id is 0 (style-based fallback). */
+static Model* render_get_proj_model(RenderClient* rc, uint32_t model_id) {
+    if (model_id == 0) return NULL;
+    for (int i = 0; i < rc->proj_model_count; i++) {
+        if (rc->proj_models[i].id == model_id)
+            return rc->proj_models[i].ready ? &rc->proj_models[i].model : NULL;
+    }
+    if (rc->proj_model_count >= MAX_PROJ_MODELS) return NULL;
+    int idx = rc->proj_model_count++;
+    rc->proj_models[idx].id = model_id;
+    rc->proj_models[idx].ready = render_build_static_model(
+        rc->model_cache, model_id, &rc->proj_models[idx].model);
+    if (!rc->proj_models[idx].ready && rc->npc_model_cache) {
+        rc->proj_models[idx].ready = render_build_static_model(
+            rc->npc_model_cache, model_id, &rc->proj_models[idx].model);
+    }
+    return rc->proj_models[idx].ready ? &rc->proj_models[idx].model : NULL;
+}
+
 /**
  * Build all overlay models (clouds, projectiles, snakelings) from the model cache.
  * Call after model_cache is loaded.
@@ -570,8 +638,18 @@ static void render_init_overlay_models(RenderClient* rc) {
 
     rc->cloud_proj_model_ready = render_build_static_model(
         rc->model_cache, GFX_CLOUD_PROJ_MODEL, &rc->cloud_proj_model);
+    {
+        uint32_t pillar_ids[4] = { INF_PILLAR_MODEL_100, INF_PILLAR_MODEL_75,
+                                    INF_PILLAR_MODEL_50, INF_PILLAR_MODEL_25 };
+        rc->pillar_models_ready = 1;
+        for (int i = 0; i < 4; i++) {
+            if (!render_build_static_model(rc->model_cache, pillar_ids[i], &rc->pillar_models[i]))
+                rc->pillar_models_ready = 0;
+        }
+    }
 
     if (rc->cloud_model_ready) printf("overlay: cloud model loaded\n");
+    if (rc->pillar_models_ready) printf("overlay: pillar models loaded (4 HP levels)\n");
     if (rc->snakeling_model_ready) printf("overlay: snakeling model loaded\n");
     if (rc->ranged_proj_model_ready) printf("overlay: ranged projectile model loaded\n");
     if (rc->magic_proj_model_ready) printf("overlay: magic projectile model loaded\n");
@@ -593,7 +671,8 @@ static void render_init_overlay_models(RenderClient* rc) {
 static void flight_spawn(RenderClient* rc,
                          float src_x, float src_y, float dst_x, float dst_y,
                          int style, int damage,
-                         int duration_ticks, int start_h, int end_h, int curve) {
+                         int duration_ticks, int start_h, int end_h, int curve,
+                         float arc_height, int tracks_target, uint32_t model_id) {
     int slot = -1;
     for (int i = 0; i < MAX_FLIGHT_PROJECTILES; i++) {
         if (!rc->flights[i].active) { slot = i; break; }
@@ -616,17 +695,26 @@ static void flight_spawn(RenderClient* rc,
     fp->curve = (float)curve;
     fp->style = style;
     fp->damage = damage;
+    fp->arc_height = arc_height;
+    fp->tracks_target = tracks_target;
+    fp->model_id = model_id;
 
-    /* height arc: OSRS SceneProjectile.calculateIncrements */
+    /* height arc: OSRS SceneProjectile.calculateIncrements
+       skip quadratic computation when using sinusoidal arc */
     float dx = dst_x - src_x, dy = dst_y - src_y;
     float dist = sqrtf(dx * dx + dy * dy);
     if (dist < 0.01f) dist = 1.0f;
-    fp->height_vel = -dist * tanf(curve * PROJ_OSRS_SLOPE_TO_RAD);
-    fp->height_accel = 2.0f * (fp->end_height - fp->start_height - fp->height_vel);
+    if (arc_height > 0.0f) {
+        fp->height_vel = 0.0f;
+        fp->height_accel = 0.0f;
+    } else {
+        fp->height_vel = -dist * tanf(curve * PROJ_OSRS_SLOPE_TO_RAD);
+        fp->height_accel = 2.0f * (fp->end_height - fp->start_height - fp->height_vel);
+    }
 
     /* initial facing */
     fp->yaw = atan2f(dx, dy);
-    fp->pitch = atan2f(fp->height_vel, dist);
+    fp->pitch = (arc_height > 0.0f) ? 0.0f : atan2f(fp->height_vel, dist);
 }
 
 /**
@@ -670,20 +758,6 @@ static void flight_client_tick(RenderClient* rc) {
 }
 
 /**
- * Update target position for in-flight projectiles matching a style.
- * Call each game tick with the target entity's current position.
- */
-static void flight_update_targets(RenderClient* rc, int style_match, float new_x, float new_y) {
-    for (int i = 0; i < MAX_FLIGHT_PROJECTILES; i++) {
-        FlightProjectile* fp = &rc->flights[i];
-        if (!fp->active) continue;
-        if (style_match >= 0 && fp->style != style_match) continue;
-        fp->dst_x = new_x;
-        fp->dst_y = new_y;
-    }
-}
-
-/**
  * Get the interpolated world position of a flight projectile.
  */
 static Vector3 flight_get_position(const FlightProjectile* fp, float src_ground, float dst_ground) {
@@ -692,7 +766,15 @@ static Vector3 flight_get_position(const FlightProjectile* fp, float src_ground,
     if (t > 1.0f) t = 1.0f;
 
     float ground = src_ground + (dst_ground - src_ground) * t;
-    float h = fp->start_height + fp->height_vel * t + 0.5f * fp->height_accel * t * t;
+    float h;
+    if (fp->arc_height > 0.0f) {
+        /* sinusoidal arc (from InfernoTrainer ArcProjectileMotionInterpolator) */
+        h = sinf(t * 3.14159265f) * fp->arc_height
+            + fp->start_height + (fp->end_height - fp->start_height) * t;
+    } else {
+        /* quadratic arc (OSRS SceneProjectile) */
+        h = fp->start_height + fp->height_vel * t + 0.5f * fp->height_accel * t * t;
+    }
 
     return (Vector3){ fp->x + 0.5f, ground + h, -(fp->y + 1.0f) + 0.5f };
 }
@@ -724,6 +806,13 @@ static void render_destroy_client(RenderClient* rc) {
     if (rc->ranged_proj_model_ready) UnloadModel(rc->ranged_proj_model);
     if (rc->magic_proj_model_ready) UnloadModel(rc->magic_proj_model);
     if (rc->cloud_proj_model_ready) UnloadModel(rc->cloud_proj_model);
+    if (rc->pillar_models_ready) {
+        for (int i = 0; i < 4; i++) UnloadModel(rc->pillar_models[i]);
+    }
+    /* free dynamic projectile model cache */
+    for (int i = 0; i < rc->proj_model_count; i++) {
+        if (rc->proj_models[i].ready) UnloadModel(rc->proj_models[i].model);
+    }
     /* free per-entity composite models */
     for (int p = 0; p < MAX_RENDER_ENTITIES; p++) {
         composite_free(&rc->composites[p]);
@@ -757,7 +846,7 @@ static void render_destroy_client(RenderClient* rc) {
 /* input                                                                     */
 /* ======================================================================== */
 
-static void render_handle_input(RenderClient* rc) {
+static void render_handle_input(RenderClient* rc, OsrsPvp* env) {
     if (IsKeyPressed(KEY_SPACE))  rc->is_paused = !rc->is_paused;
 
     if (IsKeyPressed(KEY_RIGHT) && rc->is_paused) {
@@ -875,7 +964,7 @@ static void render_handle_input(RenderClient* rc) {
             my >= rc->gui.panel_y && my < rc->gui.panel_y + rc->gui.panel_h) {
 
             Player* viewed = (rc->entity_count > 0 && rc->gui.gui_entity_idx < rc->entity_count)
-                ? rc->entities[rc->gui.gui_entity_idx] : NULL;
+                ? render_get_player_ptr(env, rc->gui.gui_entity_idx) : NULL;
 
             if (viewed) {
                 switch (rc->gui.active_tab) {
@@ -906,10 +995,11 @@ static void render_handle_input(RenderClient* rc) {
                 int entity_hit = 0;
                 for (int ei = 0; ei < rc->entity_count; ei++) {
                     if (ei == rc->gui.gui_entity_idx) continue;
-                    Player* ent = rc->entities[ei];
+                    RenderEntity* ent = &rc->entities[ei];
                     if (ent->entity_type == ENTITY_NPC && !ent->npc_visible) continue;
                     if (hull_contains(&rc->entity_hulls[ei], mx, my)) {
                         rc->human_input.pending_attack = 1;
+                        rc->human_input.pending_target_idx = rc->entities[ei].npc_slot;
                         /* attack cancels movement — server stops walking to old dest */
                         rc->human_input.pending_move_x = -1;
                         rc->human_input.pending_move_y = -1;
@@ -1041,15 +1131,37 @@ static void render_push_splat(RenderClient* rc, int damage, int pidx);
 /* ======================================================================== */
 
 /* populate rc->entities from env->players (legacy) or encounter vtable.
-   call before render_post_tick and pvp_render so all draw code uses rc->entities. */
+   call before render_post_tick and pvp_render so all draw code uses rc->entities.
+   uses fill_render_entities when available, falls back to get_entity + cast. */
 static void render_populate_entities(RenderClient* rc, OsrsPvp* env) {
     if (env->encounter_def && env->encounter_state) {
         const EncounterDef* def = (const EncounterDef*)env->encounter_def;
-        int count = def->get_entity_count(env->encounter_state);
-        if (count > MAX_RENDER_ENTITIES) count = MAX_RENDER_ENTITIES;
-        rc->entity_count = count;
-        for (int i = 0; i < count; i++) {
-            rc->entities[i] = (Player*)def->get_entity(env->encounter_state, i);
+        if (def->fill_render_entities) {
+            int count = 0;
+            def->fill_render_entities(env->encounter_state, rc->entities, MAX_RENDER_ENTITIES, &count);
+            rc->entity_count = count;
+            /* debug: print entity info on first populate */
+            static int debug_once = 1;
+            if (debug_once && count > 0) {
+                debug_once = 0;
+                fprintf(stderr, "render_populate: %d entities\n", count);
+                for (int di = 0; di < count && di < 5; di++) {
+                    fprintf(stderr, "  [%d] type=%d npc_id=%d visible=%d size=%d pos=(%d,%d) hp=%d/%d\n",
+                            di, rc->entities[di].entity_type, rc->entities[di].npc_def_id,
+                            rc->entities[di].npc_visible, rc->entities[di].npc_size,
+                            rc->entities[di].x, rc->entities[di].y,
+                            rc->entities[di].current_hitpoints, rc->entities[di].base_hitpoints);
+                }
+            }
+        } else {
+            /* legacy fallback: cast get_entity to Player* */
+            int count = def->get_entity_count(env->encounter_state);
+            if (count > MAX_RENDER_ENTITIES) count = MAX_RENDER_ENTITIES;
+            rc->entity_count = count;
+            for (int i = 0; i < count; i++) {
+                Player* p = (Player*)def->get_entity(env->encounter_state, i);
+                if (p) render_entity_from_player(p, &rc->entities[i]);
+            }
         }
         /* override arena bounds from encounter if set */
         if (def->arena_width > 0 && def->arena_height > 0) {
@@ -1061,7 +1173,7 @@ static void render_populate_entities(RenderClient* rc, OsrsPvp* env) {
     } else {
         rc->entity_count = NUM_AGENTS;
         for (int i = 0; i < NUM_AGENTS; i++) {
-            rc->entities[i] = &env->players[i];
+            render_entity_from_player(&env->players[i], &rc->entities[i]);
         }
     }
 }
@@ -1090,8 +1202,29 @@ static void render_pre_tick(RenderClient* rc, OsrsPvp* env) {
  */
 static void render_post_tick(RenderClient* rc, OsrsPvp* env) {
     render_populate_entities(rc, env);
+
+    /* detect entity identity changes from slot compaction (NPC deaths cause
+       remaining NPCs to shift to lower indices). reset stale animation and
+       composite state when a slot's NPC identity changes. */
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
+        if (rc->entities[i].npc_slot != rc->prev_npc_slot[i]) {
+            rc->anim[i].primary_seq_id = -1;
+            rc->anim[i].primary_frame_idx = 0;
+            rc->anim[i].primary_ticks = 0;
+            rc->anim[i].primary_loops = 0;
+            rc->anim[i].secondary_seq_id = -1;
+            rc->anim[i].secondary_frame_idx = 0;
+            rc->anim[i].secondary_ticks = 0;
+            rc->composites[i].needs_rebuild = 1;
+        }
+        rc->prev_npc_slot[i] = rc->entities[i].npc_slot;
+    }
+    for (int i = rc->entity_count; i < rc->prev_entity_count; i++)
+        rc->prev_npc_slot[i] = -1;
+    rc->prev_entity_count = rc->entity_count;
+
+    for (int i = 0; i < rc->entity_count; i++) {
+        RenderEntity* p = &rc->entities[i];
 
         /* convert game tile to sub-tile destination (128 units/tile, centered).
            the entity's (x,y) is the SW anchor tile. for size-1 entities,
@@ -1101,14 +1234,21 @@ static void render_post_tick(RenderClient* rc, OsrsPvp* env) {
         int new_dest_x = p->x * 128 + size * 64;
         int new_dest_y = p->y * 128 + size * 64;
 
-        /* NPC teleport: snap position when entity surfaces (was invisible).
-           prevents sliding interpolation after Zulrah dive→surface. */
-        if (p->entity_type == ENTITY_NPC && p->npc_visible &&
-            (rc->sub_x[i] / 128 != p->x || rc->sub_y[i] / 128 != p->y)) {
-            rc->sub_x[i] = new_dest_x;
-            rc->sub_y[i] = new_dest_y;
-            rc->dest_x[i] = new_dest_x;
-            rc->dest_y[i] = new_dest_y;
+        /* NPC teleport: snap position when entity appears far from tracked position.
+           this handles Zulrah dive→surface, new NPC spawns, and entity slot reuse.
+           only snap if distance > 1 tile — normal 1-tile-per-tick movement should
+           interpolate smoothly via the dest/sub system. */
+        if (p->entity_type == ENTITY_NPC && p->npc_visible) {
+            int tile_dx = (rc->sub_x[i] / 128) - p->x;
+            int tile_dy = (rc->sub_y[i] / 128) - p->y;
+            if (tile_dx < 0) tile_dx = -tile_dx;
+            if (tile_dy < 0) tile_dy = -tile_dy;
+            if (tile_dx > 1 || tile_dy > 1 || (rc->sub_x[i] == 0 && rc->sub_y[i] == 0)) {
+                rc->sub_x[i] = new_dest_x;
+                rc->sub_y[i] = new_dest_y;
+                rc->dest_x[i] = new_dest_x;
+                rc->dest_y[i] = new_dest_y;
+            }
         }
 
         /* detect if player moved this tick (destination changed) */
@@ -1160,58 +1300,85 @@ static void render_post_tick(RenderClient* rc, OsrsPvp* env) {
         }
     }
 
-    /* spawn visual effects based on this tick's events */
+    /* spawn visual effects (projectiles, spell impacts) based on this tick's events.
+       works for any entity count — uses attack_target_entity_idx for multi-entity encounters. */
     int ct = rc->effect_client_tick_counter;
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
-        int target_i = (rc->entity_count == 2) ? (1 - i) : (i == 0 ? 1 : 0);
-        Player* t = rc->entities[target_i];
+        RenderEntity* p = &rc->entities[i];
+        /* resolve target: use attack_target_entity_idx if set, otherwise PvP fallback */
+        int target_i;
+        if (p->attack_target_entity_idx >= 0) {
+            target_i = p->attack_target_entity_idx;
+        } else if (rc->entity_count == 2) {
+            target_i = 1 - i;
+        } else {
+            target_i = (i == 0) ? 1 : 0;
+        }
+        if (target_i < 0 || target_i >= rc->entity_count) continue;
+        RenderEntity* t = &rc->entities[target_i];
 
-        /* attacker cast a spell this tick — spawn projectile */
-        if (p->attack_style_this_tick == ATTACK_STYLE_MAGIC) {
-            uint8_t wpn = p->equipped[GEAR_SLOT_WEAPON];
-            if (wpn == ITEM_TRIDENT_OF_SWAMP || wpn == ITEM_SANGUINESTI_STAFF ||
-                wpn == ITEM_EYE_OF_AYAK) {
-                /* trident/sang/ayak: powered staff projectile */
-                effect_spawn_projectile(rc->effects, GFX_TRIDENT_PROJ,
+        /* attacker projectile effects: only for PvP (no encounter overlay).
+           encounters with render_post_tick handle their own projectiles via
+           encounter_emit_projectile -> flight system. */
+        int has_encounter_overlay = (env->encounter_def &&
+            ((const EncounterDef*)env->encounter_def)->render_post_tick);
+
+        if (!has_encounter_overlay) {
+            /* attacker cast a spell this tick — spawn projectile */
+            if (p->attack_style_this_tick == ATTACK_STYLE_MAGIC) {
+                uint8_t wpn = p->equipped[GEAR_SLOT_WEAPON];
+                if (wpn == ITEM_TRIDENT_OF_SWAMP || wpn == ITEM_SANGUINESTI_STAFF ||
+                    wpn == ITEM_EYE_OF_AYAK) {
+                    /* trident/sang/ayak: powered staff projectile */
+                    effect_spawn_projectile(rc->effects, GFX_TRIDENT_PROJ,
+                        p->x, p->y, t->x, t->y,
+                        0, 40, 40 * 4, 30 * 4, 16, ct, rc->model_cache);
+                } else if (p->magic_type_this_tick == 1) {
+                    /* ice barrage: projectile orb rises from target tile
+                       heights *4 per reference (stream.readUnsignedByte() * 4) */
+                    effect_spawn_projectile(rc->effects, GFX_ICE_BARRAGE_PROJ,
+                        t->x, t->y, t->x, t->y,  /* src=dst (rises in place) */
+                        0, 56, 43 * 4, 0, 16, ct, rc->model_cache);
+                }
+                /* blood barrage: no projectile, impact spawns on hit */
+            }
+
+            /* attacker fired a ranged attack this tick */
+            if (p->attack_style_this_tick == ATTACK_STYLE_RANGED) {
+                uint8_t wpn = p->equipped[GEAR_SLOT_WEAPON];
+                int gfx;
+                if (wpn == ITEM_TOXIC_BLOWPIPE) {
+                    gfx = GFX_DRAGON_DART;
+                } else if (wpn == ITEM_MAGIC_SHORTBOW_I || wpn == ITEM_DARK_BOW ||
+                           wpn == ITEM_BOW_OF_FAERDHINEN || wpn == ITEM_TWISTED_BOW) {
+                    gfx = GFX_RUNE_ARROW;
+                } else {
+                    gfx = GFX_BOLT;  /* crossbows, default */
+                }
+                /* heights *4 per reference: 43*4=172 start, 31*4=124 end */
+                effect_spawn_projectile(rc->effects, gfx,
                     p->x, p->y, t->x, t->y,
-                    0, 40, 40 * 4, 30 * 4, 16, ct, rc->model_cache);
-            } else if (p->magic_type_this_tick == 1) {
-                /* ice barrage: projectile orb rises from target tile
-                   heights *4 per reference (stream.readUnsignedByte() * 4) */
-                effect_spawn_projectile(rc->effects, GFX_ICE_BARRAGE_PROJ,
-                    t->x, t->y, t->x, t->y,  /* src=dst (rises in place) */
-                    0, 56, 43 * 4, 0, 16, ct, rc->model_cache);
+                    0, 40, 43 * 4, 31 * 4, 16, ct, rc->model_cache);
             }
-            /* blood barrage: no projectile, impact spawns on hit */
         }
 
-        /* attacker fired a ranged attack this tick */
-        if (p->attack_style_this_tick == ATTACK_STYLE_RANGED) {
-            uint8_t wpn = p->equipped[GEAR_SLOT_WEAPON];
-            int gfx;
-            if (wpn == ITEM_TOXIC_BLOWPIPE) {
-                gfx = GFX_DRAGON_DART;
-            } else if (wpn == ITEM_MAGIC_SHORTBOW_I || wpn == ITEM_DARK_BOW ||
-                       wpn == ITEM_BOW_OF_FAERDHINEN || wpn == ITEM_TWISTED_BOW) {
-                gfx = GFX_RUNE_ARROW;
-            } else {
-                gfx = GFX_BOLT;  /* crossbows, default */
-            }
-            /* heights *4 per reference: 43*4=172 start, 31*4=124 end */
-            effect_spawn_projectile(rc->effects, gfx,
-                p->x, p->y, t->x, t->y,
-                0, 40, 43 * 4, 31 * 4, 16, ct, rc->model_cache);
-        }
-
-        /* defender: check what landed on player p this tick */
+        /* defender: check what landed on entity p this tick.
+           for NPC defenders, the attacker is entity 0 (the player).
+           for player (entity 0), attacker is the current target entity. */
         if (p->hit_landed_this_tick) {
+            RenderEntity* att;
+            if (i == 0) {
+                att = t;  /* player was hit — attacker is target entity */
+            } else {
+                att = &rc->entities[0];  /* NPC was hit — attacker is player */
+            }
+
             /* check if attacker used a powered staff (trident/sang/ayak) */
-            uint8_t att_wpn = t->equipped[GEAR_SLOT_WEAPON];
+            uint8_t att_wpn = att->equipped[GEAR_SLOT_WEAPON];
             int att_is_powered_staff = (att_wpn == ITEM_TRIDENT_OF_SWAMP ||
                 att_wpn == ITEM_SANGUINESTI_STAFF || att_wpn == ITEM_EYE_OF_AYAK);
 
-            if (att_is_powered_staff && t->attack_style_this_tick == ATTACK_STYLE_MAGIC) {
+            if (att_is_powered_staff && att->attack_style_this_tick == ATTACK_STYLE_MAGIC) {
                 /* powered staff hit: trident impact splash */
                 if (p->hit_was_successful) {
                     effect_spawn_spotanim(rc->effects, GFX_TRIDENT_IMPACT,
@@ -1221,7 +1388,7 @@ static void render_post_tick(RenderClient* rc, OsrsPvp* env) {
                         p->x, p->y, ct, rc->anim_cache, rc->model_cache);
                 }
             } else {
-                int attacker_magic = t->magic_type_this_tick;
+                int attacker_magic = att->magic_type_this_tick;
                 if (attacker_magic > 0) {
                     if (p->hit_was_successful) {
                         /* spell hit: spawn impact GFX */
@@ -1245,41 +1412,47 @@ static void render_post_tick(RenderClient* rc, OsrsPvp* env) {
         if (edef->render_post_tick) {
             edef->render_post_tick(env->encounter_state, &rc->encounter_overlay);
 
-            /* spawn flight projectiles from new overlay events.
-               attack projectiles: duration=35 client ticks, startH=85, endH=40, curve=16.
-               cloud projectiles: duration = flight_ticks * 30 client ticks (stored in .damage),
-               startH=200 (high arc), endH=0 (ground), curve=10 */
+            /* spawn flight projectiles from overlay events.
+               per-projectile params with backward-compat defaults. */
             EncounterOverlay* ov = &rc->encounter_overlay;
             for (int i = 0; i < ov->projectile_count; i++) {
                 if (!ov->projectiles[i].active) continue;
-                float half_sz = (float)ov->boss_size / 2.0f;
+                int sz = ov->projectiles[i].src_size > 0 ? ov->projectiles[i].src_size : ov->boss_size;
+                float half_sz = (float)sz / 2.0f;
                 float sx = (float)ov->projectiles[i].src_x + half_sz;
                 float sy = (float)ov->projectiles[i].src_y + half_sz;
                 float dx = (float)ov->projectiles[i].dst_x;
                 float dy = (float)ov->projectiles[i].dst_y;
-                if (ov->projectiles[i].style == 3) {
-                    /* cloud projectile: flies for N game ticks (30 client ticks each) */
-                    int flight_ticks = ov->projectiles[i].damage;
-                    flight_spawn(rc, sx, sy, dx + 0.5f, dy + 0.5f,
-                        3, 0, flight_ticks * 30, 200, 0, 10);
-                } else if (ov->projectiles[i].style == 4) {
-                    /* snakeling spawn orb: flies to spawn point, doesn't track */
-                    flight_spawn(rc, sx, sy, dx + 0.5f, dy + 0.5f,
-                        4, 0, 40, 100, 0, 12);
-                } else {
-                    /* attack projectile: tracks player */
-                    flight_spawn(rc, sx, sy, dx, dy,
-                        ov->projectiles[i].style, ov->projectiles[i].damage,
-                        35, 85, 40, 16);
+
+                /* use per-projectile params, with defaults for backward compat */
+                int dur = ov->projectiles[i].duration_ticks > 0 ? ov->projectiles[i].duration_ticks : 35;
+                int sh  = ov->projectiles[i].start_h > 0 ? ov->projectiles[i].start_h : 85;
+                int eh  = ov->projectiles[i].end_h > 0 ? ov->projectiles[i].end_h : 40;
+                int cv  = ov->projectiles[i].curve > 0 ? ov->projectiles[i].curve : 16;
+                float arc = ov->projectiles[i].arc_height;
+                int trk = ov->projectiles[i].tracks_target;
+
+                /* cloud/orb styles: offset dst to tile center */
+                if (ov->projectiles[i].style == 3 || ov->projectiles[i].style == 4) {
+                    dx += 0.5f;
+                    dy += 0.5f;
                 }
+
+                flight_spawn(rc, sx, sy, dx, dy,
+                    ov->projectiles[i].style, ov->projectiles[i].damage,
+                    dur, sh, eh, cv, arc, trk, ov->projectiles[i].model_id);
             }
 
-            /* update attack projectile targets to track player's current position */
-            if (rc->entity_count > 0 && rc->entities[0]) {
-                float px = (float)rc->entities[0]->x;
-                float py = (float)rc->entities[0]->y;
-                flight_update_targets(rc, 0, px, py);  /* ranged */
-                flight_update_targets(rc, 1, px, py);  /* magic */
+            /* update tracking projectile targets to player's current position */
+            if (rc->entity_count > 0) {
+                float px = (float)rc->entities[0].x;
+                float py = (float)rc->entities[0].y;
+                for (int fi = 0; fi < MAX_FLIGHT_PROJECTILES; fi++) {
+                    if (rc->flights[fi].active && rc->flights[fi].tracks_target) {
+                        rc->flights[fi].dst_x = px;
+                        rc->flights[fi].dst_y = py;
+                    }
+                }
             }
         }
     }
@@ -1320,8 +1493,8 @@ static void render_client_tick(RenderClient* rc, int player_idx) {
         int stall = 0;
         if (rc->anim[player_idx].primary_seq_id >= 0 &&
             rc->anim[player_idx].primary_loops == 0 && rc->anim_cache) {
-            AnimSequence* seq = anim_get_sequence(
-                rc->anim_cache, (uint16_t)rc->anim[player_idx].primary_seq_id);
+            AnimSequence* seq = render_get_anim_sequence(
+                rc, (uint16_t)rc->anim[player_idx].primary_seq_id);
             if (seq && seq->interleave_count == 0) {
                 stall = 1;
             }
@@ -1373,7 +1546,12 @@ static void render_client_tick(RenderClient* rc, int player_idx) {
         if (rc->facing_opponent[player_idx]) {
             /* recompute target yaw from current visual positions each client tick,
                matching how appendFocusDestination recalculates from live coords */
-            int opp = (rc->entity_count == 2) ? (1 - player_idx) : (player_idx == 0 ? 1 : 0);
+            int opp;
+            if (rc->entities[player_idx].attack_target_entity_idx >= 0) {
+                opp = rc->entities[player_idx].attack_target_entity_idx;
+            } else {
+                opp = (rc->entity_count == 2) ? (1 - player_idx) : (player_idx == 0 ? 1 : 0);
+            }
             float dx = (float)(rc->sub_x[opp] - rc->sub_x[player_idx]);
             float dy = (float)(rc->sub_y[opp] - rc->sub_y[player_idx]);
             if (dx != 0.0f || dy != 0.0f) {
@@ -1408,9 +1586,9 @@ static void render_client_tick(RenderClient* rc, int player_idx) {
     /* secondary (pose): select based on visual movement state.
        NPCs use their own idle animation from the NPC model mapping. */
     int new_secondary;
-    if (rc->entities[player_idx]->entity_type == ENTITY_NPC) {
+    if (rc->entities[player_idx].entity_type == ENTITY_NPC) {
         const NpcModelMapping* nm = npc_model_lookup(
-            (uint16_t)rc->entities[player_idx]->npc_def_id);
+            (uint16_t)rc->entities[player_idx].npc_def_id);
         new_secondary = nm ? (int)nm->idle_anim : -1;
     } else {
         new_secondary = render_select_secondary(rc, player_idx);
@@ -1423,8 +1601,8 @@ static void render_client_tick(RenderClient* rc, int player_idx) {
 
     /* advance secondary frame timing */
     if (rc->anim_cache && rc->anim[player_idx].secondary_seq_id >= 0) {
-        AnimSequence* seq = anim_get_sequence(
-            rc->anim_cache, (uint16_t)rc->anim[player_idx].secondary_seq_id);
+        AnimSequence* seq = render_get_anim_sequence(
+            rc, (uint16_t)rc->anim[player_idx].secondary_seq_id);
         if (seq && seq->frame_count > 0) {
             int fidx = rc->anim[player_idx].secondary_frame_idx % seq->frame_count;
             int delay = seq->frames[fidx].delay > 0 ? seq->frames[fidx].delay : 1;
@@ -1439,8 +1617,8 @@ static void render_client_tick(RenderClient* rc, int player_idx) {
 
     /* advance primary frame timing (if active) */
     if (rc->anim_cache && rc->anim[player_idx].primary_seq_id >= 0) {
-        AnimSequence* seq = anim_get_sequence(
-            rc->anim_cache, (uint16_t)rc->anim[player_idx].primary_seq_id);
+        AnimSequence* seq = render_get_anim_sequence(
+            rc, (uint16_t)rc->anim[player_idx].primary_seq_id);
         if (seq && seq->frame_count > 0) {
             int fidx = rc->anim[player_idx].primary_frame_idx % seq->frame_count;
             int delay = seq->frames[fidx].delay > 0 ? seq->frames[fidx].delay : 1;
@@ -1573,14 +1751,23 @@ static void render_draw_grid(RenderClient* rc, OsrsPvp* env) {
                     DrawRectangle(sx + ts - 2, sy, 2, ts, COLOR_WALL_LINE);
             }
 
-            /* encounter arena: color platform vs water tiles */
+            /* encounter arena: color tiles based on encounter type */
             if (env->encounter_def && cmap == NULL) {
-                int on_plat = (dx >= ZUL_PLATFORM_MIN && dx <= ZUL_PLATFORM_MAX &&
-                               dy >= ZUL_PLATFORM_MIN && dy <= ZUL_PLATFORM_MAX);
-                if (on_plat)
-                    DrawRectangle(sx, sy, ts, ts, CLITERAL(Color){ 30, 60, 30, 255 });
-                else
-                    DrawRectangle(sx, sy, ts, ts, CLITERAL(Color){ 20, 30, 50, 255 });
+                if (rc->npc_model_cache) {
+                    /* inferno: dark cave floor */
+                    int shade = 18 + ((dx * 7 + dy * 13) % 10);
+                    DrawRectangle(sx, sy, ts, ts, CLITERAL(Color){
+                        (unsigned char)(shade + 3), (unsigned char)(shade - 1),
+                        (unsigned char)(shade - 3), 255 });
+                } else {
+                    /* zulrah: platform vs water */
+                    int on_plat = (dx >= ZUL_PLATFORM_MIN && dx <= ZUL_PLATFORM_MAX &&
+                                   dy >= ZUL_PLATFORM_MIN && dy <= ZUL_PLATFORM_MAX);
+                    if (on_plat)
+                        DrawRectangle(sx, sy, ts, ts, CLITERAL(Color){ 30, 60, 30, 255 });
+                    else
+                        DrawRectangle(sx, sy, ts, ts, CLITERAL(Color){ 20, 30, 50, 255 });
+                }
             }
 
             /* grid lines */
@@ -1753,7 +1940,7 @@ static void render_draw_players(RenderClient* rc) {
     int ts = RENDER_TILE_SIZE;
 
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
+        RenderEntity* p = &rc->entities[i];
         Color color = (i == 0) ? COLOR_P0 : COLOR_P1;
         int sx = render_world_to_screen_x_rc(rc, p->x);
         int sy = render_world_to_screen_y_rc(rc, p->y);
@@ -1820,7 +2007,7 @@ static void render_draw_dest_markers(RenderClient* rc) {
     int ts = RENDER_TILE_SIZE;
 
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
+        RenderEntity* p = &rc->entities[i];
         Color dest_color = (i == 0) ? COLOR_P0_LIGHT : COLOR_P1_LIGHT;
         if (p->dest_x != p->x || p->dest_y != p->y) {
             int sx = render_world_to_screen_x_rc(rc, p->dest_x);
@@ -1881,7 +2068,7 @@ static void render_splat_slot_offset(int slot, int* dx, int* dy) {
 /* 2D mode: draw splats at entity tile positions */
 static void render_draw_splats_2d(RenderClient* rc) {
     for (int p = 0; p < rc->entity_count; p++) {
-        Player* pl = rc->entities[p];
+        RenderEntity* pl = &rc->entities[p];
         int base_x = render_world_to_screen_x_rc(rc, pl->x) + RENDER_TILE_SIZE / 2;
         int base_y = render_world_to_screen_y_rc(rc, pl->y) + RENDER_TILE_SIZE / 2;
 
@@ -1925,15 +2112,15 @@ static void render_draw_header(RenderClient* rc, OsrsPvp* env) {
 
     /* right: HP summary (show first 2 entities) */
     if (rc->entity_count >= 2) {
-        Player* p0 = rc->entities[0];
-        Player* p1 = rc->entities[1];
+        RenderEntity* p0 = &rc->entities[0];
+        RenderEntity* p1 = &rc->entities[1];
         const char* hp_txt = TextFormat("P0: %d/%d   P1: %d/%d",
             p0->current_hitpoints, p0->base_hitpoints,
             p1->current_hitpoints, p1->base_hitpoints);
         int hp_w = MeasureText(hp_txt, 16);
         DrawText(hp_txt, RENDER_GRID_W - hp_w - 10, 12, 16, COLOR_TEXT);
     } else if (rc->entity_count == 1) {
-        Player* p0 = rc->entities[0];
+        RenderEntity* p0 = &rc->entities[0];
         const char* hp_txt = TextFormat("P0: %d/%d",
             p0->current_hitpoints, p0->base_hitpoints);
         int hp_w = MeasureText(hp_txt, 16);
@@ -1945,19 +2132,51 @@ static void render_draw_header(RenderClient* rc, OsrsPvp* env) {
 /* drawing: NPC/boss info panel (below GUI tabs)                             */
 /* ======================================================================== */
 
-static void render_draw_panel_npc(int x, int y, Player* p, OsrsPvp* env) {
+/** Look up inferno NPC name from npc_def_id. returns NULL if not an inferno NPC. */
+static const char* inferno_npc_name(int npc_def_id) {
+    switch (npc_def_id) {
+        case 7691: return "Jal-Nib";
+        case 7692: return "Jal-MejRah";
+        case 7693: return "Jal-Ak";
+        case 7694: return "Jal-AkRek-Ket";
+        case 7695: return "Jal-AkRek-Xil";
+        case 7696: return "Jal-AkRek-Mej";
+        case 7697: return "Jal-ImKot";
+        case 7698: return "Jal-Xil";
+        case 7699: return "Jal-Zek";
+        case 7700: return "JalTok-Jad";
+        case 7701: return "Yt-HurKot";
+        case 7706: return "TzKal-Zuk";
+        case 7707: return "Ancestral Glyph";
+        case 7708: return "Jal-MejJak";
+        default:   return NULL;
+    }
+}
+
+static void render_draw_panel_npc(int x, int y, RenderEntity* p, OsrsPvp* env) {
     int line_h = 14;
-    const char* form_names[] = { "GREEN", "RED", "BLUE" };
 
-    /* determine form name from npc_def_id */
-    const char* form = "NPC";
-    Color form_color = COLOR_TEXT;
-    if (p->npc_def_id == 2042) { form = "GREEN"; form_color = GREEN; }
-    else if (p->npc_def_id == 2043) { form = "RED"; form_color = RED; }
-    else if (p->npc_def_id == 2044) { form = "BLUE"; form_color = CLITERAL(Color){ 80, 140, 255, 255 }; }
-    (void)form_names;
+    /* determine NPC display name and color from npc_def_id */
+    const char* npc_name = NULL;
+    Color name_color = COLOR_TEXT;
 
-    DrawText(TextFormat("Zulrah [%s]", form), x, y, 14, form_color);
+    /* zulrah forms */
+    if (p->npc_def_id == 2042)      { npc_name = "Zulrah [GREEN]"; name_color = GREEN; }
+    else if (p->npc_def_id == 2043) { npc_name = "Zulrah [RED]"; name_color = RED; }
+    else if (p->npc_def_id == 2044) { npc_name = "Zulrah [BLUE]"; name_color = CLITERAL(Color){ 80, 140, 255, 255 }; }
+
+    /* inferno NPCs */
+    if (!npc_name) {
+        const char* inf_name = inferno_npc_name(p->npc_def_id);
+        if (inf_name) {
+            npc_name = inf_name;
+            name_color = CLITERAL(Color){ 255, 120, 50, 255 };  /* inferno orange */
+        }
+    }
+
+    if (!npc_name) npc_name = TextFormat("NPC %d", p->npc_def_id);
+
+    DrawText(npc_name, x, y, 14, name_color);
     y += line_h + 4;
 
     DrawText(TextFormat("HP:     %d / %d", p->current_hitpoints, p->base_hitpoints), x, y, 10, COLOR_TEXT);
@@ -1965,34 +2184,55 @@ static void render_draw_panel_npc(int x, int y, Player* p, OsrsPvp* env) {
     DrawText(TextFormat("Pos:    (%d, %d)", p->x, p->y), x, y, 10, COLOR_TEXT_DIM);
     y += line_h;
 
-    /* zulrah-specific state from encounter */
-    if (env->encounter_state) {
-        ZulrahState* zs = (ZulrahState*)env->encounter_state;
-        DrawText(TextFormat("Visible: %s", zs->zulrah_visible ? "yes" : "no"), x, y, 10, COLOR_TEXT_DIM);
-        y += line_h;
-        DrawText(TextFormat("Phase: %d  Surface: %d  %s", zs->phase_timer, zs->surface_timer,
-            zs->is_diving ? "DIVING" : ""), x, y, 10, zs->is_diving ? COLOR_FREEZE : COLOR_TEXT_DIM);
-        y += line_h;
-        const char* rot_names[] = { "Magma A", "Magma B", "Serp", "Tanz" };
-        const char* rot_name = (zs->rotation_index >= 0 && zs->rotation_index < 4)
-            ? rot_names[zs->rotation_index] : "???";
-        DrawText(TextFormat("Rotation: %s (phase %d/%d)", rot_name,
-            zs->phase_index + 1,
-            (zs->rotation_index >= 0 && zs->rotation_index < 4)
-                ? ZUL_ROT_LENGTHS[zs->rotation_index] : 0),
-            x, y, 10, COLOR_TEXT);
-        y += line_h;
-        DrawText(TextFormat("Action:  %d/%d (timer %d)", zs->action_index,
-            zs->action_progress, zs->action_timer), x, y, 10, COLOR_TEXT_DIM);
-        y += line_h;
+    /* encounter-specific state overlay */
+    if (env->encounter_def && env->encounter_state) {
+        const EncounterDef* edef = (const EncounterDef*)env->encounter_def;
 
-        /* count active snakelings and clouds */
-        int snakes = 0, clouds = 0;
-        for (int i = 0; i < ZUL_MAX_SNAKELINGS; i++)
-            if (zs->snakelings[i].active) snakes++;
-        for (int i = 0; i < ZUL_MAX_CLOUDS; i++)
-            if (zs->clouds[i].active) clouds++;
-        DrawText(TextFormat("Snakelings: %d  Clouds: %d", snakes, clouds), x, y, 10, COLOR_TEXT_DIM);
+        if (strcmp(edef->name, "zulrah") == 0) {
+            /* zulrah-specific state */
+            ZulrahState* zs = (ZulrahState*)env->encounter_state;
+            DrawText(TextFormat("Visible: %s", zs->zulrah_visible ? "yes" : "no"), x, y, 10, COLOR_TEXT_DIM);
+            y += line_h;
+            DrawText(TextFormat("Phase: %d  Surface: %d  %s", zs->phase_timer, zs->surface_timer,
+                zs->is_diving ? "DIVING" : ""), x, y, 10, zs->is_diving ? COLOR_FREEZE : COLOR_TEXT_DIM);
+            y += line_h;
+            const char* rot_names[] = { "Magma A", "Magma B", "Serp", "Tanz" };
+            const char* rot_name = (zs->rotation_index >= 0 && zs->rotation_index < 4)
+                ? rot_names[zs->rotation_index] : "???";
+            DrawText(TextFormat("Rotation: %s (phase %d/%d)", rot_name,
+                zs->phase_index + 1,
+                (zs->rotation_index >= 0 && zs->rotation_index < 4)
+                    ? ZUL_ROT_LENGTHS[zs->rotation_index] : 0),
+                x, y, 10, COLOR_TEXT);
+            y += line_h;
+            DrawText(TextFormat("Action:  %d/%d (timer %d)", zs->action_index,
+                zs->action_progress, zs->action_timer), x, y, 10, COLOR_TEXT_DIM);
+            y += line_h;
+
+            int snakes = 0, clouds = 0;
+            for (int i = 0; i < ZUL_MAX_SNAKELINGS; i++)
+                if (zs->snakelings[i].active) snakes++;
+            for (int i = 0; i < ZUL_MAX_CLOUDS; i++)
+                if (zs->clouds[i].active) clouds++;
+            DrawText(TextFormat("Snakelings: %d  Clouds: %d", snakes, clouds), x, y, 10, COLOR_TEXT_DIM);
+
+        } else if (strcmp(edef->name, "inferno") == 0) {
+            /* inferno-specific state */
+            InfernoState* is = (InfernoState*)env->encounter_state;
+            DrawText(TextFormat("Wave:   %d / %d", is->wave + 1, INF_NUM_WAVES), x, y, 10, COLOR_TEXT);
+            y += line_h;
+
+            int active_npcs = 0;
+            for (int i = 0; i < INF_MAX_NPCS; i++)
+                if (is->npcs[i].active) active_npcs++;
+            DrawText(TextFormat("NPCs:   %d active", active_npcs), x, y, 10, COLOR_TEXT_DIM);
+            y += line_h;
+
+            int pillars_alive = 0;
+            for (int i = 0; i < INF_NUM_PILLARS; i++)
+                if (is->pillars[i].active) pillars_alive++;
+            DrawText(TextFormat("Pillars: %d / %d", pillars_alive, INF_NUM_PILLARS), x, y, 10, COLOR_TEXT_DIM);
+        }
     }
     (void)y;
 }
@@ -2088,7 +2328,7 @@ static int render_get_attack_anim(uint8_t weapon_db_idx, int is_special) {
  * Primary animations are server-driven in the real client: attacks, casts, etc.
  * They play once then auto-expire (loopCount=1 effectively).
  */
-static int render_select_primary(Player* p) {
+static int render_select_primary(RenderEntity* p) {
     if (p->current_hitpoints <= 0) return ANIM_SEQ_DEATH;
 
     if (p->attack_style_this_tick != ATTACK_STYLE_NONE) {
@@ -2190,7 +2430,7 @@ static void composite_add_model(PlayerComposite* comp, OsrsModel* om) {
  * Called when equipment changes or on first frame.
  */
 static void composite_rebuild(
-    PlayerComposite* comp, ModelCache* cache, Player* p
+    PlayerComposite* comp, ModelCache* cache, RenderEntity* p
 ) {
     comp->base_vert_count = 0;
     comp->face_count = 0;
@@ -2259,10 +2499,17 @@ static void composite_rebuild(
  * Used for Zulrah forms, snakelings, and other encounter NPCs.
  */
 static void composite_rebuild_npc(
-    PlayerComposite* comp, ModelCache* cache, int npc_def_id
+    PlayerComposite* comp, ModelCache* cache, ModelCache* npc_cache, int npc_def_id
 ) {
     comp->base_vert_count = 0;
     comp->face_count = 0;
+
+    /* zero mesh buffers to prevent stale GPU data from showing as garbled geometry
+       if the model fails to load or exceeds composite limits */
+    if (comp->mesh.vertices)
+        memset(comp->mesh.vertices, 0, COMPOSITE_MAX_EXP_VERTS * 3 * sizeof(float));
+    if (comp->mesh.colors)
+        memset(comp->mesh.colors, 0, COMPOSITE_MAX_EXP_VERTS * 4);
 
     /* look up model ID from NPC definition */
     uint32_t model_id = 0;
@@ -2275,6 +2522,9 @@ static void composite_rebuild_npc(
     }
 
     OsrsModel* om = model_cache_get(cache, model_id);
+    /* fallback: check secondary NPC model cache (inferno etc.) */
+    if (!om && npc_cache)
+        om = model_cache_get(npc_cache, model_id);
     if (om) composite_add_model(comp, om);
 
     /* rebuild animation state */
@@ -2410,15 +2660,18 @@ static void composite_animate_and_draw(
     UpdateMeshBuffer(comp->mesh, 3, comp->mesh.colors,
                      exp_verts * 4, 0);
 
-    /* draw with the current face count (may be less than max capacity) */
-    comp->mesh.vertexCount = exp_verts;
-    comp->mesh.triangleCount = comp->face_count;
+    /* draw with the current face count. CRITICAL: must set vertexCount on
+       model.meshes[0], NOT comp->mesh — LoadModelFromMesh copies the mesh
+       struct by value, so comp->mesh and model.meshes[0] are independent.
+       DrawModel reads model.meshes[0].vertexCount for glDrawArrays count. */
+    comp->model.meshes[0].vertexCount = exp_verts;
+    comp->model.meshes[0].triangleCount = comp->face_count;
     comp->model.transform = transform;
     DrawModel(comp->model, (Vector3){ 0, 0, 0 }, 1.0f, WHITE);
 
     /* restore max counts so the VBO stays valid for next UpdateMeshBuffer */
-    comp->mesh.vertexCount = COMPOSITE_MAX_EXP_VERTS;
-    comp->mesh.triangleCount = COMPOSITE_MAX_FACES;
+    comp->model.meshes[0].vertexCount = COMPOSITE_MAX_EXP_VERTS;
+    comp->model.meshes[0].triangleCount = COMPOSITE_MAX_FACES;
 }
 
 static void composite_free(PlayerComposite* comp) {
@@ -2449,14 +2702,14 @@ static void render_player_composite(
     if (!rc->model_cache) return;
 
     PlayerComposite* comp = &rc->composites[player_idx];
-    Player* p = rc->entities[player_idx];
+    RenderEntity* p = &rc->entities[player_idx];
 
     composite_init_gpu(comp);
 
     /* branch on entity type: NPCs use single-model composites */
     if (p->entity_type == ENTITY_NPC) {
         if (comp->needs_rebuild || comp->last_npc_def_id != p->npc_def_id) {
-            composite_rebuild_npc(comp, rc->model_cache, p->npc_def_id);
+            composite_rebuild_npc(comp, rc->model_cache, rc->npc_model_cache, p->npc_def_id);
         }
     } else {
         if (comp->needs_rebuild ||
@@ -2469,12 +2722,12 @@ static void render_player_composite(
         /* no animation: draw static */
         if (comp->face_count > 0) {
             int exp_verts = comp->face_count * 3;
-            comp->mesh.vertexCount = exp_verts;
-            comp->mesh.triangleCount = comp->face_count;
+            comp->model.meshes[0].vertexCount = exp_verts;
+            comp->model.meshes[0].triangleCount = comp->face_count;
             comp->model.transform = transform;
             DrawModel(comp->model, (Vector3){ 0, 0, 0 }, 1.0f, WHITE);
-            comp->mesh.vertexCount = COMPOSITE_MAX_EXP_VERTS;
-            comp->mesh.triangleCount = COMPOSITE_MAX_FACES;
+            comp->model.meshes[0].vertexCount = COMPOSITE_MAX_EXP_VERTS;
+            comp->model.meshes[0].triangleCount = COMPOSITE_MAX_FACES;
         }
         return;
     }
@@ -2521,13 +2774,13 @@ static void render_player_composite(
 
     /* secondary frame */
     if (rc->anim[player_idx].secondary_seq_id >= 0) {
-        AnimSequence* seq = anim_get_sequence(
-            rc->anim_cache, (uint16_t)rc->anim[player_idx].secondary_seq_id);
+        AnimSequence* seq = render_get_anim_sequence(
+            rc, (uint16_t)rc->anim[player_idx].secondary_seq_id);
         if (seq && seq->frame_count > 0) {
             int fidx = rc->anim[player_idx].secondary_frame_idx % seq->frame_count;
             AnimSequenceFrame* sf = &seq->frames[fidx];
             if (sf->frame.framebase_id != 0xFFFF) {
-                AnimFrameBase* fb = anim_get_framebase(rc->anim_cache, sf->frame.framebase_id);
+                AnimFrameBase* fb = render_get_framebase(rc, sf->frame.framebase_id);
                 if (fb) { sec_sf = sf; sec_fb = fb; }
             }
         }
@@ -2535,13 +2788,13 @@ static void render_player_composite(
 
     /* primary frame */
     if (rc->anim[player_idx].primary_seq_id >= 0) {
-        AnimSequence* seq = anim_get_sequence(
-            rc->anim_cache, (uint16_t)rc->anim[player_idx].primary_seq_id);
+        AnimSequence* seq = render_get_anim_sequence(
+            rc, (uint16_t)rc->anim[player_idx].primary_seq_id);
         if (seq && seq->frame_count > 0) {
             int fidx = rc->anim[player_idx].primary_frame_idx % seq->frame_count;
             AnimSequenceFrame* sf = &seq->frames[fidx];
             if (sf->frame.framebase_id != 0xFFFF) {
-                AnimFrameBase* fb = anim_get_framebase(rc->anim_cache, sf->frame.framebase_id);
+                AnimFrameBase* fb = render_get_framebase(rc, sf->frame.framebase_id);
                 if (fb) { pri_sf = sf; pri_fb = fb; }
             }
         }
@@ -2551,8 +2804,8 @@ static void render_player_composite(
     const uint8_t* interleave = NULL;
     int interleave_count = 0;
     if (pri_sf) {
-        AnimSequence* prim_seq = anim_get_sequence(
-            rc->anim_cache, (uint16_t)rc->anim[player_idx].primary_seq_id);
+        AnimSequence* prim_seq = render_get_anim_sequence(
+            rc, (uint16_t)rc->anim[player_idx].primary_seq_id);
         if (prim_seq && prim_seq->interleave_order) {
             interleave = prim_seq->interleave_order;
             interleave_count = prim_seq->interleave_count;
@@ -2611,9 +2864,24 @@ static void render_draw_3d_world(RenderClient* rc) {
                 }
             }
         }
+    } else if (rc->npc_model_cache) {
+        /* inferno: dark cave floor. all tiles are walkable ground. */
+        float plat_y = 2.0f;
+        for (int dx = 0; dx < rc->arena_width; dx++) {
+            for (int dy = 0; dy < rc->arena_height; dy++) {
+                float tx = (float)(rc->arena_base_x + dx);
+                float tz = -(float)(rc->arena_base_y + dy + 1);
+
+                /* volcanic rock with subtle variation — bright enough to distinguish from background */
+                int shade = 45 + ((dx * 7 + dy * 13) % 15);
+                int r = shade + ((dx * 3 + dy * 11) % 10);  /* slight reddish tint */
+                Color c = { (unsigned char)r, (unsigned char)(shade - 3), (unsigned char)(shade - 6), 255 };
+                DrawCube((Vector3){ tx + 0.5f, plat_y - 0.05f, tz + 0.5f },
+                         1.0f, 0.1f, 1.0f, c);
+            }
+        }
     } else {
-        /* no terrain loaded — procedural arena for encounters.
-           Zulrah: raised green platform over blue water, with cloud/position overlays.
+        /* zulrah / generic encounter: raised green platform over blue water.
            the real arena is instanced so it can't be exported from the cache. */
         float water_y = 1.5f;
         float plat_y = 2.0f;
@@ -2636,13 +2904,11 @@ static void render_draw_3d_world(RenderClient* rc) {
                 }
 
                 if (on_plat) {
-                    /* slight color variation for visual interest */
                     int shade = 35 + ((dx * 7 + dy * 13) % 15);
                     Color c = { (unsigned char)shade, (unsigned char)(shade * 2), (unsigned char)shade, 255 };
                     DrawCube((Vector3){ tx + 0.5f, plat_y - 0.05f, tz + 0.5f },
                              1.0f, 0.1f, 1.0f, c);
                 } else {
-                    /* water with slight wave pattern */
                     int shade = 15 + ((dx * 3 + dy * 5) % 10);
                     Color c = { (unsigned char)(shade / 2), (unsigned char)shade, (unsigned char)(shade * 3), 255 };
                     DrawCube((Vector3){ tx + 0.5f, water_y - 0.05f, tz + 0.5f },
@@ -2650,7 +2916,52 @@ static void render_draw_3d_world(RenderClient* rc) {
                 }
             }
         }
+    }
 
+    /* inferno pillars: "Rocky support" objects with 4 HP-level models.
+       dynamically spawned (not in static objects file). */
+    if (rc->npc_model_cache && rc->gui.encounter_state) {
+        InfernoState* is = (InfernoState*)rc->gui.encounter_state;
+        float plat_y = 2.0f;
+        float ms = 1.0f / 128.0f;
+        for (int p = 0; p < INF_NUM_PILLARS; p++) {
+            if (!is->pillars[p].active) continue;
+            float hp_frac = (float)is->pillars[p].hp / (float)INF_PILLAR_HP;
+
+            float cx = (float)is->pillars[p].x + INF_PILLAR_SIZE / 2.0f;
+            float cz = -(float)(is->pillars[p].y + INF_PILLAR_SIZE / 2) - 0.5f;
+
+            if (rc->pillar_models_ready) {
+                /* select model by HP: 100%, 75%, 50%, 25% */
+                int mi = 0;
+                if (hp_frac <= 0.25f) mi = 3;
+                else if (hp_frac <= 0.50f) mi = 2;
+                else if (hp_frac <= 0.75f) mi = 1;
+
+                rlDisableBackfaceCulling();
+                rc->pillar_models[mi].transform = MatrixMultiply(
+                    MatrixScale(-ms, ms, ms),
+                    MatrixTranslate(cx, plat_y, cz));
+                DrawModel(rc->pillar_models[mi], (Vector3){0,0,0}, 1.0f, WHITE);
+                rlEnableBackfaceCulling();
+            } else {
+                /* fallback: colored DrawCube blocks */
+                int base_r = (int)(140 * hp_frac + 180 * (1.0f - hp_frac));
+                int base_g = (int)(130 * hp_frac + 40 * (1.0f - hp_frac));
+                int base_b = (int)(100 * hp_frac + 20 * (1.0f - hp_frac));
+                Color pillar_col = { (unsigned char)base_r, (unsigned char)base_g, (unsigned char)base_b, 240 };
+                for (int dx = 0; dx < INF_PILLAR_SIZE; dx++) {
+                    for (int dy = 0; dy < INF_PILLAR_SIZE; dy++) {
+                        float tx = (float)(is->pillars[p].x + dx);
+                        float tz2 = -(float)(is->pillars[p].y + dy + 1);
+                        for (int h = 0; h < 3; h++) {
+                            DrawCube((Vector3){ tx + 0.5f, plat_y + 0.5f + (float)h, tz2 + 0.5f },
+                                     0.95f, 0.95f, 0.95f, pillar_col);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /* debug: highlight the last raycast-selected tile */
@@ -2672,6 +2983,33 @@ static void render_draw_3d_world(RenderClient* rc) {
                       a.y + rc->debug_ray_dir.y * 50.0f,
                       a.z + rc->debug_ray_dir.z * 50.0f };
         DrawLine3D(a, b, YELLOW);
+    }
+
+    /* debug: draw game-logic tile positions for all entities.
+       green = player, cyan = NPCs. shows where the game thinks entities are
+       vs where the 3D model renders (which uses sub_x/sub_y interpolation). */
+    if (rc->show_debug) {
+        for (int i = 0; i < rc->entity_count; i++) {
+            RenderEntity* ep = &rc->entities[i];
+            if (ep->entity_type == ENTITY_NPC && !ep->npc_visible) continue;
+            float tx = (float)ep->x;
+            float ty = (float)ep->y;
+            float tz = -(ty + 1.0f);
+            float ground = rc->terrain
+                ? terrain_height_avg(rc->terrain, ep->x, ep->y) : 2.0f;
+            int sz = ep->npc_size > 1 ? ep->npc_size : 1;
+            Color col = (ep->entity_type == ENTITY_PLAYER)
+                ? CLITERAL(Color){ 0, 255, 0, 100 }
+                : CLITERAL(Color){ 0, 200, 255, 80 };
+            for (int dx = 0; dx < sz; dx++) {
+                for (int dy = 0; dy < sz; dy++) {
+                    float mx = tx + (float)dx;
+                    float mz = tz - (float)dy;
+                    DrawCube((Vector3){ mx + 0.5f, ground + 0.08f, mz + 0.5f },
+                             0.9f, 0.04f, 0.9f, col);
+                }
+            }
+        }
     }
 
     /* entity click hitboxes are now drawn as 2D convex hulls after EndMode3D */
@@ -2794,21 +3132,28 @@ static void render_draw_3d_world(RenderClient* rc) {
             Vector3 pos = flight_get_position(fp, src_ground, dst_ground);
 
             Model* proj_model = NULL;
-            if (fp->style == 0 && rc->ranged_proj_model_ready)
-                proj_model = &rc->ranged_proj_model;
-            else if (fp->style == 1 && rc->magic_proj_model_ready)
-                proj_model = &rc->magic_proj_model;
-            else if (fp->style == 3 && rc->cloud_proj_model_ready)
-                proj_model = &rc->cloud_proj_model;
-            else if (fp->style == 4 && rc->ranged_proj_model_ready)
-                proj_model = &rc->ranged_proj_model;  /* spawn orb reuses ranged mesh */
+            if (fp->model_id > 0) {
+                proj_model = render_get_proj_model(rc, fp->model_id);
+            }
+            if (!proj_model) {
+                /* style-based fallback for backward compatibility */
+                if (fp->style == 0 && rc->ranged_proj_model_ready)
+                    proj_model = &rc->ranged_proj_model;
+                else if (fp->style == 1 && rc->magic_proj_model_ready)
+                    proj_model = &rc->magic_proj_model;
+                else if (fp->style == 3 && rc->cloud_proj_model_ready)
+                    proj_model = &rc->cloud_proj_model;
+                else if (fp->style == 4 && rc->ranged_proj_model_ready)
+                    proj_model = &rc->ranged_proj_model;  /* spawn orb reuses ranged mesh */
+            }
 
             if (proj_model) {
                 rlDisableBackfaceCulling();
+                float pms = 1.0f / 128.0f;
                 proj_model->transform = MatrixMultiply(
                     MatrixMultiply(
-                        MatrixScale(ms, ms, ms),
-                        MatrixMultiply(MatrixRotateX(fp->pitch), MatrixRotateY(fp->yaw))),
+                        MatrixScale(-pms, pms, pms),
+                        MatrixMultiply(MatrixRotateY(fp->yaw + 1.5707963f), MatrixRotateX(fp->pitch))),
                     MatrixTranslate(pos.x, pos.y, pos.z));
                 DrawModel(*proj_model, (Vector3){0,0,0}, 1.0f, WHITE);
                 rlEnableBackfaceCulling();
@@ -2886,7 +3231,7 @@ static void render_draw_3d_world(RenderClient* rc) {
 
         rlDisableBackfaceCulling();
         for (int i = 0; i < rc->entity_count; i++) {
-            Player* ep = rc->entities[i];
+            RenderEntity* ep = &rc->entities[i];
 
             /* skip invisible NPCs (diving, dead, etc.) */
             if (ep->entity_type == ENTITY_NPC && !ep->npc_visible) continue;
@@ -2905,12 +3250,13 @@ static void render_draw_3d_world(RenderClient* rc) {
             /* rebuild composite if equipment changed, animate, upload, draw */
             render_player_composite(rc, i, base);
 
+
             /* project animated mesh vertices to 2D screen for convex hull click detection.
                ported from RuneLite RSModelMixin.getConvexHull → Perspective.modelToCanvas.
                we sample every Nth vertex for performance (full hull is overkill). */
             PlayerComposite* comp = &rc->composites[i];
             Camera3D hull_cam = render_build_3d_camera(rc);
-            int nv = comp->mesh.vertexCount;
+            int nv = comp->face_count * 3;  /* actual used verts, not pre-allocated capacity */
             int stride = (nv > 200) ? (nv / 100) : 1;  /* sample ~100 verts max */
             int hull_n = 0;
             /* stack arrays for projection — max 200 sampled points */
@@ -2965,10 +3311,10 @@ static void render_draw_3d_world(RenderClient* rc) {
                which is fine since effects render sequentially. */
             if (e->anim_state && e->meta->anim_seq_id >= 0 && rc->anim_cache
                 && om->face_indices) {
-                AnimSequence* seq = anim_get_sequence(rc->anim_cache, e->meta->anim_seq_id);
+                AnimSequence* seq = render_get_anim_sequence(rc, e->meta->anim_seq_id);
                 if (seq && e->anim_frame < seq->frame_count) {
                     AnimSequenceFrame* sf = &seq->frames[e->anim_frame];
-                    AnimFrameBase* fb = anim_get_framebase(rc->anim_cache,
+                    AnimFrameBase* fb = render_get_framebase(rc,
                         sf->frame.framebase_id);
                     if (fb) {
                         anim_apply_frame(e->anim_state, om->base_vertices,
@@ -3053,7 +3399,7 @@ static void render_draw_models_2d_overlay(RenderClient* rc) {
     BeginMode3D(cam);
 
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
+        RenderEntity* p = &rc->entities[i];
 
         uint8_t slot_idx = p->equipped[GEAR_SLOT_WEAPON];
         uint8_t db_idx = get_item_for_slot(GEAR_SLOT_WEAPON, slot_idx);
@@ -3115,7 +3461,7 @@ static void render_draw_overhead_status(RenderClient* rc, OsrsPvp* env) {
     };
 
     for (int i = 0; i < rc->entity_count; i++) {
-        Player* p = rc->entities[i];
+        RenderEntity* p = &rc->entities[i];
 
         /* skip invisible NPCs */
         if (p->entity_type == ENTITY_NPC && !p->npc_visible) continue;
@@ -3197,12 +3543,13 @@ void pvp_render(OsrsPvp* env) {
        during pause, rewind, or initial frame) */
     render_populate_entities(rc, env);
 
-    render_handle_input(rc);
+    render_handle_input(rc, env);
 
-    /* inventory mouse interaction (clicks, drags) — runs every frame */
+    /* inventory mouse interaction (clicks, drags) — runs every frame.
+       gui functions need the full Player* (inventory, stats, etc.) */
     if (rc->entity_count > 0 && rc->gui.gui_entity_idx < rc->entity_count) {
-        gui_inv_handle_mouse(&rc->gui, rc->entities[rc->gui.gui_entity_idx],
-                             &rc->human_input);
+        Player* gui_p = render_get_player_ptr(env, rc->gui.gui_entity_idx);
+        if (gui_p) gui_inv_handle_mouse(&rc->gui, gui_p, &rc->human_input);
     }
 
     /* run client ticks at 50 Hz (20ms each), matching the real OSRS client's
@@ -3266,8 +3613,8 @@ void pvp_render(OsrsPvp* env) {
 
         /* entity HP summary top-right */
         if (rc->entity_count >= 2) {
-            Player* p0 = rc->entities[0];
-            Player* p1 = rc->entities[1];
+            RenderEntity* p0 = &rc->entities[0];
+            RenderEntity* p1 = &rc->entities[1];
             const char* hp_txt = TextFormat("P0: %d/%d   P1: %d/%d",
                 p0->current_hitpoints, p0->base_hitpoints,
                 p1->current_hitpoints, p1->base_hitpoints);
@@ -3343,15 +3690,18 @@ void pvp_render(OsrsPvp* env) {
     }
 
     if (rc->entity_count > 0) {
-        Player* gui_player = rc->entities[rc->gui.gui_entity_idx];
-        gui_draw(&rc->gui, gui_player);
+        /* gui_draw needs full Player* for inventory/stats/prayers.
+           render_get_player_ptr fetches from encounter vtable. */
+        Player* gui_player = render_get_player_ptr(env, rc->gui.gui_entity_idx);
+        if (gui_player) gui_draw(&rc->gui, gui_player);
 
         /* boss/NPC info: top-left overlay (instead of below panel) */
-        if (gui_player->entity_type != ENTITY_NPC && rc->entity_count > 1) {
+        RenderEntity* gui_re = &rc->entities[rc->gui.gui_entity_idx];
+        if (gui_re->entity_type != ENTITY_NPC && rc->entity_count > 1) {
             for (int ei = 0; ei < rc->entity_count; ei++) {
-                if (rc->entities[ei]->entity_type == ENTITY_NPC) {
+                if (rc->entities[ei].entity_type == ENTITY_NPC) {
                     render_draw_panel_npc(10, RENDER_HEADER_HEIGHT + 8,
-                                         rc->entities[ei], env);
+                                         &rc->entities[ei], env);
                     break;
                 }
             }
