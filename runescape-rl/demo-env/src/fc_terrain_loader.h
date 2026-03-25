@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 
 #define TERR_MAGIC 0x54455252  /* "TERR" */
 
@@ -55,6 +56,30 @@ static FcTerrain fc_terrain_load(const char* path) {
     fread(mesh.vertices, sizeof(float), vert_count * 3, f);
     fread(mesh.colors, 1, vert_count * 4, f);
     fclose(f);
+
+    /* Generate flat normals for proper lighting */
+    mesh.normals = (float*)RL_MALLOC(vert_count * 3 * sizeof(float));
+    for (uint32_t i = 0; i < vert_count; i += 3) {
+        /* Triangle vertices */
+        float *v0 = &mesh.vertices[i*3], *v1 = &mesh.vertices[(i+1)*3], *v2 = &mesh.vertices[(i+2)*3];
+        /* Edge vectors */
+        float e1x = v1[0]-v0[0], e1y = v1[1]-v0[1], e1z = v1[2]-v0[2];
+        float e2x = v2[0]-v0[0], e2y = v2[1]-v0[1], e2z = v2[2]-v0[2];
+        /* Cross product */
+        float nx = e1y*e2z - e1z*e2y;
+        float ny = e1z*e2x - e1x*e2z;
+        float nz = e1x*e2y - e1y*e2x;
+        /* Normalize */
+        float len = sqrtf(nx*nx + ny*ny + nz*nz);
+        if (len > 0.0001f) { nx/=len; ny/=len; nz/=len; }
+        else { nx=0; ny=1; nz=0; }
+        /* Assign to all 3 verts of the triangle */
+        for (int j = 0; j < 3; j++) {
+            mesh.normals[(i+j)*3+0] = nx;
+            mesh.normals[(i+j)*3+1] = ny;
+            mesh.normals[(i+j)*3+2] = nz;
+        }
+    }
 
     UploadMesh(&mesh, false);
     t.mesh = mesh;

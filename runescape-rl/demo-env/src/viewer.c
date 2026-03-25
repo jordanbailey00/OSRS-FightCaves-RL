@@ -219,9 +219,9 @@ static void draw_scene(ViewerState* v) {
 
     BeginMode3D(v->camera3d);
 
-    /* Terrain mesh or procedural fallback */
+    /* Terrain mesh — offset Y up so entities stand on it, not above it */
     if (v->terrain.loaded) {
-        DrawModel(v->terrain.model, (Vector3){0, 0, 0}, 1.0f, WHITE);
+        DrawModel(v->terrain.model, (Vector3){0, 0.3f, 0}, 1.0f, WHITE);
     } else {
         /* Procedural ground plane fallback */
         for (int x = 0; x < FC_ARENA_WIDTH; x++) {
@@ -718,7 +718,24 @@ int main(void) {
     fprintf(stderr, "\n=== Asset Load Summary ===\n");
     fprintf(stderr, "NPC models: %s (%d models)\n", v.model_cache ? "LOADED" : "FAILED",
             v.model_cache ? v.model_cache->count : 0);
-    fprintf(stderr, "Terrain:    %s\n", v.terrain.loaded ? "LOADED" : "FAILED");
+    fprintf(stderr, "Terrain:    %s (rendered at Y+0.3 offset, bg=BLACK)\n",
+            v.terrain.loaded ? "LOADED" : "FAILED");
+    if (v.terrain.loaded) {
+        fprintf(stderr, "  Mesh: %d verts, %d tris\n",
+                v.terrain.mesh.vertexCount, v.terrain.mesh.triangleCount);
+        /* Sample AABB from first few verts */
+        float *tv = v.terrain.mesh.vertices;
+        float xmin=tv[0],xmax=tv[0],ymin=tv[1],ymax=tv[1],zmin=tv[2],zmax=tv[2];
+        for (int i=1; i<v.terrain.mesh.vertexCount && i<1000; i++) {
+            float vx=tv[i*3], vy=tv[i*3+1], vz=tv[i*3+2];
+            if(vx<xmin)xmin=vx; if(vx>xmax)xmax=vx;
+            if(vy<ymin)ymin=vy; if(vy>ymax)ymax=vy;
+            if(vz<zmin)zmin=vz; if(vz>zmax)zmax=vz;
+        }
+        fprintf(stderr, "  AABB: X[%.1f,%.1f] Y[%.3f,%.3f] Z[%.1f,%.1f]\n",
+                xmin,xmax,ymin,ymax,zmin,zmax);
+        fprintf(stderr, "  Player will be at (32.5, 0.0, 32.5), terrain Y offset +0.3\n");
+    }
     fprintf(stderr, "Prayer spr: %s\n", v.sprites_loaded ? "LOADED" : "FAILED");
     fprintf(stderr, "Tab spr:    %s\n", v.tab_inv_tex.id ? "LOADED" : "FAILED");
     fprintf(stderr, "Render:     3D asset-backed (single path, no 2D fallback)\n");
@@ -790,7 +807,7 @@ int main(void) {
 
         /* Render */
         BeginDrawing();
-        ClearBackground(COL_BORDER);
+        ClearBackground(BLACK);
 
         /* Single 3D render path — always uses exported assets when loaded */
         draw_scene(&v);
