@@ -1,5 +1,0 @@
-spawns = [
-# 7757
-  { id = "spade", x = 1951, y = 4964, delay = 100, members = true },
-  { id = "bucket", x = 1943, y = 4956, delay = 100, members = true },
-]

@@ -1,6 +1,0 @@
-[rename_delay]
-format = "int"
-persist = true
-
-[name_history]
-persist = true

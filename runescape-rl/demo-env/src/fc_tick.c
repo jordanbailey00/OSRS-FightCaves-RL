@@ -3,11 +3,9 @@
 #include "fc_prayer.h"
 #include "fc_pathfinding.h"
 #include <math.h>
-#include <stdio.h>
 #include "fc_npc.h"
 #include "fc_wave.h"
 #include "fc_contracts.h"
-#include "fc_debug.h"
 
 /*
  * fc_tick.c — Main tick loop for Fight Caves simulation.
@@ -103,11 +101,13 @@ static int npc_slot_to_index(const FcState* state, int slot) {
 static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     FcPlayer* p = &state->player;
 
-    int act_move   = actions[0];
-    int act_attack = actions[1];
-    int act_prayer = actions[2];
-    int act_eat    = actions[3];
-    int act_drink  = actions[4];
+    int act_move     = actions[0];
+    int act_attack   = actions[1];
+    int act_prayer   = actions[2];
+    int act_eat      = actions[3];
+    int act_drink    = actions[4];
+    int act_target_x = actions[5];
+    int act_target_y = actions[6];
 
     /* ---- Prayer (instant, processed first) ---- */
     if (act_prayer > 0) {
@@ -153,10 +153,30 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
         state->prayer_potion_used_this_tick = 1;
     }
 
+    /* ---- Walk-to-tile (high-level pathfinding, heads 5+6) ---- */
+    /* When both target_x and target_y are non-zero, BFS pathfind to that tile.
+     * This is identical to a human clicking a tile in the viewer. The route is
+     * consumed one step per tick by the movement code below. */
+    if (act_target_x > 0 && act_target_y > 0) {
+        int tx = act_target_x - 1;  /* 1-64 → 0-63 */
+        int ty = act_target_y - 1;
+        if (tx >= 0 && tx < FC_ARENA_WIDTH && ty >= 0 && ty < FC_ARENA_HEIGHT &&
+            state->walkable[tx][ty]) {
+            int steps = fc_pathfind_bfs(p->x, p->y, tx, ty, state->walkable,
+                                        p->route_x, p->route_y, FC_MAX_ROUTE);
+            p->route_len = steps;
+            p->route_idx = 0;
+            /* Clear attack target — walking to tile cancels combat approach */
+            p->attack_target_idx = -1;
+            p->approach_target = 0;
+        }
+    }
+
     /* ---- Movement ---- */
-    /* Two modes:
-     * 1. Route-based (click-to-move from viewer): consume one step from route deque
-     * 2. Directional (RL action head): immediate step in direction
+    /* Three modes (priority order):
+     * 1. Route-based (from walk-to-tile action or viewer click): consume steps
+     * 2. Directional (RL action head 0): immediate step in direction
+     * 3. Idle
      * Route takes priority. If route active, directional input is ignored. */
     if (p->route_idx < p->route_len) {
         /* Consume steps from the route: 1 if walking, 2 if running */

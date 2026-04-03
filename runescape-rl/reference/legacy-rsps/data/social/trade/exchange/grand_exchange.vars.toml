@@ -1,4 +1,0 @@
-[grand_exchange_tutorial]
-persist = true
-format = "list"
-values = [ "unstarted", "completed"]

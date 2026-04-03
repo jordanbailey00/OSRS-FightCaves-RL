@@ -36,6 +36,8 @@ int fc_capi_attack_dim(void) { return FC_ATTACK_DIM; }
 int fc_capi_prayer_dim(void) { return FC_PRAYER_DIM; }
 int fc_capi_eat_dim(void) { return FC_EAT_DIM; }
 int fc_capi_drink_dim(void) { return FC_DRINK_DIM; }
+int fc_capi_move_target_x_dim(void) { return FC_MOVE_TARGET_X_DIM; }
+int fc_capi_move_target_y_dim(void) { return FC_MOVE_TARGET_Y_DIM; }
 
 /* Create a new environment context */
 FcEnvCtx* fc_capi_create(void) {

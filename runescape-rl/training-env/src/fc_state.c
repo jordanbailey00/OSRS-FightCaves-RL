@@ -1,6 +1,7 @@
 #include "fc_api.h"
 #include "fc_wave.h"
 #include <string.h>
+#include <stdio.h>
 
 /*
  * fc_state.c — State allocation, initialization, reset, rendering.
@@ -11,15 +12,42 @@
  */
 
 /* ======================================================================== */
-/* Arena setup (placeholder — PR 2+ will use proper Fight Caves layout)      */
+/* Arena collision map (from Void 634 cache, region 37,79, level 0)          */
 /* ======================================================================== */
 
+/*
+ * Binary collision extracted via DumpFcCollision.kt from the Void 634 cache.
+ * Format: 64*64 bytes, row-major (y=0..63, x=0..63), 1=walkable, 0=blocked.
+ * 2153 walkable tiles, 1943 blocked. The irregular cave shape with walls,
+ * pillars, and narrow passages is critical for safespot mechanics.
+ *
+ * Loaded from assets/fightcaves.collision at runtime.
+ * If the file is missing, falls back to an open arena with border walls.
+ */
 static void setup_arena(FcState* state) {
-    /* For now, mark entire arena as walkable.
-     * PR 2 will add the actual Fight Caves obstacle layout. */
-    memset(state->walkable, 1, sizeof(state->walkable));
+    /* Try to load collision from binary file */
+    FILE* f = fopen("assets/fightcaves.collision", "rb");
+    if (!f) {
+        /* Also try relative to build directory */
+        f = fopen("../demo-env/assets/fightcaves.collision", "rb");
+    }
+    if (f) {
+        uint8_t buf[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
+        size_t n = fread(buf, 1, sizeof(buf), f);
+        fclose(f);
+        if (n == sizeof(buf)) {
+            /* Binary is row-major [y][x], our array is [x][y] — transpose */
+            for (int y = 0; y < FC_ARENA_HEIGHT; y++) {
+                for (int x = 0; x < FC_ARENA_WIDTH; x++) {
+                    state->walkable[x][y] = buf[y * FC_ARENA_WIDTH + x];
+                }
+            }
+            return;
+        }
+    }
 
-    /* Mark border tiles as non-walkable */
+    /* Fallback: open arena with border walls */
+    memset(state->walkable, 1, sizeof(state->walkable));
     for (int x = 0; x < FC_ARENA_WIDTH; x++) {
         state->walkable[x][0] = 0;
         state->walkable[x][FC_ARENA_HEIGHT - 1] = 0;
@@ -60,24 +88,40 @@ static void init_player(FcPlayer* p) {
 
     /* Run */
     p->run_energy = 10000;  /* 100% */
-    p->is_running = 0;
+    p->is_running = 1;  /* FC players typically run */
 
-    /* Stats */
+    /* Stats (from FightCaveEpisodeInitializer.kt) */
+    p->attack_level = FC_PLAYER_ATTACK_LVL;
+    p->strength_level = FC_PLAYER_STRENGTH_LVL;
     p->defence_level = FC_PLAYER_DEFENCE_LVL;
     p->ranged_level = FC_PLAYER_RANGED_LVL;
+    p->prayer_level = FC_PLAYER_PRAYER_LVL;
+    p->magic_level = FC_PLAYER_MAGIC_LVL;
 
-    /* Equipment bonuses (standard rune crossbow + black d'hide setup) */
-    p->ranged_attack_bonus = 100;   /* approximate */
-    p->ranged_strength_bonus = 64;  /* adamant bolts */
-    p->defence_stab = 50;
-    p->defence_slash = 60;
-    p->defence_crush = 55;
-    p->defence_magic = 60;
-    p->defence_ranged = 70;
-    p->prayer_bonus = 5;
+    /* Equipment bonuses — exact values from Void 634 cache item definitions:
+     * Coif + Rune Crossbow + Black D'hide Body/Chaps/Vambraces + Snakeskin Boots + Adamant Bolts */
+    p->ranged_attack_bonus = 153;   /* 2+90+30+17+11+3 */
+    p->ranged_strength_bonus = 100; /* adamant bolts (param 643) */
+    p->defence_stab = 97;           /* 4+0+55+31+6+1 */
+    p->defence_slash = 84;          /* 6+0+47+25+5+1 */
+    p->defence_crush = 110;         /* 8+0+60+33+7+2 */
+    p->defence_magic = 91;          /* 4+0+50+28+8+1 */
+    p->defence_ranged = 90;         /* 4+0+55+31+0+0 */
+    p->prayer_bonus = 0;            /* no prayer bonus from this loadout */
 
     /* Ammo */
     p->ammo_count = 1000;
+
+    /* HP regen counter */
+    p->hp_regen_counter = 0;
+
+    /* Route (click-to-move) — empty */
+    p->route_len = 0;
+    p->route_idx = 0;
+
+    /* Attack target — none */
+    p->attack_target_idx = -1;
+    p->approach_target = 0;
 }
 
 /* ======================================================================== */
@@ -208,7 +252,7 @@ void fc_write_obs(const FcState* state, float* out) {
         npc_out[FC_NPC_DISTANCE]      = (float)npc_distance(p, n) / (float)FC_ARENA_WIDTH;
         npc_out[FC_NPC_ATK_STYLE]     = (float)n->attack_style / 3.0f;
         npc_out[FC_NPC_ATK_TIMER]     = (n->attack_speed > 0) ? (float)n->attack_timer / (float)n->attack_speed : 0.0f;
-        npc_out[FC_NPC_SIZE]          = (float)n->size / 4.0f;
+        npc_out[FC_NPC_SIZE]          = (float)n->size / 5.0f;  /* max NPC size is 5 (Ket-Zek, Jad) */
         npc_out[FC_NPC_IS_HEALER]     = (float)n->is_healer;
         npc_out[FC_NPC_JAD_TELEGRAPH] = (float)n->jad_telegraph / 2.0f;
         npc_out[FC_NPC_AGGRO]         = (n->aggro_target >= 0) ? 1.0f : 0.0f;
@@ -339,10 +383,10 @@ void fc_fill_render_entities(const FcState* state, FcRenderEntity* entities, int
     pe->damage_taken_this_tick = state->player.damage_taken_this_tick;
     pe->hit_landed_this_tick = state->player.hit_landed_this_tick;
 
-    /* Active NPCs */
+    /* Active NPCs + NPCs that just died this tick (for death hitsplat visibility) */
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         const FcNpc* n = &state->npcs[i];
-        if (!n->active) continue;
+        if (!n->active && !n->died_this_tick) continue;
 
         FcRenderEntity* ne = &entities[idx++];
         memset(ne, 0, sizeof(FcRenderEntity));
@@ -359,6 +403,7 @@ void fc_fill_render_entities(const FcState* state, FcRenderEntity* entities, int
         ne->aggro_target = n->aggro_target;
         ne->damage_taken_this_tick = n->damage_taken_this_tick;
         ne->died_this_tick = n->died_this_tick;
+        ne->npc_slot = i;
     }
 
     *count = idx;

@@ -1,6 +1,7 @@
 #include "fc_wave.h"
 #include "fc_npc.h"
 #include "fc_api.h"
+#include "fc_pathfinding.h"
 
 /*
  * fc_wave.c — 63-wave Fight Caves spawn table with 15 rotations.
@@ -1168,12 +1169,23 @@ static const int WAVE_ROTATIONS[FC_NUM_WAVES][FC_NUM_ROTATIONS][FC_MAX_SPAWNS_PE
 /* Spawn position from direction                                             */
 /* ======================================================================== */
 
+/*
+ * Spawn positions derived from RSPS tzhaar_fight_cave.areas.toml.
+ * World coords converted to arena-local (world - 2368, world - 5056).
+ * Centers of each spawn area, verified walkable for all NPC sizes (1-5).
+ *
+ *   NORTH_WEST: world [2378,2385]x[5102,5109] → local [10,17]x[46,53] center (13,49)
+ *   SOUTH_WEST: world [2379,2385]x[5070,5076] → local [11,17]x[14,20] center (14,17)
+ *   SOUTH:      world [2402,2408]x[5070,5076] → local [34,40]x[14,20] center (37,17)
+ *   SOUTH_EAST: world [2416,2422]x[5080,5086] → local [48,54]x[24,30] center (51,27)
+ *   CENTER:     world [2397,2403]x[5085,5091] → local [29,35]x[29,35] center (32,32)
+ */
 void fc_spawn_position(int spawn_dir, int* x, int* y) {
     switch (spawn_dir) {
-        case SPAWN_SOUTH:      *x = 32; *y = 5;  break;
-        case SPAWN_SOUTH_WEST: *x = 8;  *y = 8;  break;
-        case SPAWN_NORTH_WEST: *x = 8;  *y = 55; break;
-        case SPAWN_SOUTH_EAST: *x = 55; *y = 8;  break;
+        case SPAWN_SOUTH:      *x = 37; *y = 17; break;
+        case SPAWN_SOUTH_WEST: *x = 14; *y = 17; break;
+        case SPAWN_NORTH_WEST: *x = 13; *y = 49; break;
+        case SPAWN_SOUTH_EAST: *x = 51; *y = 27; break;
         case SPAWN_CENTER:     *x = 32; *y = 32; break;
         default:               *x = 32; *y = 32; break;
     }
@@ -1199,6 +1211,29 @@ int fc_wave_spawn_dir(int wave_num, int rotation, int npc_index) {
 /* Spawn wave NPCs into the arena                                            */
 /* ======================================================================== */
 
+/* Find a valid spawn position for an NPC of given size near (sx,sy).
+ * Checks footprint walkability. If the base position doesn't fit,
+ * searches nearby tiles in expanding rings (up to radius 5). */
+static void find_valid_spawn(int* sx, int* sy, int size,
+                             const uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT]) {
+    if (fc_footprint_walkable(*sx, *sy, size, walkable)) return;
+
+    /* Search nearby in expanding rings */
+    for (int r = 1; r <= 5; r++) {
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dy = -r; dy <= r; dy++) {
+                if (dx != -r && dx != r && dy != -r && dy != r) continue; /* ring only */
+                int nx = *sx + dx, ny = *sy + dy;
+                if (fc_footprint_walkable(nx, ny, size, walkable)) {
+                    *sx = nx; *sy = ny;
+                    return;
+                }
+            }
+        }
+    }
+    /* Couldn't find valid position — use original (NPC will be stuck but alive) */
+}
+
 void fc_wave_spawn(FcState* state, int wave_num) {
     const FcWaveEntry* wave = fc_wave_get(wave_num);
     int rotation = state->rotation_id;
@@ -1209,12 +1244,18 @@ void fc_wave_spawn(FcState* state, int wave_num) {
         int sx, sy;
         fc_spawn_position(dir, &sx, &sy);
 
+        /* Validate footprint for large NPCs */
+        const FcNpcStats* stats = fc_npc_get_stats(npc_type);
+        find_valid_spawn(&sx, &sy, stats->size, state->walkable);
+
         /* Find a free NPC slot */
         for (int slot = 0; slot < FC_MAX_NPCS; slot++) {
             if (!state->npcs[slot].active) {
                 fc_npc_spawn(&state->npcs[slot], npc_type, sx, sy,
                              state->next_spawn_index++);
-                state->npcs_remaining++;
+                /* Tz-Kek counts as 2 in wave remaining (pre-counts the split).
+                 * RSPS: ids.sumOf { if (it == "tz_kek") 2 else 1 } */
+                state->npcs_remaining += (npc_type == NPC_TZ_KEK) ? 2 : 1;
                 break;
             }
         }

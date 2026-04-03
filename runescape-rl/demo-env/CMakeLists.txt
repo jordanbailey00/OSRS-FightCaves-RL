@@ -16,8 +16,8 @@ set(FC_BACKEND_SOURCES
     src/fc_wave.c
 )
 
-# Find Raylib from the pufferlib pre-built distribution
-set(RAYLIB_ROOT "${CMAKE_SOURCE_DIR}/../pufferlib/raylib-5.5_linux_amd64" CACHE PATH "Raylib root")
+# Find Raylib — local copy in demo-env/raylib/
+set(RAYLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/raylib" CACHE PATH "Raylib root")
 
 if(EXISTS "${RAYLIB_ROOT}/include/raylib.h")
     add_executable(fc_viewer
@@ -49,3 +49,11 @@ if(EXISTS "${RAYLIB_ROOT}/include/raylib.h")
 else()
     message(STATUS "Raylib not found at ${RAYLIB_ROOT} — fc_viewer skipped (set RAYLIB_ROOT)")
 endif()
+
+# Headless tests (no Raylib dependency)
+add_executable(test_headless
+    tests/test_headless.c
+    ${FC_BACKEND_SOURCES}
+)
+target_include_directories(test_headless PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_headless PRIVATE m)

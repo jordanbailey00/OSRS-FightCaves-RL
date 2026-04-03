@@ -1,4 +1,0 @@
-[dye_wig]
-remove = ["wig_grey", "yellow_dye"]
-add = ["wig_blonde"]
-message = "You dye the wig blonde."

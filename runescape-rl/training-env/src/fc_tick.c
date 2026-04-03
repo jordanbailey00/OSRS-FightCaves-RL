@@ -2,10 +2,10 @@
 #include "fc_combat.h"
 #include "fc_prayer.h"
 #include "fc_pathfinding.h"
+#include <math.h>
 #include "fc_npc.h"
 #include "fc_wave.h"
 #include "fc_contracts.h"
-#include "fc_debug.h"
 
 /*
  * fc_tick.c — Main tick loop for Fight Caves simulation.
@@ -101,11 +101,13 @@ static int npc_slot_to_index(const FcState* state, int slot) {
 static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     FcPlayer* p = &state->player;
 
-    int act_move   = actions[0];
-    int act_attack = actions[1];
-    int act_prayer = actions[2];
-    int act_eat    = actions[3];
-    int act_drink  = actions[4];
+    int act_move     = actions[0];
+    int act_attack   = actions[1];
+    int act_prayer   = actions[2];
+    int act_eat      = actions[3];
+    int act_drink    = actions[4];
+    int act_target_x = actions[5];
+    int act_target_y = actions[6];
 
     /* ---- Prayer (instant, processed first) ---- */
     if (act_prayer > 0) {
@@ -151,10 +153,55 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
         state->prayer_potion_used_this_tick = 1;
     }
 
+    /* ---- Walk-to-tile (high-level pathfinding, heads 5+6) ---- */
+    /* When both target_x and target_y are non-zero, BFS pathfind to that tile.
+     * This is identical to a human clicking a tile in the viewer. The route is
+     * consumed one step per tick by the movement code below. */
+    if (act_target_x > 0 && act_target_y > 0) {
+        int tx = act_target_x - 1;  /* 1-64 → 0-63 */
+        int ty = act_target_y - 1;
+        if (tx >= 0 && tx < FC_ARENA_WIDTH && ty >= 0 && ty < FC_ARENA_HEIGHT &&
+            state->walkable[tx][ty]) {
+            int steps = fc_pathfind_bfs(p->x, p->y, tx, ty, state->walkable,
+                                        p->route_x, p->route_y, FC_MAX_ROUTE);
+            p->route_len = steps;
+            p->route_idx = 0;
+            /* Clear attack target — walking to tile cancels combat approach */
+            p->attack_target_idx = -1;
+            p->approach_target = 0;
+        }
+    }
+
     /* ---- Movement ---- */
-    if (act_move == FC_MOVE_IDLE) {
+    /* Three modes (priority order):
+     * 1. Route-based (from walk-to-tile action or viewer click): consume steps
+     * 2. Directional (RL action head 0): immediate step in direction
+     * 3. Idle
+     * Route takes priority. If route active, directional input is ignored. */
+    if (p->route_idx < p->route_len) {
+        /* Consume steps from the route: 1 if walking, 2 if running */
+        int steps = p->is_running ? 2 : 1;
+        for (int s = 0; s < steps && p->route_idx < p->route_len; s++) {
+            int nx = p->route_x[p->route_idx];
+            int ny = p->route_y[p->route_idx];
+            if (fc_tile_walkable(nx, ny, state->walkable)) {
+                /* Update facing based on movement direction */
+                int dx = nx - p->x;
+                int dy = ny - p->y;
+                if (dx != 0 || dy != 0) {
+                    /* atan2 of world X delta and negated world Y delta (for Raylib Z) */
+                    p->facing_angle = atan2f((float)dx, (float)(-dy)) * (180.0f / 3.14159f);
+                }
+                p->x = nx;
+                p->y = ny;
+                state->movement_this_tick = 1;
+            }
+            p->route_idx++;
+        }
+    } else if (act_move == FC_MOVE_IDLE) {
         state->idle_this_tick = 1;
     } else if (act_move >= FC_MOVE_WALK_N && act_move <= FC_MOVE_RUN_NW) {
+        /* Directional movement (for RL agents) */
         int dx = FC_MOVE_DX[act_move];
         int dy = FC_MOVE_DY[act_move];
         int max_steps = (act_move >= FC_MOVE_RUN_N) ? 2 : 1;
@@ -165,17 +212,66 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
         }
     }
 
-    /* ---- Attack ---- */
-    if (act_attack > FC_ATTACK_NONE && p->attack_timer <= 0 && p->ammo_count > 0) {
-        int slot = act_attack - 1;  /* 1-indexed → 0-indexed */
+    /* ---- Attack target selection ---- */
+    if (act_attack > FC_ATTACK_NONE) {
+        int slot = act_attack - 1;
         int npc_idx = npc_slot_to_index(state, slot);
         if (npc_idx >= 0) {
-            FcNpc* target = &state->npcs[npc_idx];
-            int dist = fc_distance_to_npc(p->x, p->y, target);
+            p->attack_target_idx = npc_idx;
+            p->approach_target = 1;  /* auto-walk into range, same as human click */
+        }
+    }
 
-            /* Ranged crossbow: range of ~7 tiles */
-            int weapon_range = 7;
-            if (dist <= weapon_range) {
+    /* ---- Auto-attack current target ---- */
+    /* Like Void CombatMovement: if target set, walk toward it until in range,
+     * then attack on cooldown. Player stays still once in range. */
+    if (p->attack_target_idx >= 0 && p->ammo_count > 0) {
+        FcNpc* target = &state->npcs[p->attack_target_idx];
+        if (!target->active || target->is_dead) {
+            p->attack_target_idx = -1;  /* target died, clear */
+            p->approach_target = 0;
+        } else {
+            int dist = fc_distance_to_npc(p->x, p->y, target);
+            int weapon_range = 7;  /* rune crossbow */
+
+            if (dist > weapon_range && p->approach_target && p->route_idx >= p->route_len) {
+                /* Walk toward the NPC center. The greedy pathfinder will head
+                 * straight toward the target. The route consumer in the movement
+                 * section will stop once we're in range (checked next tick). */
+                int npc_cx = target->x + target->size / 2;
+                int npc_cy = target->y + target->size / 2;
+                p->route_len = fc_pathfind_bfs(p->x, p->y, npc_cx, npc_cy,
+                                                state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
+                /* Trim the route to stop at weapon range */
+                for (int ri = 0; ri < p->route_len; ri++) {
+                    int rx = p->route_x[ri], ry = p->route_y[ri];
+                    /* Chebyshev distance to nearest NPC footprint tile */
+                    int nx = (rx < target->x) ? target->x : (rx > target->x + target->size - 1) ? target->x + target->size - 1 : rx;
+                    int ny = (ry < target->y) ? target->y : (ry > target->y + target->size - 1) ? target->y + target->size - 1 : ry;
+                    int rdx = (rx > nx) ? rx - nx : nx - rx;
+                    int rdy = (ry > ny) ? ry - ny : ny - ry;
+                    int rdist = (rdx > rdy) ? rdx : rdy;
+                    if (rdist <= weapon_range) {
+                        p->route_len = ri + 1;  /* stop here */
+                        break;
+                    }
+                }
+                p->route_idx = 0;
+            }
+
+            /* Face the attack target */
+            {
+                float tx = (float)target->x + (float)target->size*0.5f;
+                float ty = (float)target->y + (float)target->size*0.5f;
+                float dx = tx - ((float)p->x + 0.5f);
+                float dy = ty - ((float)p->y + 0.5f);
+                if (dx != 0 || dy != 0) {
+                    p->facing_angle = atan2f(dx, -dy) * (180.0f / 3.14159f);
+                }
+            }
+
+            if (dist <= weapon_range && p->attack_timer <= 0) {
+                /* In range — fire attack */
                 int att_roll = fc_player_ranged_attack_roll(p);
                 const FcNpcStats* tstats = fc_npc_get_stats(target->npc_type);
                 int def_roll = fc_npc_def_roll(tstats->def_level, tstats->def_bonus);
@@ -190,8 +286,9 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                                      FC_MAX_PENDING_HITS,
                                      damage, delay, ATTACK_RANGED, -1, 0);
 
-                p->attack_timer = 5;  /* crossbow attack speed */
+                p->attack_timer = 5;
                 p->ammo_count--;
+                p->hit_landed_this_tick = 1;  /* flag for viewer hitsplat */
             }
         }
     }
@@ -216,8 +313,15 @@ static void decrement_player_timers(FcPlayer* p) {
 /* Jad healer auto-spawn                                                     */
 /* ======================================================================== */
 
+/*
+ * Jad healer spawn (from TzhaarFightCave.kt npcLevelChanged handler):
+ *   Trigger: Jad HP drops below 50% of max.
+ *   Spawns up to 4 Yt-HurKot (fills missing slots: 4 - currently_alive).
+ *   Respawn: Only after Jad is healed back above 50% and drops below again.
+ *   The jad_healers_spawned flag tracks whether we're in a "healed" state.
+ *   When Jad is healed above 50%, flag resets so next drop below 50% re-triggers.
+ */
 static void check_jad_healers(FcState* state) {
-    if (state->jad_healers_spawned) return;
     if (state->current_wave != FC_NUM_WAVES) return;  /* only on wave 63 */
 
     /* Find Jad */
@@ -225,30 +329,50 @@ static void check_jad_healers(FcState* state) {
         FcNpc* jad = &state->npcs[i];
         if (jad->npc_type != NPC_TZTOK_JAD || !jad->active || jad->is_dead) continue;
 
-        float hp_frac = (float)jad->current_hp / (float)jad->max_hp;
-        if (hp_frac < FC_JAD_HEALER_THRESHOLD_FRAC) {
-            /* Spawn 4 Yt-HurKot near Jad */
-            int offsets[4][2] = {{-2, 0}, {2, 0}, {0, -2}, {0, 2}};
-            for (int h = 0; h < FC_JAD_NUM_HEALERS; h++) {
-                int hx = jad->x + offsets[h][0];
-                int hy = jad->y + offsets[h][1];
-                /* Clamp to arena */
-                if (hx < 1) hx = 1;
-                if (hy < 1) hy = 1;
-                if (hx >= FC_ARENA_WIDTH - 1) hx = FC_ARENA_WIDTH - 2;
-                if (hy >= FC_ARENA_HEIGHT - 1) hy = FC_ARENA_HEIGHT - 2;
+        int half_hp = jad->max_hp / 2;
 
-                for (int slot = 0; slot < FC_MAX_NPCS; slot++) {
-                    if (!state->npcs[slot].active) {
-                        fc_npc_spawn(&state->npcs[slot], NPC_YT_HURKOT, hx, hy,
-                                     state->next_spawn_index++);
-                        state->npcs_remaining++;
-                        break;
-                    }
+        /* If Jad is above 50%, reset the spawn flag (allows re-trigger) */
+        if (jad->current_hp >= half_hp) {
+            state->jad_healers_spawned = 0;
+            return;
+        }
+
+        /* Below 50% — spawn healers if not already spawned this cycle */
+        if (state->jad_healers_spawned) return;
+
+        /* Count currently alive healers */
+        int alive_healers = 0;
+        for (int h = 0; h < FC_MAX_NPCS; h++) {
+            if (state->npcs[h].active && !state->npcs[h].is_dead &&
+                state->npcs[h].npc_type == NPC_YT_HURKOT) {
+                alive_healers++;
+            }
+        }
+
+        /* Spawn up to 4 total (fill missing slots) */
+        int to_spawn = FC_JAD_NUM_HEALERS - alive_healers;
+        int offsets[4][2] = {{-2, 0}, {2, 0}, {0, -2}, {0, 2}};
+        int spawned = 0;
+        for (int h = 0; h < to_spawn; h++) {
+            int hx = jad->x + offsets[(alive_healers + h) % 4][0];
+            int hy = jad->y + offsets[(alive_healers + h) % 4][1];
+            /* Clamp to arena */
+            if (hx < 1) hx = 1;
+            if (hy < 1) hy = 1;
+            if (hx >= FC_ARENA_WIDTH - 1) hx = FC_ARENA_WIDTH - 2;
+            if (hy >= FC_ARENA_HEIGHT - 1) hy = FC_ARENA_HEIGHT - 2;
+
+            for (int slot = 0; slot < FC_MAX_NPCS; slot++) {
+                if (!state->npcs[slot].active) {
+                    fc_npc_spawn(&state->npcs[slot], NPC_YT_HURKOT, hx, hy,
+                                 state->next_spawn_index++);
+                    state->npcs_remaining++;
+                    spawned++;
+                    break;
                 }
             }
-            state->jad_healers_spawned = 1;
         }
+        state->jad_healers_spawned = 1;
         return;
     }
 }
@@ -295,6 +419,18 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     /* 4. Prayer drain */
     fc_prayer_drain_tick(&state->player);
 
+    /* 4b. HP regen (1 HP = 10 tenths every FC_HP_REGEN_INTERVAL ticks) */
+    if (state->player.current_hp > 0 && state->player.current_hp < state->player.max_hp) {
+        state->player.hp_regen_counter++;
+        if (state->player.hp_regen_counter >= FC_HP_REGEN_INTERVAL) {
+            state->player.hp_regen_counter = 0;
+            state->player.current_hp += 10;  /* 1 HP in tenths */
+            if (state->player.current_hp > state->player.max_hp) {
+                state->player.current_hp = state->player.max_hp;
+            }
+        }
+    }
+
     /* 5. NPC AI tick */
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         fc_npc_tick(state, i);
@@ -305,6 +441,18 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         if (state->npcs[i].active) {
             fc_resolve_npc_pending_hits(state, i);
+        }
+    }
+
+    /* 6b. Process death timers — dead NPCs stay visible briefly */
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        FcNpc* n = &state->npcs[i];
+        if (n->is_dead && n->active) {
+            if (n->death_timer > 0) {
+                n->death_timer--;
+            } else {
+                n->active = 0;  /* fully despawn */
+            }
         }
     }
 

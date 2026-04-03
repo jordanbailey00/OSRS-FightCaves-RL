@@ -1,6 +1,0 @@
-# demo-env source only
-build/
-session-logs/
-logs/
-tmp/
-*.log

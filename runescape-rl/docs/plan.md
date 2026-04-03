@@ -1,415 +1,1258 @@
-# Fight Caves RL — Plan
-
-## Status
-
-Hard pivot from Kotlin/JVM to C. The Kotlin implementation is archived at branch `archive/kotlin-final` for historical reference only. No JVM code exists in this repo.
-
-The `runescape-rl/` directory is fully owned by the parent repository (`claude/`, branch `v2Claude`). The nested `.git` from the Kotlin era has been removed; its history is preserved in `runescape-rl-nested-backup.bundle` at the repo root's parent directory. (Historical note: the branch was originally named `c-rewrite` and renamed to `v2Claude` at the PR1–PR4 checkpoint.)
-
-## Goal
-
-Train an RL agent to clear OSRS Fight Caves (Jad + all 63 waves) using:
-- A high-throughput C backend for all Fight Caves mechanics
-- A Raylib-based viewer for human play, policy playback, and replay/debug
-- A Python RL stack (PufferLib + W&B) for training, evaluation, and logging
-
-## Reference Intake
-
-Before locking contracts, these local references were reviewed to extract patterns and avoid reinventing the wheel. Findings are folded directly into this plan.
-
-### PufferLib OSRS PvP (`pufferlib/pufferlib/ocean/osrs_pvp/`)
-
-Production C environment for OSRS PvP combat. Key patterns adopted:
-
-- **Flat state structs**: All player/NPC state is flat fields on a single struct (~2KB). No nested pointers, no heap allocation per tick. Enables cache locality and fast memset reset.
-- **XORshift32 RNG**: Single `uint32_t rng_state` seeded at reset. All randomness flows through it. Episode = (seed, action_sequence) → fully reproducible.
-- **Multi-head action space**: 7 independent heads (loadout, combat, prayer, food, potion, karambwan, veng) with per-tick action masks. Total combinatorial space is large but most masked as invalid. Fight Caves needs fewer heads (no gear switching, no PvP opponent reads).
-- **Pending hits with tick countdown**: Attacks queue damage with delay (models projectile flight time). Prayer checked at landing time, not fire time. Adopt this for ranged NPC attacks and Jad.
-- **Encounter vtable** (`EncounterDef`): Standard interface (create, reset, step, write_obs, write_mask, get_reward, is_terminal, fill_render_entities). Allows hot-swapping encounters. Adopt for fc_core API.
-- **binding.c pattern**: ~150-line wrapper that bridges PufferLib's `vecenv.h` (double actions, float terminals) to internal types. Type conversion only — no logic. Adopt directly.
-- **Raylib viewer with rewind**: `RenderClient` snapshots full state per tick (~4.5KB × 2000 ticks = 9MB). Step forward/backward via snapshot restore. Hit splats, HP bars, prayer icons, projectile flight animations, debug overlays (collision, pathfinding, safe spots). Adopt the snapshot rewind pattern.
-- **Human input → same action interface**: `HumanInput` struct queues pending actions (move, attack, prayer, consumable). Mouse click → raycast → tile → action command. Same interface as RL agent. Adopt directly.
-- **Per-tick flags for event detection**: `hit_landed_this_tick`, `freeze_applied_this_tick`, etc. Read in observations after step returns. Adopt for hitsplat/damage/prayer events.
-- **Observation normalization**: Divisors table maps each feature to its max value. All obs normalized to [0,1]. Adopt for our observation contract.
-- **Shared combat math** (`osrs_combat_shared.h`): OSRS accuracy formula, damage rolls, prayer blocking, hit delays. Reusable across encounters. Adopt for our combat resolution.
-
-### PufferLib OSRS Zulrah (`pufferlib/pufferlib/ocean/osrs_zulrah/`)
-
-Boss PvE encounter using the same infrastructure. Key patterns:
-
-- **Phase/rotation state machine**: Data-driven phase table defining (position, form, phase_ticks, action_sequence). Execution is a simple timer + action index walker. Fight Caves waves are analogous — adopt this for wave progression.
-- **6-head action space**: Movement (25 dirs), attack (3), prayer (5), food (3), potion (3), special (2). Simpler than PvP. Fight Caves can use a similar 5-6 head layout.
-- **81 observations**: Player (16) + boss (14) + hazards (21) + snakelings (16) + meta (8) + safe tiles (4) + mask. Compact and sufficient for policy learning. Our FC obs will be similarly structured.
-- **Encounter as single header**: Full Zulrah implementation in one ~2300-line header. Lightweight, no build complexity. Consider this for fc_core if it stays manageable.
-
-### Kotlin Archive (`archive/kotlin-final`)
-
-Domain knowledge from the abandoned Kotlin Fight Caves implementation:
-
-- **63 waves with 15 spawn rotations each**: Wave table defines NPC composition per wave. Rotations vary spawn directions (north_west, south_east, south, south_west) to prevent memorization.
-- **6 NPC types**: Tz-Kih (melee), Tz-Kek (melee, spawns 2 adds on death), Tok-Xil (ranged), Yt-MejKot (magic), Ket-Zek (high melee), TzTok-Jad (magic+ranged, prayer switching). Yt-HurKot healers spawn during Jad.
-- **Jad mechanics**: 3-tick attack queue delay + client animation delay. Prayer telegraph states: Idle, MagicWindup, RangedWindup. Prayer checked at hit resolution tick. Max hits: magic 950, ranged 970 (in tenths).
-- **Observation layout**: 134 floats — 30 base (player state, wave info, consumables) + 13 features × 8 visible NPCs (type, position, HP, aggro, Jad telegraph). Visible NPC cap of 8.
-- **Action space**: 7 discrete actions — wait, walk_to_tile(x,y), attack_npc(idx), toggle_prayer(id), eat_shark, drink_prayer_potion, toggle_run.
-- **16 reward features**: damage_dealt, damage_taken, npc_kill, wave_clear, jad_damage_dealt, jad_kill, player_death, cave_complete, food_used, prayer_potion_used, correct_jad_prayer, wrong_jad_prayer, invalid_action, movement_progress, idle_penalty, tick_penalty.
-- **Equipment**: Fixed loadout (rune crossbow, black d'hide, adamant bolts). 20 sharks + 8 prayer potions (32 doses).
-
-### Asset Sources for Viewer
-
-- **PufferLib PvP render** (`osrs_pvp_render.h`, ~4000 lines): Complete Raylib viewer with 3D models exported from OSRS cache via Python scripts (`scripts/export_models.py`, `scripts/export_terrain.py`). Models stored as C header arrays or MDL2/TERR binaries. Animation data similarly exported. Adopt render patterns directly.
-- **PufferLib collision maps**: Exported from OSRS cache. 104×104 local grid format with per-tile traversability flags.
-- **RSPS/Kotlin data** (`archive/kotlin-final`): NPC definitions (IDs 2734-2746), animation IDs (9230-9300), GFX/projectile IDs, combat definitions, arena coordinates, wave data. All in TOML format under `headless-env/data/minigame/tzhaar_fight_cave/`.
-- **OSRS binary cache** (`reference/legacy-headless-env/data/cache/`): Full modern OSRS cache (183MB .dat2 + 37 index files). Source for terrain meshes, 3D models, animations, sprites. PufferLib export scripts read this with a `.dat`→`.dat2` adapter.
-
-## Architecture
-
-### Core Principle: Single Mechanics Owner
-
-All Fight Caves gameplay logic lives in one place: `training-env/fc_core`. This is a pure C library with no rendering, no Python, no I/O. Both the headless training kernel and the demo-env viewer are thin shells over this shared backend.
-
-```
-training-env/
-├── fc_core        (static lib)  — state, tick, NPC AI, combat, prayer, pathfinding, waves
-├── libfc_capi.so  (shared lib)  — plain C API + FcBatchCtx batched stepping (PR7)
-
-demo-env/
-├── fc_viewer      (executable)  — Raylib shell: render, HUD, input, replay
-└── assets/        — exported terrain, models, sprites from OSRS cache
-
-RL/
-└── fc_env.py      — ctypes wrapper over libfc_capi.so, batched vectorized env
-```
-
-### What Each Layer Owns
-
-| Component | Owns | Does NOT own |
-|-----------|------|-------------|
-| `fc_core` | All Fight Caves mechanics: state transitions, NPC behavior, combat math, prayer, pathfinding, wave spawning, hit resolution, deterministic RNG, debug/trace hooks | Rendering, I/O, Python bindings, batching |
-| `libfc_capi.so` | Plain C shared library API: single-env and batched (FcBatchCtx) create/destroy/reset/step/getters, contract constant exports. Wraps fc_core for any FFI consumer. | Mechanics (delegates to fc_core), Python-specific logic |
-| `fc_viewer` | Raylib rendering, HUD, input handling, replay playback, rewind snapshots, debug overlays | Mechanics (calls fc_core for all state/tick) |
-| `RL/fc_env.py` | ctypes bridge to libfc_capi.so, vectorized env, obs splitting, SPS measurement | Environment mechanics, rendering |
-
-**Future optimization**: If python3-dev becomes available, a PufferLib `env_binding.h` C extension (`binding.c`) can be added alongside the ctypes path for lower per-step overhead. The ctypes path is the current production integration.
-
-### Canonical Action Contract
-
-A single action interface is shared across all consumers: headless RL, human playable viewer, replay playback, and policy playback. No consumer bypasses this interface.
-
-**Multi-head command-style actions** (informed by PufferLib PvP/Zulrah patterns):
-
-| Head | Dim | Values | Notes |
-|------|-----|--------|-------|
-| `MOVE` | ~17 | 0=idle, 1-8=walk cardinal+diagonal, 9-16=run cardinal+diagonal | Tile-relative movement. Walk=1 tile/tick, run=2 tiles/tick. |
-| `ATTACK` | 9 | 0=none, 1-8=attack visible NPC by slot index | Visible NPC cap of 8. Attack queues via fc_core combat resolution. |
-| `PRAYER` | 5 | 0=no change, 1=off, 2=protect magic, 3=protect missiles, 4=protect melee | Toggle active protection prayer. |
-| `EAT` | 3 | 0=none, 1=shark, 2=combo eat (karambwan if available) | Subject to food timer lockout. |
-| `DRINK` | 2 | 0=none, 1=prayer potion | Subject to potion timer lockout. |
-
-Total: 5 heads, ~17×9×5×3×2 = 4,590 combinations (most masked).
-
-**Action mask**: Per-tick binary mask per head value. Prevents invalid actions (eat with no food, attack nonexistent NPC, run with 0 energy). Mask packed as float array appended to observations (PufferLib convention).
-
-**Human input mapping**: Mouse click on tile → MOVE head value. Mouse click on NPC → ATTACK head value. Click prayer icon → PRAYER head value. Click inventory item → EAT/DRINK head value. All go through the same action buffer — the viewer never calls fc_core directly for state mutation.
-
-**Replay**: Records action buffer per tick. Playback feeds recorded actions through the same step interface.
-
-### Observation Contract
-
-Flat float array packed by fc_core's observation writer. Python reads this directly — it never redefines the layout.
-
-**Finalized layout** (locked in PR 1, defined in `training-env/include/fc_contracts.h`):
-
-```
-policy_obs (126 floats):
-  Player state (20):     HP, prayer, position(x,y), attack_timer, food_timer, potion_timer,
-                         combo_timer, run_energy, is_running, active_prayer(3),
-                         sharks_remaining, prayer_doses, ammo_count, defence_level,
-                         ranged_level, damage_taken_this_tick, stunned(reserved)
-  Per-NPC state (96):    8 visible NPC slots × 12 features each
-                         (valid, npc_type, x, y, hp, distance, atk_style, atk_timer,
-                          size, is_healer, jad_telegraph, aggro)
-  Wave/meta (10):        wave_id, rotation_id, remaining_npcs, tick, total_damage_dealt,
-                         total_damage_taken, damage_dealt_tick, damage_taken_tick,
-                         npcs_killed_tick, wave_just_cleared
-
-reward_features (16 floats):
-  Emitted by C, transported with the obs buffer, but NOT part of the default policy input.
-  Trainer reads reward features for shaping/logging; policy sees only policy_obs.
-  Features: damage_dealt, damage_taken, npc_kill, wave_clear, jad_damage,
-            jad_kill, player_death, cave_complete, food_used, prayer_pot_used,
-            correct_jad_prayer, wrong_jad_prayer, invalid_action, movement,
-            idle, tick_penalty
-
-action_mask (36 floats):
-  5 heads: MOVE(17) + ATTACK(9) + PRAYER(5) + EAT(3) + DRINK(2)
-  1.0 = valid, 0.0 = invalid. Appended after reward features.
-```
-
-**Total transport per environment: 178 floats** (126 + 16 + 36).
-
-PufferLib sees `OBS_SIZE = 178`. Python trainer slices:
-- `policy_obs = obs[:126]` — fed to the policy network
-- `reward_features = obs[126:142]` — for shaping/logging, NOT policy input
-- `action_mask = obs[142:178]` — for masked action sampling
-
-All values normalized to [0,1] using divisor tables. Contracts in `fc_contracts.h` are the single source of truth.
-
-### Reward Contract
-
-16 per-tick reward features are computed in C and packed into the observation buffer (after policy_obs, before action_mask). Python applies configurable shaping weights to produce the scalar reward — C does not hardcode the final reward.
-
-Reward features (from Kotlin archive, validated as sufficient):
-
-| # | Feature | Trigger |
-|---|---------|---------|
-| 0 | damage_dealt | NPC HP reduced this tick |
-| 1 | damage_taken | Player HP reduced this tick |
-| 2 | npc_kill | NPC death count this tick |
-| 3 | wave_clear | All wave NPCs dead |
-| 4 | jad_damage_dealt | Jad HP reduced this tick |
-| 5 | jad_kill | Jad defeated |
-| 6 | player_death | Player HP ≤ 0 |
-| 7 | cave_complete | All 63 waves cleared |
-| 8 | food_used | Shark consumed this tick |
-| 9 | prayer_potion_used | Potion consumed this tick |
-| 10 | correct_jad_prayer | Prayer matched Jad attack at hit resolution |
-| 11 | wrong_jad_prayer | Prayer did not match Jad attack |
-| 12 | invalid_action | Rejected/masked action attempted |
-| 13 | movement_progress | Walk/run action executed |
-| 14 | idle_penalty | Wait/idle action |
-| 15 | tick_penalty | Every tick (time discount) |
-
-### Determinism, Replay, and Debug
-
-Determinism and replay are first-class from PR 1, not deferred.
-
-**Determinism guarantee**: The C backend is fully deterministic given (seed, action_sequence). XORshift32 single RNG state seeded at reset. All randomness (combat rolls, NPC targeting, spawn rotations) flows through this RNG.
-
-**Determinism verification** (built into fc_core from PR 1):
-- `fc_state_hash(state)` — FNV-1a hash over explicit field values (not raw struct bytes). Padding-independent. Called per tick to verify that two runs with the same (seed, actions) produce identical state hashes at every tick.
-- Determinism unit test: run episode twice with same seed+actions, assert per-tick state hash equality.
-
-**Replay recording** (infrastructure in place, file I/O deferred to PR 7/12):
-- Format: `{seed: uint32, actions: int32[num_ticks][num_heads]}` — binary, compact.
-- `FcActionTrace` (fc_debug.h) records per-tick actions + state hashes in memory. This is available from PR 1 for in-process determinism verification and test canaries.
-- Binary file I/O for persistent replays is deferred to PR 7 (headless kernel can write replay files during batch runs) or PR 12 (viewer replay mode loads replay files). PR 6 adds the wave system but does NOT add file I/O — it uses the existing in-memory `FcActionTrace` for determinism tests.
-- Replay playback reconstructs episode entirely from determinism — no state serialization needed.
-
-**Debug/trace hooks** (built into fc_core from PR 2):
-- `fc_debug_log` — optional per-tick event log (hit events, prayer toggles, NPC spawns/deaths, wave transitions). Disabled by default (zero cost). Enabled via compile flag or runtime toggle.
-- `fc_trace_actions` — records (tick, action_heads[]) for seed+action replay compatibility.
-- These hooks are sufficient to diagnose simulation drift, incorrect combat resolution, and policy misbehavior without the viewer.
-
-### Viewer: Asset and Render Requirements
-
-**Priority**: Viewer completion (asset-backed rendering + human-playable mode + debug usability) is a **pre-training requirement**. Training does not begin until the viewer looks and plays similar to actual RuneScape Fight Caves. Policy playback depends on a trained checkpoint and can remain after training begins.
-
-**Asset provenance** (required path, not optional polish):
-- **Cache-exported / RSPS-derived assets**: OSRS cache sprites/models exported via Python scripts (pattern from PufferLib PvP `scripts/export_models.py`, `scripts/export_terrain.py`). Stored as C header arrays or binary blobs in `demo-env/assets/`. NPC models, player equipment, terrain tiles, prayer icons, hitsplat sprites, inventory icons.
-- **Kotlin demo-env reference**: UI layout, asset loading patterns, combat visual presentation from the archived Kotlin Fight Caves demo.
-- **PufferLib OSRS PvP viewer reference**: 3D render pipeline with Raylib, model/terrain export scripts, HUD layout, hit splats, prayer icons, debug overlays. Adopt render patterns directly where applicable.
-- **OSRS binary cache available**: Full modern OSRS cache at `/home/joe/projects/runescape-rl/reference/legacy-headless-env/data/cache/` (183MB `.dat2` + 37 index files). PufferLib export scripts can read this with a `.dat` → `.dat2` filename adapter. This unblocks terrain, model, animation, and sprite extraction for Fight Caves.
-- **Placeholders only where extraction is genuinely blocked**: Each remaining placeholder must be explicitly documented with the reason it could not be asset-backed.
-
-**Tile/world-to-screen coordinate ownership**:
-- fc_core owns the game-world coordinate system: integer tile grid (x, y). The Fight Caves arena is approximately 64×64 tiles.
-- The viewer owns the screen projection: tile (x, y) → screen pixel (px, py). Top-down or isometric, configurable. Camera zoom, pan, center-on-player.
-- fc_core exposes arena bounds (min_x, min_y, max_x, max_y) and per-tile flags (walkable, obstacle, safe spot) for the viewer to render.
-
-**Data fc_core must expose for rendering** (via `fill_render_entities` callback, PufferLib pattern):
-- Player: position, HP, prayer, equipment slots, active prayer icon, attack animation state, pending hit events (for hitsplats)
-- Per NPC: position, type, HP, max HP, size (1×1 or 2×2+), aggro target, attack animation state, death state, Jad telegraph state
-- Arena: walkable tile mask, obstacle positions, spawn points
-- Wave: current wave number, NPCs remaining
-- Combat events this tick: hitsplat list (entity_id, damage, style), prayer activation events, NPC spawn/death events
-- Debug data (optional): pathfinding grid, aggro ranges, reward signal breakdown, safe spot analysis
-
-**HUD data fc_core must expose**:
-- Player HP / max HP, prayer / max prayer, run energy
-- Inventory: shark count, prayer potion doses
-- Ammo count
-- Active prayer
-- Wave number, total kill count
-
-### Viewer Modes
-
-The viewer is a Raylib presentation/input/replay shell. It does not own separate mechanics. All gameplay calls go through fc_core.
-
-**1. Human Playable**
-- Click-to-move, click-to-attack, click-to-use-item, toggle prayers
-- All input goes through the canonical multi-head action interface
-- Manual controls do not bypass game rules
-- Real-time tick rate (~0.6s/tick OSRS standard, or configurable)
-
-**2. Policy Playback**
-- Load a trained policy checkpoint (PyTorch)
-- Viewer steps fc_core, packs observations, feeds to policy, applies returned actions
-- Real-time or configurable speed
-- Overlay: agent's chosen action per head, value estimate, action probabilities
-
-**3. Replay/Debug**
-- Load a recorded (seed, action_sequence) replay file
-- Step forward/backward via deterministic re-execution (forward) or snapshot rewind (backward)
-- Pause, single-step, slow-motion, fast-forward
-- Debug overlays (individually toggleable):
-  - Pathfinding visualization (BFS expansion)
-  - NPC aggro ranges and target selection
-  - Per-tick reward signal breakdown
-  - Safe spot analysis (tiles not reachable by current NPCs)
-  - State inspection panel (hover/click entity for internal values)
-  - Hit event log (scrolling combat text)
-  - Per-tick state hash (for determinism verification)
-
-## RL Stack
-
-### Framework
-
-- **PufferLib** for vectorized environment management and training loops
-- **PyTorch** for policy networks
-- **W&B** for experiment tracking and logging
-
-### Environment Integration
-
-Python calls into the C backend via `libfc_capi.so` loaded through ctypes (`RL/src/fc_env.py`). The shared library exposes create/reset/step/getters. All contract constants (obs size, action dims, mask size) are exported from C and read at Python import time — no magic numbers in Python.
-
-`FightCavesVecEnv` wraps N independent C env contexts, steps them per-tick, and copies obs/reward/terminal into numpy arrays. It never interprets observation fields or reconstructs game state. `split_obs()` provides the trainer with separated (policy_obs, reward_features, action_mask) slices.
-
-### Policies
-
-Start simple (MLP), graduate to more complex architectures as needed. Policy architecture is independent of the C backend — it only sees the flat observation+mask contract.
-
-Multi-head action output: one softmax per action head, sampled independently. Action masks applied before sampling (masked logits → -inf).
-
-### Training Metrics (tracked continuously)
-
-Performance metrics:
-- Steps per second (SPS)
-- Episodes per second
-- GPU utilization, memory usage
-
-Agent metrics:
-- Wave reached (mean, max, distribution)
-- Jad kills, Jad prayer accuracy
-- Deaths by cause (HP depletion, which wave)
-- DPS efficiency, prayer potion efficiency
-- Episode length
-
-These will be maintained in `docs/training_performance.md` and `docs/agent_performance.md` as living documents once training begins.
-
-## Current Implemented State
-
-**PR 1 — Complete.** Core state, contracts, determinism infrastructure.
-- `fc_types.h`: FcState, FcPlayer, FcNpc, FcPendingHit, FcRenderEntity, all enums.
-- `fc_contracts.h`: 178-float transport (126 policy_obs + 16 reward_features + 36 action_mask). 5 action heads (MOVE/ATTACK/PRAYER/EAT/DRINK). Single source of truth.
-- `fc_api.h`: init, reset, step, destroy, write_obs, write_mask, write_reward_features, is_terminal, state_hash, fill_render_entities, RNG.
-- `fc_debug.h`: Debug log (compile-time FC_DEBUG toggle), action trace for replay.
-- `fc_state.c`, `fc_rng.c` (XORshift32), `fc_hash.c` (FNV-1a over explicit fields, padding-independent), `fc_debug.c`.
-- 368 test assertions passing.
-
-**PR 2 — Complete.** Minimal deterministic combat slice (player vs 1 Tz-Kih).
-- `fc_tick.c`: Full tick loop — clear flags → actions → timers → prayer drain → NPC AI → resolve hits → check terminal → tick++.
-- `fc_combat.c`: OSRS accuracy formula, NPC attack roll/max hit, player ranged attack, PvM prayer block (100% on correct match), pending hit queue with tick delay, hit resolution.
-- `fc_prayer.c`: 3 protection prayers, per-tick drain, prayer potion restore.
-- `fc_pathfinding.c`: Greedy diagonal-first walk/run, NPC step-toward.
-- `fc_npc.c`: NPC stat table pre-populated for all 9 types (NPC_NONE through NPC_YT_HURKOT). Spawn, AI tick (move + attack). Tz-Kih fully functional; other types have stats, AI extensions deferred to PR 5.
-- Golden trace artifact: seed 777, 20 ticks, final hash `0x89d019cd`. Catches simulation drift.
-- 64 test assertions passing (432 total with PR 1).
-
-**PR 3 — Complete.** Python binding and smoke tests.
-- `fc_capi.h` / `fc_capi.c`: Plain C shared library API (libfc_capi.so). create/destroy/reset/step/getters, batch interface, contract constant exports. No Python.h dependency.
-- `RL/src/fc_env.py`: ctypes wrapper — `FightCavesVecEnv` with split_obs(), smoke test, vectorized test, SPS benchmark.
-- All contract constants read from C at import time (no duplicated magic numbers).
-- Reward features separable: `split_obs()` returns (policy_obs[126], reward_features[16], action_mask[36]).
-- Auto-reset on terminal: C side resets with RNG-derived seed and writes fresh obs.
-- **SPS baseline: 335,800** (64 envs, per-env ctypes loop). PufferLib env_binding.h path deferred (python3-dev unavailable).
-- Smoke test: 4 envs × 100 steps, shapes/ranges/masks verified. Vectorized test: 16 envs diverge correctly.
-
-**PR 4 — Complete.** Minimal Raylib viewer shell.
-- `demo-env/src/viewer.c` (~435 lines): single-file viewer combining render, HUD, debug overlay, and controls.
-- Placeholder top-down tile grid rendering: player = blue circle, NPCs = type-colored rectangles (red=Tz-Kih, green=Tok-Xil, cyan=Yt-MejKot, purple=Ket-Zek, orange=Jad, yellow=Yt-HurKot), walkable tiles = dark gray, obstacles = darker.
-- Shared-backend rendering via `fc_fill_render_entities` — viewer never accesses FcState fields directly.
-- HP bars above all entities, prayer indicator above player (M/R/P text), Jad telegraph indicator (MAG/RNG text), hitsplat damage numbers on hit.
-- HUD overlay (toggleable with H): HP, prayer, active prayer name, sharks/doses, ammo, wave/kills/remaining, tick/episode, player position, timers, cumulative damage, pause/speed status.
-- Debug overlay (toggleable with D): state hash, seed/rotation, action head values, terminal/damage-this-tick, zoom level.
-- Controls: Space (pause/resume), Right (single-step while paused), Up/Down (tick speed ±, range 1–30 tps), R (reset episode), H (toggle HUD), D (toggle debug), Q/Esc (quit), scroll wheel (zoom 0.3x–5.0x), middle-mouse drag (camera pan).
-- Demo mode: random actions each tick with occasional idle for readability. Auto-pause on terminal.
-- Linked against `fc_core` static lib + Raylib 5.5 pre-built distribution.
-- Current limitations:
-  - No human-playable input (click-to-move, click-to-attack deferred to PR 10).
-  - No policy playback (deferred to PR 11).
-  - No replay file I/O or rewind (deferred to PR 12).
-  - No step-backward (forward only; snapshot rewind is a PR 12 feature).
-
-**PR 5 — Complete.** All NPC Types — AI and Special Mechanics.
-- All 8 NPC types have full AI: type-specific attack, movement, and special behavior.
-- Real NPC defence stats (`def_level`, `def_bonus`): player accuracy now varies by target (>80% vs Tz-Kih, <30% vs Ket-Zek).
-- `fc_magic_hit_delay(distance)`: 1 + floor((1+dist)/3).
-- Tz-Kek split-on-death: spawns 2 NPC_TZ_KEK_SM at death position, reuses dead NPC's slot.
-- Tok-Xil: ranged (range 6), projectile delay, blocked by protect range.
-- Yt-MejKot: melee + heals nearby NPCs (≤3 tiles) for 10 HP every 8 ticks.
-- Ket-Zek: magic (range 8), projectile delay, blocked by protect magic.
-- Jad: 3-state telegraph (IDLE → MAGIC_WINDUP/RANGED_WINDUP → fire), 3-tick windup, RNG style selection, magic max 970 / ranged max 950 tenths.
-- Yt-HurKot: walks to Jad and heals 10 HP/4 ticks; player attack distracts permanently.
-- 72 test assertions passing (504 total). PR5 golden trace: seed 55555, hash `0x8baf02d4`.
-- Outstanding: Yt-HurKot auto-spawn at Jad low HP is a wave-system feature (PR 6).
-
-**PR 6 — Complete.** Wave System (All 63 Waves + Jad).
-- `src/fc_wave.c` (~1250 lines): 63-wave spawn table + 15 rotations/wave. Wave data sourced from Kotlin archive TOML and embedded as static C arrays.
-- `fc_reset` auto-spawns wave 1. Wave-clear triggers `fc_wave_check_advance` → next wave spawn. All 63 waves → TERMINAL_CAVE_COMPLETE.
-- Wave-clear correctly accounts for Tz-Kek split spawns (splits increment `npcs_remaining`).
-- Jad (wave 63): spawns via wave table. When HP drops below 50%, 4 Yt-HurKot auto-spawn around Jad.
-- Spawn directions: SOUTH (32,5), SOUTH_WEST (8,8), NORTH_WEST (8,55), SOUTH_EAST (55,8), CENTER (32,32). Per-wave rotation selected at reset via RNG.
-- Full episode: reset → 63 waves of combat → Jad + healers → cave complete or player death. Deterministic given (seed, action_sequence).
-- 57 test assertions passing (560 total). PR6 golden trace: seed 66666, hash `0x7c0d19cd`.
-
-**PR 9a — In progress (recovery pass needed).** PR9a.1 fixed terrain coordinate mismatch but the viewer has a dual-render-path bug: 3D mode uses exported models but 2D mode falls back to colored primitives with zero asset integration. The viewer must have ONE integrated render path that always uses assets. Player model still placeholder. Item sprites still placeholder. Training remains blocked.
-
-**PR 8 — Foundation complete, parity NOT yet complete (PR8a+PR8b+PR8c).**
-- **PR8a**: Identified all FC asset sources. Found OSRS binary cache at `reference/legacy-headless-env/data/cache/`. Decoded VoidPS NPC definitions to extract model IDs.
-- **PR8b**: Built asset export pipeline. Exported 8 NPC 3D models (686KB MDL2), 14 UI sprites (prayer icons, slots, tabs).
-- **PR8c**: Integrated NPC 3D models via MDL2 loader. Prayer icon sprites as Raylib textures. Dual 3D/2D mode.
-- **Not yet done** (required for viewer parity):
-  - Cache/RSPS-derived Fight Caves terrain and object rendering (procedural fallback not accepted as final).
-  - Actual player rendering with the fixed FC gear/loadout (blue cylinder not accepted).
-  - RS-like tabbed UI with inventory/prayer/combat panels and real item sprites.
-  - Clickable inventory items and prayer toggles in the UI.
-  - Human-playable controls through canonical actions.
-- Training (PR11) remains blocked until viewer parity is accepted (PR9a + PR9b).
-
-**PR 7 — Complete.** Batched Headless Kernel and Benchmarks.
-- `FcBatchCtx` in `fc_capi.c`: contiguous array of N `FcEnvCtx` structs. `fc_capi_batch_step_flat` steps all envs in one C call with flat numpy-compatible arrays.
-- `FightCavesVecEnv` rewritten to use batched C path — zero per-env Python loop in the hot path.
-- **SPS @ 64 envs: 3,353,676** (up from 335,800, +899%). Peak: 4,617,173 @ 1024 envs.
-- Batch independence verified: batch envs produce identical results to individually-run single envs.
-
-**Accepted tradeoffs and outstanding items:**
-- **8-visible-NPC overflow**: Observation slots are limited to the 8 closest active NPCs (Chebyshev distance, spawn_index tiebreak). Overflow NPCs (9+) are simulated but invisible to the policy and untargetable via ATTACK head. This covers the vast majority of waves; `FC_VISIBLE_NPCS` can be increased if testing reveals a need.
-- **Observation slot-to-attack alignment**: ATTACK head value N targets the NPC in observation slot N-1. The slot ordering (distance, spawn_index) is identical in the obs writer and action resolver.
-
-## Required Viewer Features (pre-training)
-
-The viewer must reach the following bar before training begins:
-
-- **Terrain**: Cache/RSPS-derived Fight Caves arena, not procedural colored tiles.
-- **Player**: Actual player representation with the fixed FC gear (rune crossbow, black d'hide, etc.), not a primitive shape.
-- **NPCs**: 3D models from cache (done in PR8c).
-- **Tabbed UI**: RS-like right-side panel with switchable tabs (inventory, prayer, combat/stats). Not just a flat text panel.
-- **Inventory**: Visible item sprites for sharks, prayer potions, adamant bolts in inventory slots. Clickable to use.
-- **Prayer panel**: Prayer icons (on/off states) for the 3 protection prayers. Clickable to toggle.
-- **Human-playable controls**: Click-to-move, click-to-attack, click inventory item, click prayer toggle — all routed through canonical actions.
-- **Hitsplats, HP bars, overhead prayer**: Already partially done; must work in the final integrated view.
-
-## Non-Goals
-
-- Pixel-perfect OSRS UI replication (close and functional, not pixel-identical)
-- Full OSRS game implementation (Fight Caves only)
-- Java/Kotlin/JVM code in any form
-- Separate mechanics implementations for training vs. viewing
-- Python rebuilding environment semantics
-- Full OSRS client feature set (we need RS-like Fight Caves play/debug, not a general client)
-
-## Docs Maintenance Rules
-
-- **plan.md** changes only when architecture, contracts, accepted tradeoffs, or current implemented truth changes. It is the source of truth for what the system IS, not what it will be.
-- **pr_plan.md** changes after every PR to record: status, delivered scope, acceptance evidence, deviations from plan, downstream implications, and the exact next PR. It is the execution log.
-- No important implementation decision may live only in chat. If it affects contracts, architecture, or future PRs, it must be in one of these two docs.
+================================================================================
+FIGHT CAVES DEBUG VIEWER — PLAN
+================================================================================
+
+STATUS: Terrain and placed objects rendering from b237 OSRS cache. All 8 NPC
+types spawned as colored placeholder cubes. Player as blue cylinder. Black floor.
+Cave wall/cliff terrain renders with 3,867 objects, 26 unique models, 424K tris.
+Headless sim backend running with random actions.
+
+NEXT MILESTONE: Implement the full authoritative Fight Caves backend as a
+playable game in the debug viewer, porting systems from the Void RSPS reference.
+
+================================================================================
+ARCHITECTURE — SELF-CONTAINED DEMO-ENV
+================================================================================
+
+Everything needed to build and run the debug viewer lives in demo-env/:
+
+  demo-env/
+    src/
+      viewer.c                  — Raylib viewer shell (input, rendering, UI)
+      osrs_pvp_terrain.h        — terrain mesh loader
+      osrs_pvp_objects.h        — objects mesh loader + atlas
+      fc_types.h                — core types, enums, constants
+      fc_api.h                  — public API (init, reset, step, render)
+      fc_sim.c                  — tick loop, action processing, episode control
+      fc_map.c                  — collision map, LOS, pathfinding, tile queries
+      fc_combat.c               — targeting, attack rolls, damage resolution
+      fc_npc.c                  — NPC definitions, AI, movement, spawning
+      fc_player.c               — player movement, stats, consumables
+      fc_prayer.c               — prayer activation, drain, protection checks
+      fc_inventory.c            — inventory/equipment state, item definitions
+      fc_projectile.c           — projectile flight, impact timing
+      fc_wave.c                 — wave definitions, spawn tables, encounter script
+      fc_obs.c                  — observation, action mask, reward extraction
+      fc_rng.c                  — seeded XORshift32 RNG
+      fc_debug.c                — state hash, replay trace, debug instrumentation
+      fc_ids.h                  — canonical internal IDs (NOT cache IDs)
+    assets/
+      fightcaves.terrain        — b237 terrain mesh (401 KB)
+      fightcaves.objects        — b237 objects mesh (30 MB)
+      fightcaves.atlas          — b237 texture atlas (15 MB)
+    docs/
+      debug_viewer_plan.md      — this file
+      fc_backend_systems.md     — full system coverage reference
+      fc_systems_audit.md       — audit report with exact formulas/values
+    tests/
+      (scenario and parity tests)
+
+BACKEND RULE: The viewer (viewer.c) NEVER decides gameplay outcomes. It only:
+  - Sends actions to fc_step()
+  - Reads state from FcState / FcRenderEntity
+  - Draws the result
+
+All gameplay authority lives in the fc_*.c backend files.
+
+CACHE: Modern OSRS b237 from openrs2.org (flat file format)
+  - Source: cache-oldschool-live-en-b237-2026-04-01-10-45-07-openrs2#2509.tar.gz
+  - Location: /tmp/osrs_cache_modern/cache/ (re-extract after reboot)
+  - Model IDs use int32 (opcodes 6/7), not uint16 (opcodes 1/5)
+
+COORDINATE SYSTEM:
+  - Valo_envs convention: X=east, Y=up, Z=-north (right-handed)
+  - terrain_offset(tm, 2368, 5056) shifts world coords to local
+  - Entity Z is negated: ey = -(entity.y)
+  - FC arena origin: world (2368, 5056) = region (37,79)
+
+================================================================================
+PORTING REFERENCES
+================================================================================
+
+The backend logic is ported from the Void RSPS (Kotlin). Two reference copies:
+
+  LEGACY RSPS (full server):
+    /home/joe/projects/runescape-rl/claude/runescape-rl/reference/legacy-rsps/
+
+    Key files for porting:
+      game/.../content/area/karamja/tzhaar_city/TzhaarFightCave.kt    — wave controller
+      game/.../content/area/karamja/tzhaar_city/TzhaarFightCaveWaves.kt — wave spawner
+      engine/.../mode/combat/CombatApi.kt                              — combat event flow
+      engine/.../data/config/CombatDefinition.kt                       — attack definitions
+      game/.../content/skill/prayer/Prayer.kt                          — prayer system
+      game/.../content/skill/prayer/active/PrayerDrain.kt              — drain rates
+      engine/.../entity/character/mode/move/PathFinder.kt              — pathfinding
+      engine/.../entity/character/npc/NPC.kt                           — NPC state
+      engine/.../inv/Inventory.kt                                      — inventory system
+
+    Data files (TOML configs):
+      data/minigame/tzhaar_fight_cave/tzhaar_fight_cave_waves.toml     — 63 waves, 15 rotations
+      data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.npcs.toml      — NPC stats
+      data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.combat.toml    — attack patterns
+      data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.anims.toml     — animation IDs
+      data/skill/prayer/prayers.toml                                   — prayer definitions
+
+  CURRENT FC DEMO (RL-integrated headed demo):
+    /home/joe/projects/runescape-rl-reference/current_fightcaves_demo/
+
+    Key files:
+      game/.../tzhaar_city/FightCaveBackendActionAdapter.kt            — action types
+      game/.../tzhaar_city/FightCaveHeadedObservationBuilder.kt        — observation schema
+      game/.../tzhaar_city/FightCaveEpisodeInitializer.kt              — episode config
+
+================================================================================
+ID TRANSLATION — VOID 634 vs OSRS b237
+================================================================================
+
+The Void RSPS backend uses cache revision 634 IDs. Our cache is OSRS b237.
+IDs WILL differ for NPCs, items, animations, projectiles, and graphics.
+
+STRATEGY: Use canonical internal enums (fc_ids.h), never raw cache IDs in sim.
+
+  fc_ids.h defines:
+    - FcNpcId     (NPC_TZ_KIH, NPC_TZ_KEK, etc.)
+    - FcItemId    (ITEM_SHARK, ITEM_PRAYER_POTION_4, etc.)
+    - FcAnimId    (ANIM_TZ_KIH_ATTACK, ANIM_JAD_MAGIC_WINDUP, etc.)
+    - FcProjId    (PROJ_TOK_XIL_RANGED, PROJ_KET_ZEK_MAGIC, etc.)
+    - FcGfxId     (GFX_HITSPLAT, GFX_PRAYER_DRAIN, etc.)
+
+  When porting from RSPS reference, translate IDs like this:
+    RSPS Void 634 NPC ID 2734 (tz_kih) → internal NPC_TZ_KIH enum
+    RSPS animation IDs → look up equivalent in b237 NPC definitions
+    RSPS projectile IDs → look up equivalent in b237 spotanim/projectile defs
+
+  The viewer maps internal IDs → b237 cache IDs for rendering only.
+  The sim core never touches cache IDs.
+
+  REFERENCE for ID lookup:
+    - Void 634 NPC IDs: data/minigame/tzhaar_fight_cave/tzhaar_fight_cave.npcs.toml
+    - b237 NPC defs: cache index 2, archive 9 (NPC definitions)
+    - b237 item defs: cache index 2, archive 10 (item definitions)
+    - RuneLite rev 237 loaders: /home/joe/projects/runescape-rl-reference/runelite/
+
+  Void 634 → Internal mapping (NPCs, sizes from cache opcode 12):
+    2734 → NPC_TZ_KIH      (Tz-Kih, lv22, size=1, melee, drains prayer)
+    2736 → NPC_TZ_KEK      (Tz-Kek, lv45, size=2, melee, splits on death)
+    2738 → NPC_TZ_KEK_SM   (Small Tz-Kek, lv22, size=1, split spawn)
+    2739 → NPC_TOK_XIL     (Tok-Xil, lv90, size=3, ranged+melee)
+    2741 → NPC_YT_MEJKOT   (Yt-MejKot, lv180, size=4, melee + heals nearby NPCs)
+    2743 → NPC_KET_ZEK     (Ket-Zek, lv360, size=5, magic + melee)
+    2745 → NPC_TZTOK_JAD   (TzTok-Jad, lv702, size=5, all styles, 8-tick attack)
+    2746 → NPC_YT_HURKOT   (Yt-HurKot, lv108, size=1, heals Jad 50hp/4ticks)
+
+  PLAYER FIXED LOADOUT (from FightCaveEpisodeInitializer.kt):
+    Stats: Att=1, Str=1, Def=70, Con=700(70HP), Rng=70, Pray=43, Mag=1
+    Equipment: Coif, Rune Crossbow, Black D'hide Body/Chaps/Vambraces, Snakeskin Boots
+    Ammo: 1000 Adamant Bolts
+    Inventory: 8 Prayer Potions (32 doses), 20 Sharks
+
+================================================================================
+WHAT WORKS NOW
+================================================================================
+
+1. Terrain floor: 8,192 triangles from b237 cache, heightmapped
+2. Placed objects: 3,867 objects, 26 unique models, 424K triangles, texture atlas
+3. Cave walls/cliffs: visible and mostly continuous around arena perimeter
+4. All 8 NPC types: spawned as colored placeholder cubes with correct sizes
+5. Player: blue cylinder at arena center
+6. Camera: orbit (right-drag), zoom (scroll), presets (1=aerial, 2=gameplay)
+7. UI: header bar, side panel (HP, prayer, wave, items), debug overlay
+8. Grid: toggleable tile grid (G key)
+9. Simulation: headless backend runs, random actions, wave progression
+
+================================================================================
+IMPLEMENTATION PHASES
+================================================================================
+
+See fc_backend_systems.md for the complete system coverage reference.
+Systems are grouped by dependency order. Each phase produces a testable result.
+
+--- PHASE 1: SELF-CONTAINED BACKEND CONSOLIDATION ---
+
+Goal: Move all backend source into demo-env/src/ so demo-env builds standalone.
+
+  1. Copy fc_types.h, fc_api.h, fc_contracts.h into demo-env/src/
+  2. Copy all fc_*.c source files into demo-env/src/
+  3. Update CMakeLists.txt to compile backend sources directly (remove fc_core dep)
+  4. Verify: demo-env builds and runs identically to current linked version
+
+This is a file reorganization, not new logic. training-env/ keeps its copy for
+headless RL training. demo-env/ becomes independently buildable.
+
+--- PHASE 2: AUTHORITATIVE SIMULATION FOUNDATION (Group 1) ---
+
+Goal: Solid tick loop with deterministic state, action processing, and reset.
+
+  Systems from fc_backend_systems.md Section 1A:
+    - Fixed tick loop with defined phase ordering
+    - Global simulation clock
+    - Per-entity timers/cooldowns
+    - Action queue with validation
+    - Reset/episode restart
+    - Seeded RNG (already exists in fc_rng.c)
+    - State hash for determinism verification (already exists in fc_hash.c)
+
+  Tick phase ordering (freeze this — matches RSPS GameTick.kt):
+    1. Clear per-tick event flags (reset damage_this_tick, etc.)
+    2. Process player action (one action per tick — from RL or human input)
+    3. NPC AI: hunt/aggro check (every 4 ticks), target acquisition
+    4. NPC combat: attack decisions, projectile spawning
+    5. NPC movement: one step per tick toward target (size-aware)
+    6. Player movement: one step per tick (or two if running)
+    7. Decrement timers (attack cooldowns, food_delay, drink_delay)
+    8. Resolve pending hits landing this tick (check prayer at RESOLVE time)
+    9. Process deaths / splits / despawns
+    10. Prayer drain tick (counter-based: accumulate, threshold, drain)
+    11. HP regen tick (1 HP per 100 ticks if applicable)
+    12. Check wave clear → advance wave (remaining == 0)
+    13. Check terminal conditions (death, cave complete, tick cap)
+    14. Emit state / fill render entities
+
+  CRITICAL: NPC processing runs BEFORE player processing (matching RSPS).
+  One action per tick enforced (LAST_ACTION_TICK_KEY).
+
+  Port from: existing fc_tick.c + RSPS TzhaarFightCave.kt tick ordering
+
+--- PHASE 3: MAP / COLLISION / PATHFINDING (Group 2) ---
+
+Goal: Authoritative tile-based collision map separate from visual mesh.
+
+  Systems from fc_backend_systems.md Section 1B:
+    - 64x64 tile grid with walkability flags
+    - Movement-blocked tiles (from placed objects / cave walls)
+    - Line-of-sight (LOS) checks (Bresenham or similar)
+    - Reachability queries
+    - Multi-tile entity footprint support (Jad = 3x3, Ket-Zek = 3x3)
+    - Arena boundaries
+    - A* or BFS pathfinding (already exists in fc_pathfinding.c)
+    - Size-aware pathing for large NPCs
+
+  IMPORTANT: The collision map is gameplay-authoritative. The rendered terrain
+  mesh is visual only. Safespots emerge naturally from correct collision.
+
+  Build collision from: b237 cache collision flags for region (37,79), OR
+  manually define walkable area from the known FC arena layout.
+
+  Port from: existing fc_pathfinding.c + RSPS PathFinder.kt + RSMod collision
+
+--- PHASE 4: ENTITY STATE & PLAYER SYSTEMS (Groups 3-4) ---
+
+Goal: Full player state model with movement, stats, inventory, equipment, prayer.
+
+  A. Player movement (Section 1E):
+    - Click-to-tile intent → pathfind → one-step-per-tick progression
+    - Walking vs running
+    - Movement while under attack / while consuming
+    - Arena boundary enforcement
+    - Blocked tile handling
+
+  B. Stats system (Section 1G):
+    - Base stats, current stats, boosted/drained
+    - HP, prayer points (already in FcPlayer)
+    - Regen rules (HP regen every 100 ticks, etc.)
+    - Death when HP reaches 0
+
+  C. Inventory system (Section 1H):
+    - Fixed 28-slot container
+    - Sharks (heal 200 HP), prayer potions (restore formula)
+    - Slot indexing, empty slot tracking
+    - Item definitions as data table (not scattered in code)
+
+  D. Equipment system (Section 1I):
+    - Fixed Fight Caves loadout (no swaps for v1)
+    - Equipment bonuses → attack/defence rolls
+    - Weapon speed, attack style, range
+    - Can expand to gear swaps in v2
+
+  E. Prayer system (Section 1J):
+    - Protect from melee/ranged/magic (already exists in fc_prayer.c)
+    - Exclusive prayer groups (group 6: only one protect active)
+    - Prayer drain: COUNTER-BASED system (not simple rate!)
+      Each tick: counter += sum(active prayer drains)
+      Resistance = 60 + (prayerBonus * 2)
+      While counter > resistance: drain 1 point, counter -= resistance
+      All three protects have drain = 12
+    - Prayer bonus from equipment reduces drain rate (adds to resistance)
+    - Prayer disabled when points reach 0
+    - Tz-Kih drains exactly 1 prayer point per hit impact (flat)
+    - Jad prayer timing: protection checked at hit RESOLVE time (tick 6 from attack)
+      NOT at fire time. This is the FC demo behavior, not legacy RSPS.
+
+  F. Consumables (Section 1R):
+    - Eat shark: 3-tick food_delay, heals exactly 200 HP (flat)
+    - Drink prayer potion: 2-tick drink_delay (NOT 3!), restores 7 + floor(43*0.25) = 17 pts
+    - Food and potions use SEPARATE delay clocks — can eat+drink same tick
+    - Cannot eat while food_delay active, cannot drink while drink_delay active
+    - Can eat/drink + prayer switch on same tick (no interaction restriction)
+    - Potions: 4 doses per potion, 8 potions = 32 doses default
+    - Item removal/replacement on consume (potion → lower dose or vial)
+
+  Port from: existing fc_types.h structs + RSPS Inventory.kt, Prayer.kt,
+  PrayerDrain.kt, PrayerBonus.kt + RSPS combat.toml stats
+
+--- PHASE 5: NPC AI & MOVEMENT (Group 2 continued) ---
+
+Goal: Authentic NPC behavior — aggro, chase, attack, patrol, size-aware pathing.
+
+  Systems from fc_backend_systems.md Section 1F:
+    - Spawn at wave-defined positions
+    - Aggro acquisition (aggressive_intolerant hunt mode — all players in LOS)
+    - Chase logic: path toward player each tick
+    - Size-aware pathing (Jad 3x3, Ket-Zek 3x3 cannot fit through narrow gaps)
+    - Movement stop distance = attack range
+    - NPC collision: NPCs CAN walk through each other (no NPC-NPC collision!)
+    - Only terrain/object collision blocks NPCs
+    - Target loss / reacquisition
+    - Death cleanup / corpse timing
+
+  Fight Caves specific:
+    - Tz-Kek split: spawns 2 small Tz-Kek at death tile
+    - Yt-MejKot: heals nearby NPCs with HP < 50% of max, 100 HP per heal
+    - Yt-HurKot: follows Jad, heals 50 HP every 4 ticks when within 5 tiles
+      Distracted when player attacks (switches to combat mode, stops healing)
+    - Jad: weighted random style selection (magic/ranged), telegraph visible
+      Attack speed: 8 ticks. Hit resolves 6 ticks from attack start.
+      Healer spawn: 4 healers when Jad HP drops below 50%
+      Respawn: only after Jad healed back above 50% and drops below again
+    - Safespot behavior: emergent from correct collision + LOS + size-aware pathing
+      (5x5 Ket-Zek and Jad cannot fit through gaps that smaller NPCs can)
+
+  NPC stat table (from Void 634 cache + tzhaar_fight_cave.npcs.toml):
+    Type          HP    Atk   Str   Def   Mag   Rng   Style    AtkSpd  Size  AtkRange  MaxHit
+    Tz-Kih        100   20    30    15    15    30    melee    4       1     1         40
+    Tz-Kek        200   40    60    30    30    60    melee    4       2     1         70
+    Tz-Kek(sm)    100   20    30    15    15    30    melee    4       1     1         40
+    Tok-Xil       400   80    120   60    60    120   rng+mel  4       3     1/14      130/140
+    Yt-MejKot     800   160   240   120   120   240   mel+heal 4       4     1         250
+    Ket-Zek       1600  320   480   240   240   480   mag+mel  4       5     1/14      540/490
+    TzTok-Jad     2500  640   960   480   480   960   all      8       5     1/14      970/950
+    Yt-HurKot     600   140   100   60    120   120   melee    4       1     1         140
+
+  CRITICAL: Sizes from Void 634 cache (opcode 12, verified):
+    Tz-Kih=1, Tz-Kek=2, Tok-Xil=3, Yt-MejKot=4, Ket-Zek=5, Jad=5, Yt-HurKot=1
+    These large sizes (Ket-Zek and Jad are 5x5!) are critical for pathfinding/safespots.
+
+  Port from: existing fc_npc.c + RSPS NPC.kt, hunt_modes.toml,
+  tzhaar_fight_cave.combat.toml
+
+--- PHASE 6: COMBAT FOUNDATION (Group 3) ---
+
+Goal: Full attack pipeline — targeting, rolls, projectiles, damage, death.
+
+  A. Target/engagement system (Section 1K):
+    - Target selection (click NPC or auto-retaliate)
+    - Target validity (alive, in range, LOS)
+    - Attack initiation: approach if out of range, then attack
+    - Attack cooldown (weapon speed in ticks)
+    - Retargeting on target death
+
+  B. Player combat (Section 1L):
+    - OSRS accuracy formula (already in fc_combat.c):
+      hit_chance = att_roll > def_roll
+        ? 1 - (def_roll+2)/(2*(att_roll+1))
+        : att_roll/(2*(def_roll+1))
+    - Damage roll: uniform [0, max_hit]
+    - Equipment/stat/prayer modifiers on att/def rolls
+    - Ranged projectile spawn with travel delay
+    - Hit delay by distance: 1 + floor((3 + dist) / 6) for ranged
+
+  C. NPC combat (Section 1M):
+    - Per-type attack style and damage from stat table
+    - Melee: instant hit (0 delay)
+    - Ranged (Tok-Xil): projectile, delayed hit
+    - Magic (Ket-Zek): projectile, delayed hit
+    - Jad: style selection (alternating magic/ranged), telegraph, delayed hit
+    - Prayer interaction: correct protect blocks 100% in PvM
+
+  D. Projectile system (Section 1N):
+    - Spawn projectile at source position
+    - Travel time: CLIENT_TICKS.toTicks(offset + distance * multiplier) + 1
+      Where toTicks(n) = n / 30 (integer floor division)
+    - Per-projectile timing (from gfx.toml):
+      tok_xil_shoot:   delay=32, default multiplier=5
+      ket_zek_travel:  delay=28, offset=8, multiplier=8
+      tztok_jad_travel: delay=86, multiplier=8
+      Jad ranged: no projectile, fixed delay=120 → 5 game ticks
+    - Prayer check at IMPACT tick (not launch tick)
+    - Despawn on impact
+    - Target tracking (projectile follows moving target)
+
+  JAD ATTACK TIMELINE (critical for RL):
+    Tick 0: Attack animation starts (telegraph visible)
+    Tick 3: hit() called (damage rolled, projectile spawned)
+    Tick 6: Damage resolves, prayer checked (3 + toTicks(64) + 1 = 3+2+1 = 6)
+    Total: 6 game ticks from telegraph to hit = 3.6 seconds
+
+  E. Damage / hit resolution (Section 1O):
+    - Pending hit queue (already in FcPendingHit struct)
+    - Resolve at ticks_remaining == 0
+    - Check active prayer at resolve time
+    - Multiple hits can land same tick
+    - HP floor = 0 → death trigger
+    - Damage splat generation for viewer
+
+  F. Death / despawn (Section 1P):
+    - NPC death → remove after death delay (2-3 ticks)
+    - Tz-Kek death → spawn 2 small Tz-Kek
+    - Player death → terminal state
+    - Cleanup pending hits/projectiles referencing dead entities
+    - Wave clear detection: npcs_remaining == 0
+
+  Port from: existing fc_combat.c + RSPS CombatApi.kt, CombatDefinition.kt,
+  CombatAttack.kt, tzhaar_fight_cave.combat.toml
+
+--- PHASE 7: WAVE / ENCOUNTER SCRIPTING (Group 5) ---
+
+Goal: All 63 waves with 15 rotations, spawned from data tables.
+
+  Systems from fc_backend_systems.md Section 1S:
+    - Wave index 1..63
+    - Spawn list per wave (from tzhaar_fight_cave_waves.toml)
+    - 15 spawn rotations with directional positions
+    - Spawn timing (immediate on wave start)
+    - Wave complete detection (all NPCs dead, counting Tz-Kek splits)
+    - Transition to next wave
+    - Wave 63: TzTok-Jad spawn
+    - Jad half-HP: spawn 4 Yt-HurKot healers
+    - Terminal: cave complete after wave 63 cleared
+
+  EXISTING: fc_wave.c already has wave data. Verify against RSPS TOML:
+    data/minigame/tzhaar_fight_cave/tzhaar_fight_cave_waves.toml (50,967 bytes)
+    Contains all 63 waves with exact NPC counts and 15 rotation spawn positions.
+
+  Port from: existing fc_wave.c + RSPS TzhaarFightCaveWaves.kt + waves TOML
+
+--- PHASE 8: VIEWER INTEGRATION — PLAYABLE GAME (Group 7) ---
+
+Goal: Human-playable Fight Caves in the debug viewer.
+Status: PARTIALLY DONE — sub-phases below track remaining work.
+
+--- PHASE 8a: FIX MOVEMENT — CLICK-TO-MOVE ---
+
+Problems identified:
+  - WASD directional movement is unnatural. OSRS uses click-to-move.
+  - Player keeps moving when no input (if auto-mode accidentally toggled).
+  - No way to click a tile and have the player walk there.
+  - Movement should STOP when player reaches destination or enters combat.
+
+How Void RSPS does it (FightCaveBackendActionAdapter.kt):
+  - Wait action (0) = complete no-op, player stands still
+  - WalkToTile action (1) = pathfind to (x,y) once, walk one step per tick
+  - Movement mode clears when destination reached → player stops
+
+How RSMod does it (PlayerMovementProcessor.kt):
+  - Click creates RouteRequest → pathfinder computes route once
+  - Each tick: consume one step from route deque
+  - When deque empty: player stops. No persistent movement.
+
+Fix plan:
+  1. Add route deque to FcPlayer (destination + path steps)
+  2. Click tile in viewer → set player route destination
+  3. Each tick: if route has steps, consume one step (walk toward destination)
+  4. If route empty or destination reached: player stands still
+  5. Remove WASD directional movement (or keep as secondary option)
+  6. New action: clicking on the 3D terrain → raycast to tile → set destination
+  7. Player stops moving when entering combat range of target
+
+--- PHASE 8b: FIX COMBAT BEHAVIOR ---
+
+Problems identified:
+  - NPCs and player both keep moving during combat instead of being stationary
+  - NPCs should stop moving once in attack range and attack on cooldown
+  - Player should face target and auto-attack, not wander around
+  - Hitsplats are 0.12-radius spheres — invisible at normal camera distance
+  - No damage NUMBER text, just tiny colored dots
+  - No attack animation indication
+
+How Void RSPS does combat:
+  - Player clicks NPC → enters CombatMovement mode
+  - CombatMovement: approach target until in attack range, then STOP
+  - Once in range: attack on cooldown, remain stationary
+  - Player only moves if explicitly clicking a new tile
+  - Hitsplats: show damage number above entity head
+
+Fix plan:
+  1. NPC behavior: once in attack range AND attack timer ready, STOP moving.
+     Only resume chasing if player moves out of range.
+  2. Player attack: when target selected (Tab or click NPC), player walks
+     toward NPC until in weapon range (7 tiles for crossbow), then STOPS
+     and auto-attacks on cooldown.
+  3. Hitsplats: render as 2D text overlay (DrawText in screen space projected
+     from 3D position), not 3D spheres. Show damage number in red/blue.
+     Make them large enough to read (font size 16+).
+  4. Attack indication: brief flash or pulse on attacker when they swing.
+
+--- PHASE 8e: VISUAL PROJECTILES WITH ACTUAL MODELS ---
+
+Projectile model IDs (from osrs-dumps dump.spot):
+  Crossbow bolt:           model 3135 (crossbowbolt_travel, spotanim 27)
+  Tok-Xil spine:           model 9340 (tzhaar_spine_attack, spotanim 443)
+  Ket-Zek fire launch:     model 9335 (tzhaar_fire_launch_travel, spotanim 445)
+  Jad ranged fire:         model 6434 (tzhaar_ranged_fire_attack, spotanim 440)
+  Jad magic fireball:      model 9334 (tzhaar_firebreath_attack, spotanim 439)
+  Yt-MejKot heal:          model 9341 (tzhaar_heal, spotanim 444)
+
+Implementation:
+  1. Export projectile models from b237 cache (same pipeline as NPC models)
+  2. Load as separate model set in viewer
+  3. Replace colored sphere projectiles with actual 3D model instances
+  4. Rotate projectile to face travel direction
+  5. Scale per spotanim definition (resizeh/resizev)
+
+--- PHASE 8e-old: VISUAL PROJECTILES ---
+
+Requirements:
+  - Ranged/magic attacks show an actual projectile moving from attacker to target
+  - Projectile travels at the correct speed per NPC/weapon type (from gfx.toml timing)
+  - Player crossbow bolt: colored sphere moving from player to NPC
+  - Tok-Xil ranged: projectile from NPC to player
+  - Ket-Zek magic: blue projectile from NPC to player
+  - Jad magic/ranged: large projectile from Jad to player
+  - Melee attacks: no projectile (just hitsplat on impact)
+  - Projectile is a small colored sphere that lerps from source to dest over the hit delay ticks
+  - Multiple projectiles can be in flight simultaneously
+
+Implementation:
+  - Add VisualProjectile struct: source xyz, dest xyz, color, total_ticks, elapsed_ticks
+  - When fc_tick queues a pending hit with delay > 1, viewer spawns a VisualProjectile
+  - Each frame: lerp projectile position from source to dest based on elapsed/total
+  - Draw as colored sphere in 3D
+  - Remove when elapsed >= total (hit has landed)
+
+--- PHASE 8g: ANIMATIONS (NPC + PLAYER) ---
+
+Requirements:
+  - NPCs and player should animate: idle, walk, attack, death
+  - Animations should match the correct game tick timing
+  - Jad attack telegraph should have visible wind-up animation
+
+How OSRS animations work:
+  - NOT skeletal — uses vertex group labels (0-255 per vertex)
+  - FrameBase: defines transform slots (translate, rotate, scale) and which vertex labels they affect
+  - FrameDef: per-frame dx/dy/dz values for each transform slot
+  - SequenceDef: chains frames with tick delays + body part interleave
+
+Existing infrastructure (valo_envs):
+  - export_animations.py: full decoder for sequences, frames, framebases from cache
+  - export_inferno_npcs.py: already exports NPC animations to .anims binary
+  - osrs_pvp_anim.h: PRODUCTION C code for animation playback in Raylib!
+    - anim_apply_frame(): applies frame transforms to vertices
+    - anim_update_mesh(): updates Raylib mesh vertices from animated state
+    - Complete load/decode/playback pipeline
+
+FC NPC animation IDs (from osrs-dumps seq.sym, verified):
+  Tz-Kih (firebat):     idle=2618 walk=2619 attack=2621 defend=2622 death=2620
+  Tz-Kek (lavabeast):   idle=2624 walk=2623 attack=2625 defend=2626 death=2627
+  Tok-Xil (magmaquris): idle=2631 walk=2632 melee=2628 ranged=2633 defend=2629 death=2630
+  Yt-MejKot (lizard_cleric): idle=2636 walk=2634 attack=2637 defend=2635 death=2638 heal=2639
+  Ket-Zek (igniferum):  idle=2642 walk=2643 melee=2644 magic=2647 defend=2645 death=2646
+  TzTok-Jad (lordmagmus): idle=2650 walk=2651 melee=2655 magic=2656 defend=2653 death=2654
+  Jad (jaltokjad):      idle=7589 walk=7588 melee=7590 magic=7592 ranged=7593 defend=7591 death=7594
+  Yt-HurKot (lizard_cleric): idle=2636 walk=2634 attack=2637 defend=2635 death=2638 heal=2639
+
+  Note: lordmagmus (seq 2650-2656) and jaltokjad (seq 7588-7594) are DIFFERENT animation sets.
+  The NPC dump says Jad (3127) uses lordmagmus anims. Verify which set the b237 cache actually uses.
+
+Implementation plan:
+  1. Write export_fc_anims.py (adapt export_inferno_npcs.py for FC NPC + player anims)
+     - Export all FC NPC idle/walk/attack/death sequence IDs
+     - Export player attack/walk animations
+     - Output fc_anims.anims binary
+  2. Copy osrs_pvp_anim.h into demo-env/src/ (it's already production C code)
+  3. Load .anims binary at viewer startup alongside .models
+  4. Per entity per tick: select animation based on state (idle/walk/attack/death)
+  5. Per render frame: interpolate between animation frames, apply transforms, update mesh
+  6. Upload updated mesh to GPU each frame (UploadMesh or UpdateMeshBuffer)
+
+Animation state per entity (add to viewer):
+  - current_seq_id (which animation is playing)
+  - frame_index (current frame within sequence)
+  - frame_timer (ticks remaining in current frame)
+  - base_verts (copy of original un-animated vertices for reset each frame)
+
+--- PHASE 8f: PLAYER CHARACTER MODEL ---
+
+Requirements:
+  - Replace blue cylinder with actual player model wearing FC equipment
+  - Player model is a composite of base body kit + equipment worn models
+  - Each equipment slot has a "worn model" ID in the item definition
+
+Challenge:
+  - b237 live cache has obfuscated item names (all blank)
+  - Item IDs 1169, 9185, 2503, 2497, 2491, 6328 exist but names are stripped
+  - Worn model IDs (opcode 23/25) may still be valid even without names
+  - Need to extract worn models from item defs at the known IDs
+  - Player body is composed of: base body + head + torso + arms + legs + feet + weapon
+  - Base body kit model IDs are in the player kit definitions (index 2, group 3)
+
+Options:
+  1. Extract worn models from Void 634 cache (has correct item data)
+  2. Try b237 item IDs directly (opcode 23 may have model IDs despite blank names)
+  3. Use a pre-made generic player model as placeholder
+  4. Export from the Void 634 cache using Kotlin tools
+
+--- PHASE 8c: FIX NPC SPAWN POSITIONS ---
+
+Problems identified:
+  - Wave 4 Tz-Kek sometimes spawns behind a cliff (unreachable)
+  - find_valid_spawn fallback uses original position even if invalid
+  - NPC stuck behind cliff: can't reach player, player can't reach NPC
+  - This blocks wave progression entirely
+
+Fix plan:
+  1. Increase find_valid_spawn search radius from 5 to 10
+  2. If still no valid position found, spawn at CENTER (32,32) as last resort
+  3. Verify all 5 spawn positions work for all NPC sizes (1-5)
+  4. Add debug logging when spawn fallback triggers
+
+--- PHASE 8d: NPC MODEL RENDERING (from Phase 10) ---
+
+Problems identified:
+  - All NPCs render as identical colored cubes
+  - Hard to tell NPC types apart at distance
+  - Need actual NPC meshes from b237 cache
+
+This is Phase 10 work pulled forward because it's blocking usability.
+  1. Export NPC models for each FC NPC type from b237 cache
+  2. Load as mesh assets in viewer
+  3. Render at entity position with correct size/rotation
+  4. Fallback to colored cubes if model not available
+    - Prayer icon next to player HP bar
+    - Attack animation indicators (flash/pulse on attack tick)
+
+  C. UI panels (reflecting backend state only):
+    - Inventory panel: shark count, potion doses
+    - Prayer panel: active prayer highlighted, prayer points
+    - Combat panel: current target, attack timer
+    - Wave display: current wave, NPCs remaining
+    - Stats: HP, prayer, total damage, kills
+
+  D. Tick controls:
+    - Configurable TPS (1-60, default: game speed ~1.67 TPS)
+    - Pause/unpause (space)
+    - Single-step (right arrow while paused)
+    - Fast-forward (hold shift + space)
+
+--- PHASE 8h: CLICKABLE INVENTORY / COMBAT / PRAYER TABS ---
+
+Goal: Add tabbed side panel with clickable Inventory, Combat, and Prayer tabs.
+This is purely a UI/viewer layer — no backend changes. The tabs provide a more
+intuitive visual interface for human play, mirroring the OSRS game interface.
+
+The existing side panel (HP bar, prayer bar, wave info, consumable counts, NPC
+health bars) remains at the top. Below it, three clickable tabs appear:
+
+  TAB 1: INVENTORY (default)
+    - 28-slot inventory grid (4 columns × 7 rows), styled like OSRS inventory
+    - Slots are filled based on the player's current loadout:
+      Prayer potions: slots 0-7 (8 pots × 4 doses each)
+        Display: "Ppot(4)" → "Ppot(3)" → ... → "Ppot(1)" → empty
+        As doses are consumed, label decrements. When all 4 doses used,
+        slot shows empty (or "Vial"). prayer_doses_remaining / 4 = full pots,
+        prayer_doses_remaining % 4 = partial pot doses.
+      Sharks: slots 8-27 (20 sharks)
+        Display: "Shark" icon/label. As sharks are eaten, slots empty from end.
+    - Click a prayer potion slot → drink one dose (same as pressing P)
+    - Click a shark slot → eat shark (same as pressing F)
+    - Empty slots are dark/inactive (no click action)
+
+  TAB 2: COMBAT
+    - Shows current attack style info:
+      "Accurate" / "Rapid" / "Long range" radio buttons (Rapid is default for FC)
+      For FC v1, attack style is fixed (Rapid — 1 tick faster, no bonus),
+      but display shows it so we can verify/change if needed.
+    - Auto retaliate toggle: checkbox/button, currently always ON in FC
+      When ON: player auto-targets aggressor if no current target
+    - Current weapon: "Rune crossbow"
+    - Attack speed: "5 ticks (Rapid)"
+    - Weapon range: "7 tiles"
+    - Current target info (name, HP bar, distance)
+
+  TAB 3: PRAYER
+    - Grid of prayer icons (simplified: just the 3 protection prayers for v1)
+    - Each prayer shown as a clickable button:
+      "Protect from Melee"  — click to toggle (same as pressing 1)
+      "Protect from Range"  — click to toggle (same as pressing 2)
+      "Protect from Magic"  — click to toggle (same as pressing 3)
+    - Active prayer highlighted (bright icon/border)
+    - Prayer points display: "43/43" with drain rate info
+    - If prayer points = 0, buttons grayed out
+
+  Implementation:
+    1. Add tab state to ViewerState: active_tab enum (TAB_INVENTORY=0, TAB_COMBAT=1, TAB_PRAYER=2)
+    2. Draw 3 tab buttons at the separator line between existing panel info and new tab area
+    3. Click tab button → switch active_tab
+    4. Based on active_tab, draw the appropriate sub-panel content
+    5. For inventory tab: compute slot contents from sharks_remaining + prayer_doses_remaining
+    6. For combat tab: display static info (style, auto-retal toggle)
+    7. For prayer tab: draw 3 prayer buttons with toggle-on-click
+    8. All clicks in tab area translate to the SAME backend actions (pending_eat, pending_drink,
+       pending_prayer) — no new backend code needed, purely viewer-side UI
+
+  Reference: OSRS inventory/prayer/combat tab layout from Void RSPS
+    Inventory.kt — slot layout
+    Prayer.kt — prayer grid icons
+    CombatDefinition.kt — combat style display
+
+--- PHASE 9a: AGENT-VIEWER ACTION PARITY ---
+
+Goal: Every action available to a human in the viewer must be expressible by an
+RL agent through the action API, and produce identical results. The viewer is
+the demo-env — it must serve both human play and machine control interchangeably.
+
+Current gap:
+  Human clicks tile (25,30) → BFS pathfind → route stored → consumed per tick
+  Agent sends action[0]=FC_MOVE_WALK_NE → one directional step per tick
+  These are NOT equivalent. The human gets intelligent pathfinding; the agent
+  gets raw per-tick directional nudges.
+
+Similarly:
+  Human clicks NPC → sets attack_target_idx + approach_target
+  Agent sends action[1]=3 → sets target via slot index, no approach
+
+Fix: Unify by making ALL actions go through the same backend interface.
+
+Option A — Elevate the agent API to match human capabilities:
+  Add new action types to fc_step:
+    FC_ACTION_WALK_TO_TILE(x, y) — pathfind + route, same as click-to-move
+    FC_ACTION_ATTACK_NPC(npc_idx) — set target + approach, same as click NPC
+  The existing directional actions (FC_MOVE_WALK_N etc.) remain for fine-grained
+  RL control, but the agent CAN use the higher-level actions too.
+
+Option B — Lower the human input to match the agent API:
+  Human clicks translate to the same per-tick directional actions the agent uses.
+  Problem: pathfinding disappears, movement becomes clunky for humans.
+
+Recommendation: Option A. Add high-level action types that both human and agent
+can use. The viewer translates clicks → high-level actions. The agent can send
+either high-level (walk_to_tile) or low-level (directional) actions.
+
+Implementation: Option A — elevated agent API with high-level actions.
+
+  Added two new action heads (5 and 6) for BFS walk-to-tile:
+    Head 5: FC_MOVE_TARGET_X (dim 65: 0=no-op, 1-64=tile X 0-63)
+    Head 6: FC_MOVE_TARGET_Y (dim 65: 0=no-op, 1-64=tile Y 0-63)
+  When both are non-zero, backend calls fc_pathfind_bfs() and sets the
+  player route — identical to a human clicking a tile in the viewer.
+  The route is consumed per tick. Directional actions (head 0) are ignored
+  while a route is active. If target is unwalkable, BFS returns 0 steps (no-op).
+
+  The agent can now use EITHER:
+    - Low-level: directional per-tick actions (head 0) for fine control
+    - High-level: walk-to-tile (heads 5+6) for BFS pathfinding
+
+  FC_NUM_ACTION_HEADS: 5 → 7
+  FC_ACTION_MASK_SIZE: 36 → 166 (added 65+65 for tile coordinates)
+  FC_OBS_SIZE: 178 → 308
+
+Action parity checklist:
+  [x] Movement (low-level): directional actions per tick (head 0)
+  [x] Movement (high-level): BFS walk-to-tile via heads 5+6
+  [x] Attack: agent targets NPC by slot index with auto-approach (head 1)
+  [x] Prayer: agent toggles via action head 2
+  [x] Eat/drink: agent consumes via action heads 3/4
+  [ ] Run toggle: human has X key. No action head. Low priority for FC.
+  [x] Wait/idle: FC_MOVE_IDLE (head 0 = 0)
+
+COMPLETE ACTION REFERENCE (7 heads, 166 discrete values):
+
+  All 7 heads are processed SIMULTANEOUSLY each tick. The agent submits one
+  value per head per tick. Actions don't block each other — the agent can
+  move + eat + pray + attack all on the same tick.
+
+  Head 0: MOVE — directional per-tick movement (17 values)
+    0      idle (stand still)
+    1-8    walk 1 tile: N, NE, E, SE, S, SW, W, NW
+    9-16   run 2 tiles: N, NE, E, SE, S, SW, W, NW
+    Note: ignored when a BFS route is active (from heads 5+6 or viewer click).
+    Agent must choose direction EVERY tick. For 20 tiles: 10 ticks of run.
+    But agent can eat/drink/pray/attack on each of those ticks too.
+
+  Head 1: ATTACK — target NPC by visible slot index (9 values)
+    0      no target
+    1-8    target NPC in slot 0-7 (sorted by distance to player)
+    Sets approach_target=1: auto-walks into weapon range (7 tiles for
+    crossbow), then auto-attacks on cooldown. Identical to human click-NPC.
+    Attack clears when target dies → agent must retarget.
+
+  Head 2: PRAYER — toggle protection prayer (5 values)
+    0      no change
+    1      prayer off (deactivate current prayer)
+    2      protect from magic
+    3      protect from range (missiles)
+    4      protect from melee
+    Instant — processed before movement/combat. Toggling the already-active
+    prayer is a no-op (not an error). Grayed out when prayer points = 0.
+
+  Head 3: EAT — consume food (3 values)
+    0      don't eat
+    1      eat shark (heals 20 HP, 3-tick food cooldown)
+    2      combo eat karambwan (heals 18 HP, 1-tick combo cooldown)
+    Masked when: no sharks left, food timer > 0, HP already full.
+    Food and potion cooldowns are SEPARATE — can eat + drink same tick.
+
+  Head 4: DRINK — consume potion (2 values)
+    0      don't drink
+    1      drink prayer potion dose (restores 17 pray pts, 2-tick cooldown)
+    Masked when: no doses left, potion timer > 0, prayer already full.
+    8 potions × 4 doses = 32 total doses.
+
+  Head 5: MOVE_TARGET_X — BFS pathfind target X (65 values)
+    0      no pathfind target (use directional head 0 instead)
+    1-64   tile X coordinate 0-63
+    Must be paired with head 6. If either is 0, pathfinding is skipped.
+
+  Head 6: MOVE_TARGET_Y — BFS pathfind target Y (65 values)
+    0      no pathfind target
+    1-64   tile Y coordinate 0-63
+    When both heads 5+6 are non-zero: BFS pathfind to tile (x-1, y-1).
+    Route is set once, then auto-consumed 1-2 tiles per tick. While the
+    route plays out, the agent still submits all heads each tick and can
+    eat/drink/pray/attack normally. If target is unwalkable or unreachable,
+    BFS returns 0 steps → no-op. Setting a new walk-to-tile cancels any
+    previous route. Directional actions (head 0) are ignored while route
+    is active.
+
+  INTERACTION RULES:
+    - All heads are independent — no head blocks another
+    - Can eat + drink on same tick (separate cooldown timers)
+    - Can pray + eat + drink on same tick (prayer is instant)
+    - Movement + combat: setting attack target auto-walks to range
+    - Walk-to-tile cancels attack approach (and vice versa)
+    - Directional movement ignored while BFS route is active
+
+LIVE VERIFICATION TEST PLAN:
+
+  Run the viewer with scripted agent actions, observe in debug viewer:
+
+  Movement tests:
+    1. Directional walk — each of 8 directions (head 0 = 1-8)
+    2. Directional run — at least 2 directions (head 0 = 9-16)
+    3. Walk-to-tile — BFS to a specific walkable tile (heads 5+6)
+    4. Walk-to-tile blocked — target unwalkable tile (should no-op)
+    5. Walk-to-tile then directional — directional should be ignored
+       while route active, then resume working after route completes
+    6. Walk-to-tile cancel — new walk-to-tile replaces old route
+
+  Combat tests:
+    7. Attack NPC — target slot 1 (closest), verify approach + auto-attack
+    8. Switch target — retarget different NPC mid-combat
+    9. Target dies — verify target auto-clears, agent can retarget
+
+  Prayer tests:
+    10. Activate each protection prayer (head 2 = 2, 3, 4)
+    11. Deactivate prayer (head 2 = 1)
+    12. Prayer at 0 points — should be rejected
+
+  Consumable tests:
+    13. Eat shark — verify HP heals, 3-tick cooldown blocks re-eat
+    14. Drink prayer pot — verify prayer restores, 2-tick cooldown
+    15. Eat + drink same tick — both should work (separate cooldowns)
+    16. Eat at full HP — should be masked/rejected
+    17. Drink at full prayer — should be masked/rejected
+
+  Combined tests:
+    18. Run north + eat shark + switch prayer — all on same tick
+    19. Walk-to-tile + attack NPC — walk-to-tile should cancel approach
+    20. Attack NPC while walking route — approach should cancel route
+
+--- PHASE 9b: BACKEND AGENT PLAYABILITY VERIFICATION ---
+
+Goal: Verify the backend is fully playable by an agent using ONLY the action
+API — no viewer, no human input, no GUI. This is the critical gate before
+copying the backend to training-env.
+
+  Steps:
+    1. Write a simple test harness (C or Python via ctypes) that:
+       a. Calls fc_reset() to start an episode
+       b. Each tick: reads observation, computes action mask, selects a valid
+          random action per head, calls fc_tick() with those actions
+       c. Runs for multiple full episodes (wave 1 through death or completion)
+       d. Logs: waves reached, ticks survived, damage dealt, prayer usage
+    2. Verify all action heads work correctly without viewer:
+       - Directional movement: agent can navigate the arena
+       - NPC targeting: agent can select and attack NPCs by slot index
+       - Prayer switching: agent can toggle prayers via action head
+       - Eating/drinking: agent consumes items via action head
+       - Action mask: masked actions are correctly rejected
+    3. Verify combat parity:
+       - Same damage rolls, hit delays, prayer checks as viewer play
+       - NPC AI behaves identically
+       - Wave progression works (all 63 waves, Jad healers, splits)
+       - Terminal conditions fire correctly
+    4. Verify observation correctness:
+       - All 126 policy obs features are populated and normalized to [0,1]
+       - 16 reward features fire at correct times
+       - Action mask reflects valid actions each tick
+    5. Verify determinism:
+       - Same seed + same actions → identical state hash at every tick
+       - Run twice with recorded actions, compare hash traces
+
+--- PHASE 9c: DEBUG TOOLING & OVERLAYS ---
+
+Goal: Make the viewer a powerful debugging tool for RL development.
+
+  A. Collision/LOS overlays:
+    - Show walkable tiles (green) vs blocked (red)
+    - Show LOS rays from player to NPCs
+    - Show pathfinding result (yellow path tiles)
+    - Show attack range circles
+
+  B. Entity state inspection:
+    - Click entity to show detailed state panel
+    - NPC: type, HP, attack timer, target, AI state, telegraph
+    - Player: all stats, timers, pending hits
+    - Pending hit visualization (incoming damage indicators)
+
+  C. RL observation overlay:
+    - Show action mask (which actions are legal this tick)
+    - Show reward feature values
+    - Show observation vector summary
+    - Toggle between human control and agent control
+
+  D. Replay / trace:
+    - Record action trace per episode
+    - Deterministic replay from seed + actions
+    - Per-tick state dump (optional)
+    - State hash display for determinism verification
+
+  E. Debug event log:
+    - "why move failed" / "why attack failed" annotations
+    - Combat roll details (att_roll, def_roll, damage)
+    - Prayer check results
+    - NPC AI decisions
+
+--- PHASE 9d: TRAINING-ENV CODE AUDIT ---
+
+Goal: Determine exactly which files and code from demo-env/ belong in the
+headless training-env, and what must be excluded. The rule: keep everything
+that affects game logic, mechanics, timing, stats, or simulation. Exclude
+everything that only exists for rendering, sprites, UI, or human interaction.
+
+  AUDIT RESULT (completed, updated with training performance focus):
+
+  BACKEND — COPY TO TRAINING-ENV (16 files):
+  Every file here is essential for the game simulation. Nothing can be
+  removed without breaking gameplay mechanics, stats, or the RL interface.
+
+    fc_types.h          — All game structs (FcState, FcPlayer, FcNpc, FcPendingHit, enums)
+    fc_contracts.h      — Obs/action/reward/mask buffer layouts, head dimensions, normalization
+    fc_api.h            — Public sim API: init, reset, step, write_obs, write_mask, write_reward
+    fc_capi.h           — Python ctypes FFI interface declarations (PufferLib bridge)
+    fc_capi.c           — FFI implementation: env create/destroy/reset/step, batch interface
+    fc_state.c          — State init, reset, walkability map, obs/mask/reward writers
+    fc_tick.c           — Main tick loop: action processing, timers, hit resolution, death timers
+    fc_combat.c         — OSRS combat formulas: accuracy rolls, max hit, prayer blocking, hit queues
+    fc_combat.h         — Combat function declarations
+    fc_npc.c            — NPC stat table (8 types), AI dispatch, aggro, movement, Tz-Kek split
+    fc_npc.h            — NPC function declarations
+    fc_wave.c           — All 63 waves × 15 rotations spawn data + wave advancement logic (40KB)
+    fc_wave.h           — Wave function declarations
+    fc_prayer.c         — Prayer drain counter (OSRS formula), potion restore calculation
+    fc_prayer.h         — Prayer function declarations
+    fc_pathfinding.c    — Tile walkability, footprint checks, Bresenham LOS, BFS pathfinding
+    fc_pathfinding.h    — Pathfinding function declarations
+    fc_rng.c            — XORshift32 deterministic RNG (all randomness flows through this)
+
+  DO NOT COPY — DEAD WEIGHT FOR TRAINING (8 files):
+
+    fc_debug.h          — Debug event log structs, trace buffer, FC_DBG_LOG macros.
+                           fc_tick.c and fc_combat.c include it but NEVER call any
+                           of its functions (verified: zero FC_DBG_LOG calls). The
+                           include is dead. Training-env should not carry this.
+    fc_debug.c          — Debug log + action trace buffer implementation.
+                           Only useful for viewer-side diagnostics. Not called by
+                           any core game code. Dead weight.
+    fc_hash.c           — FNV-1a state hash for determinism verification.
+                           Only called from viewer.c (debug overlay). fc_capi.c
+                           never calls it. Useful for testing but not training.
+                           fc_api.h declares fc_state_hash() but no training code
+                           calls it, so no linker error.
+    fc_debug_overlay.h  — Phase 9c debug visualization (Raylib overlays, event log
+                           ring buffer, panel tabs). Viewer-only.
+    viewer.c            — 2000+ LOC Raylib 3D viewer, UI, input handling
+    fc_npc_models.h     — Raylib MDL2 model loader (depends on raylib.h)
+    osrs_pvp_terrain.h  — Raylib terrain mesh loader (depends on raylib.h)
+    osrs_pvp_objects.h  — Raylib placed objects + atlas loader (depends on raylib.h)
+    osrs_pvp_anim.h     — OSRS vertex-group animation runtime (graphics-focused)
+
+  CLEANUP NEEDED BEFORE COPY:
+    - Remove dead #include "fc_debug.h" from fc_tick.c and fc_combat.c
+      (they include it but never use it — verified zero calls)
+    - fc_api.h declares fc_state_hash() which lives in fc_hash.c. This
+      declaration is harmless (no training code calls it, so no linker
+      error), but could be wrapped in #ifdef FC_INCLUDE_HASH for cleanliness.
+
+  THINGS THAT MUST NOT BE STRIPPED:
+    - Pathfinding (BFS) — needed for walk-to-tile action heads 5+6
+    - fc_fill_render_entities() in fc_state.c — it's a pure data serializer,
+      harmless to include even if training never calls it
+    - death_timer / died_this_tick — simulation timing that affects wave
+      progression and observation writer, not cosmetic
+    - All combat formulas, NPC stats, prayer drain rates, wave data
+    - Action mask computation (used by RL policy)
+    - Reward feature extraction (used by RL trainer)
+
+--- PHASE 9e: REPO CLEANUP & REORG ---
+
+Goal: Clean up legacy files, dead code, and stale artifacts across the repo
+so the codebase is well-organized and easy to navigate BEFORE we copy the
+backend to training-env. We don't want to carry cruft into the training build.
+
+  Steps:
+    1. Audit runescape-rl/ top-level directory structure:
+       - demo-env/        — keep (viewer + backend, actively developed)
+       - training-env/    — keep (headless RL env, about to be refreshed)
+       - reference/       — keep (legacy RSPS source for porting, read-only)
+       - docs/            — review: remove stale writeups that are no longer
+         relevant, consolidate useful ones. Keep agent_handoff, pr_plan,
+         debug_viewer_analysis. Remove anything from pre-C-pivot era that
+         references the old Kotlin/JVM architecture.
+       - pufferlib/       — review: is this a submodule or a copy? Remove
+         any stale forks or unused code. Should only contain what's needed
+         for the training pipeline.
+
+    2. Clean up demo-env/src/:
+       - Remove any dead code, commented-out blocks, or TODO stubs that
+         will never be implemented
+       - Ensure all fc_*.c/h files have accurate header comments describing
+         what they do (no stale descriptions from early phases)
+       - Remove any debug fprintf statements that spam stderr during normal
+         play (keep only ones gated by FC_DEBUG or show_debug)
+
+    3. Clean up demo-env/docs/:
+       - debug_viewer_plan.md — mark completed phases as DONE, remove
+         outdated problem descriptions that have been fixed
+       - Remove any one-off investigation docs that served their purpose
+
+    4. Clean up training-env/:
+       - The stale 2026-03-24 copies will be replaced in Phase 9f, but
+         remove any other cruft (old test files, unused scripts, stale
+         build artifacts)
+       - Verify CMakeLists.txt is ready for the refreshed backend
+
+    5. Repository root:
+       - Remove empty directories, stale build outputs, temp files
+       - Ensure .gitignore covers build/, *.o, __pycache__, etc.
+       - Verify the directory structure is clean and self-explanatory
+
+  Rule: If you're not sure whether to delete something, check git log to
+  see when it was last meaningfully touched. If it hasn't been relevant
+  since the C pivot (2026-03-24), it's probably safe to remove.
+
+--- PHASE 9f: COPY BACKEND TO TRAINING-ENV ---
+
+Goal: training-env/ has a complete, independently buildable copy of the FC
+backend — identical game logic, no rendering, ready for PufferLib integration.
+
+  Current state: training-env/ has STALE copies of fc_*.c/h from 2026-03-24.
+  The demo-env backend has evolved significantly since then (click-to-move,
+  combat fixes, animation state, NPC models, prayer/combat improvements).
+
+  Steps:
+    1. Snapshot the demo-env backend files to copy:
+       - All fc_*.c and fc_*.h from demo-env/src/
+       - EXCLUDE viewer-only files: viewer.c, osrs_pvp_terrain.h,
+         osrs_pvp_objects.h, fc_npc_models.h, osrs_pvp_anim.h
+       - EXCLUDE assets/ directory (terrain, objects, atlas, models, anims)
+    2. Copy fc_*.c/h into training-env/src/ and training-env/include/,
+       replacing the stale versions
+    3. Verify training-env CMakeLists.txt compiles all backend sources
+       (no Raylib dependency — headless build)
+    4. Verify training-env/src/fc_capi.c (the PufferLib C API bridge) still
+       compiles and links against the updated backend
+    5. Run the agent playability test from Phase 9b against the training-env
+       build to confirm identical behavior
+    6. Run determinism check: same seed + actions in demo-env and training-env
+       must produce identical state hashes at every tick
+
+  CRITICAL: After this step, both demo-env and training-env share the same
+  backend logic. Future backend changes must be applied to BOTH, or we must
+  establish a shared-source build system. For v1, manual sync is acceptable.
+  Phase 10+ may introduce a shared fc_core/ directory with symlinks or
+  CMake add_subdirectory() to eliminate drift.
+
+--- PHASE 10: RL TRAINING INFRASTRUCTURE ---
+
+Goal: Set up everything needed to train an RL agent on the Fight Caves
+backend using PufferLib. This is the transition from "game engine" to
+"RL environment". The C backend is frozen after Phase 9 — this phase is
+all Python-side infrastructure.
+
+  A. PufferLib environment wrapper:
+    1. Write Python environment class that wraps fc_capi via ctypes
+       - Load the training-env .so
+       - Implement PufferLib's env interface (reset, step, obs, reward, done)
+       - Multi-head action space mapping (7 heads → flat action array)
+       - Observation slicing (policy obs vs reward features vs action mask)
+    2. Vectorized env: PufferLib batch interface using fc_capi_batch_*
+       - N parallel envs in one C allocation (already built in fc_capi.c)
+       - Flat array I/O for obs, actions, rewards, terminals
+    3. Verify env runs: random policy, check obs shapes, reward signals,
+       episode termination and auto-reset
+
+  B. Policy network architecture:
+    1. Design the policy network for multi-head discrete action space
+       - Input: 126 policy observation floats
+       - Output: 7 action heads with different dimensions (17,9,5,3,2,65,65)
+       - Architecture: MLP or small transformer, shared trunk + per-head outputs
+       - Action masking: apply mask before sampling each head
+    2. Value network (critic): shared trunk → single scalar value estimate
+    3. Consider whether the agent should use walk-to-tile (heads 5+6) or
+       directional (head 0) or both. Walk-to-tile has 65×65 coordinate space
+       which may need special handling (factored action space).
+
+  C. Training script:
+    1. PPO training loop using PufferLib
+       - Hyperparameters: learning rate, clip ratio, entropy coefficient,
+         GAE lambda, minibatch size, update epochs
+       - Reward shaping weights (configurable, applied to 16 reward features)
+       - Curriculum: start on later waves? or always wave 1?
+    2. Logging: wandb or tensorboard integration
+       - Track: mean reward, waves reached, episode length, Jad encounters,
+         cave completions, prayer accuracy
+    3. Checkpointing: save policy weights every N updates
+
+  D. Policy replay and evaluation:
+    PufferLib has built-in eval/evaluate functionality that handles policy
+    replay. NO custom trace recording needed. The workflow:
+      1. Train produces checkpoint files (policy weights)
+      2. PufferLib eval loads checkpoint + creates single env with render_mode
+      3. Runs policy forward pass live → actions → env.step() → env.render()
+      4. Our demo-env Raylib viewer IS the render target
+      5. Press O during eval to enable debug overlays (LOS, path, range,
+         obs, mask, reward) — all the tooling from Phase 9c
+    
+    No action trace logging during training — zero overhead. Visual replay
+    is done live via PufferLib eval at any saved checkpoint.
+    
+    Key PufferLib files:
+      pufferlib/pufferl.py:372         — C++ eval() entry point
+      pufferlib/python_pufferl.py:995  — Python eval() entry point
+      pufferlib/python_pufferl.py:214  — evaluate() method (rollout loop)
+
+  E. Milestone tracking (lightweight, no per-tick logging):
+    Python training loop tracks aggregate stats per episode (no tick-level
+    logging — too expensive). At episode end, record to wandb/tensorboard:
+      - Waves reached, terminal reason, total reward, episode length
+      - Jad encounters, prayer accuracy, food/pot usage
+    Save checkpoints on milestones:
+      - New highest wave reached
+      - First Jad encounter / first cave completion
+      - Every Nth training update (e.g. every 100 updates)
+    Then use PufferLib eval to watch any checkpoint visually.
+
+--- PHASE 11: NPC MODELS (Visual Polish) ---
+
+Goal: Replace colored placeholder cubes with actual NPC meshes from b237 cache.
+
+  1. Look up b237 NPC definition IDs for each FC NPC type
+     (These will differ from Void 634 IDs — use cache reader to find by name)
+  2. Export NPC models via export_models.py with recoloring
+  3. Load as MDL2 binary meshes in viewer
+  4. Render at entity positions with correct size/rotation
+  5. Stretch goal: idle/attack/death animation playback
+
+--- PHASE 12: FLOOR TEXTURE (Visual Polish) ---
+
+Goal: Replace black floor with lava crack texture.
+
+  Options:
+    1. Extract from older OSRS revision where lava texture is static
+    2. Generate procedurally in shader
+    3. Hand-crafted lava texture asset
+    4. Accept current vertex-color height shading
+
+================================================================================
+WHAT NOT TO BUILD
+================================================================================
+
+This is Fight Caves only. Do NOT implement:
+  - Banking, shops, trading
+  - Chat, social systems
+  - Quests, skilling
+  - World persistence, networking
+  - Login/account systems
+  - General object interaction beyond FC needs
+  - Full RuneScape combat (only FC-relevant subset)
+
+================================================================================
+KEY PARITY CONTRACTS (FREEZE THESE)
+================================================================================
+
+These must be identical between headless RL env and debug viewer backend:
+
+  - Tick phase ordering (Phase 2 list above)
+  - Action schema (5 heads: move, attack, prayer, eat, drink)
+  - Observation schema (126 floats: player 20 + NPC 96 + meta 10)
+  - Reward features (16 floats)
+  - Action mask (36 floats)
+  - Combat timing (attack speed, projectile delay, prayer check timing)
+  - Pathfinding / collision semantics
+  - NPC AI target selection
+  - Wave progression rules
+  - Terminal conditions
+
+================================================================================
+KEY FILES
+================================================================================
+
+Viewer:
+  demo-env/src/viewer.c              — Raylib viewer shell (~375 lines)
+  demo-env/src/osrs_pvp_terrain.h    — terrain loader
+  demo-env/src/osrs_pvp_objects.h    — objects loader + atlas
+  demo-env/assets/fightcaves.*       — terrain, objects, atlas from b237
+
+Backend (to be consolidated into demo-env/src/):
+  fc_types.h / fc_api.h              — types, API
+  fc_sim.c                           — tick loop, episode control
+  fc_map.c                           — collision, LOS, pathfinding
+  fc_combat.c                        — targeting, rolls, damage
+  fc_npc.c                           — NPC defs, AI, movement
+  fc_player.c                        — player movement, stats
+  fc_prayer.c                        — prayer system
+  fc_inventory.c                     — inventory, equipment, items
+  fc_projectile.c                    — projectile flight/impact
+  fc_wave.c                          — wave data, encounter script
+  fc_obs.c                           — observation, mask, reward
+  fc_rng.c                           — deterministic RNG
+  fc_debug.c                         — hash, replay, instrumentation
+  fc_ids.h                           — canonical internal ID enums
+
+Reference (for porting, NOT for linking):
+  reference/legacy-rsps/             — full Void RSPS in Kotlin
+  /home/joe/projects/runescape-rl-reference/current_fightcaves_demo/
+
+Export scripts:
+  /home/joe/projects/runescape-rl-reference/valo_envs/ocean/osrs/scripts/
+
+Cache:
+  Download: ~/Downloads/cache-oldschool-live-en-b237-*.tar.gz
+  Extract to: /tmp/osrs_cache_modern/cache/
+
+================================================================================
+BUILD & RUN
+================================================================================
+
+# Extract cache (after reboot)
+mkdir -p /tmp/osrs_cache_modern && cd /tmp/osrs_cache_modern && \
+tar xzf ~/Downloads/cache-oldschool-live-en-b237-*.tar.gz
+
+# Build
+cd /home/joe/projects/runescape-rl/claude/runescape-rl && \
+cmake --build build -j$(nproc)
+
+# Run
+cd build && ./demo-env/fc_viewer
+
+================================================================================
+DO NOT
+================================================================================
+
+- Use the Void 634 cache for graphics (use b237 OSRS cache instead)
+- Decode cache data in C at runtime (use Python export → binary assets)
+- Let raw cache IDs leak into sim core (use fc_ids.h canonical enums)
+- Let the viewer decide gameplay outcomes (viewer reads state, never writes it)
+- Assume Void 634 IDs work in b237 (translate everything through fc_ids.h)
+- Build systems that aren't needed for Fight Caves
+- Implement separate game logic for viewer vs headless (one backend, two frontends)

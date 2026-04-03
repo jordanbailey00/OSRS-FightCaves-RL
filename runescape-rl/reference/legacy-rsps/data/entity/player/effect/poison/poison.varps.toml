@@ -1,9 +1,0 @@
-[poison]
-id = 102
-format = "int"
-persist = true
-
-[disease]
-id = 456
-format = "int"
-persist = true

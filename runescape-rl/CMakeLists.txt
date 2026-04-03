@@ -11,8 +11,8 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Shared C backend (training-env owns the mechanics)
-add_subdirectory(training-env)
-
-# Raylib viewer shell (thin presentation layer over training-env backend)
+# Demo environment (viewer + backend)
 add_subdirectory(demo-env)
+
+# Training environment (headless backend for RL)
+add_subdirectory(training-env)

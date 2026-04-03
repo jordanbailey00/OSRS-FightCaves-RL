@@ -1,4 +1,0 @@
-spawns = [
-# 9622
-  { id = "rope", x = 2403, y = 9660, delay = 100, members = true },
-]

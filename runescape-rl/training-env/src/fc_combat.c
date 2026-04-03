@@ -1,6 +1,5 @@
 #include "fc_api.h"
 #include "fc_npc.h"
-#include "fc_debug.h"
 
 /*
  * fc_combat.c — OSRS combat math and pending hit resolution.
@@ -44,12 +43,19 @@ int fc_npc_melee_max_hit(int str_level, int str_bonus) {
 int fc_player_def_roll(const FcPlayer* p, int attack_style) {
     int def_bonus;
     switch (attack_style) {
-        case ATTACK_MELEE:  def_bonus = p->defence_crush; break;  /* melee NPCs use crush */
+        case ATTACK_MELEE:  def_bonus = p->defence_crush; break;  /* FC melee NPCs use crush/stab */
         case ATTACK_RANGED: def_bonus = p->defence_ranged; break;
         case ATTACK_MAGIC:  def_bonus = p->defence_magic; break;
         default:            def_bonus = 0; break;
     }
-    int eff_def = p->defence_level + 9;
+
+    int eff_def;
+    if (attack_style == ATTACK_MAGIC) {
+        /* Magic defence: 30% from Defence, 70% from Magic (OSRS formula from Hit.kt) */
+        eff_def = (int)(p->defence_level * 0.3 + p->magic_level * 0.7) + 9;
+    } else {
+        eff_def = p->defence_level + 9;
+    }
     return eff_def * (def_bonus + 64);
 }
 
@@ -63,8 +69,12 @@ int fc_player_ranged_attack_roll(const FcPlayer* p) {
 }
 
 int fc_player_ranged_max_hit(const FcPlayer* p) {
+    /* OSRS: 5 + (effectiveLevel * strengthBonus) / 64
+     * effectiveLevel = ranged_level + 8 (accurate style)
+     * strengthBonus = ranged_strength_bonus from equipment
+     * With Rng 70, adamant bolts (str 100): 5 + (78 * 100) / 64 = 5 + 121 = 126 tenths = 12.6 */
     int eff_str = p->ranged_level + 8;
-    return ((eff_str * (p->ranged_strength_bonus + 64) + 320) / 640);
+    return 5 + (eff_str * p->ranged_strength_bonus) / 64;
 }
 
 /* ======================================================================== */
@@ -101,18 +111,67 @@ int fc_distance_to_npc(int px, int py, const FcNpc* npc) {
 /* Hit delay formulas                                                        */
 /* ======================================================================== */
 
+/*
+ * OSRS projectile hit delay:
+ *   travel_time = time_offset + (distance * multiplier)  [in client ticks, 20ms each]
+ *   game_ticks = travel_time / 30 + 1                    [CLIENT_TICKS.toTicks() = n/30]
+ *
+ * Per-NPC projectile definitions from tzhaar_fight_cave.gfx.toml:
+ *   tok_xil_shoot:   delay=32, height=256, curve=16, no offset/mult → default mult=5
+ *   ket_zek_travel:  delay=28, height=128, curve=16, offset=8, mult=8
+ *   tztok_jad_travel: delay=86, height=50, curve=16, mult=8, no offset
+ *   Jad ranged: no projectile, fixed client delay=120
+ *
+ * Melee: delay 1 (resolves same tick in our system — queued then resolved in same tick loop)
+ */
+
 int fc_melee_hit_delay(void) {
-    return 1;  /* melee hits resolve next tick */
+    return 1;
 }
 
+/* Player ranged (rune crossbow + adamant bolts) */
 int fc_ranged_hit_delay(int distance) {
-    /* Player ranged: floor((3 + distance) / 6) + 1 + 1(player bonus) */
-    return (3 + distance) / 6 + 2;
+    /* Standard crossbow projectile: delay + distance-based travel */
+    int travel = 5 * distance;  /* default multiplier for player ranged */
+    return travel / 30 + 1;
 }
 
+/* Generic magic delay (unused now — prefer fc_npc_hit_delay) */
 int fc_magic_hit_delay(int distance) {
-    /* Magic: 1 + floor((1 + distance) / 3) ticks */
-    return 1 + (1 + distance) / 3;
+    int travel = 8 + 8 * distance;
+    return travel / 30 + 1;
+}
+
+/*
+ * Per-NPC-type hit delay — uses exact projectile timing from Void 634 gfx.toml.
+ * Called from NPC attack code for precise parity with RSPS.
+ */
+int fc_npc_hit_delay(int npc_type, int attack_style, int distance) {
+    if (attack_style == ATTACK_MELEE) return 1;
+
+    switch (npc_type) {
+        case NPC_TOK_XIL:
+            /* tok_xil_shoot: default mult=5, no offset */
+            return (5 * distance) / 30 + 1;
+
+        case NPC_KET_ZEK:
+            /* ket_zek_travel: offset=8, mult=8 */
+            return (8 + 8 * distance) / 30 + 1;
+
+        case NPC_TZTOK_JAD:
+            if (attack_style == ATTACK_MAGIC) {
+                /* tztok_jad_travel: mult=8, no offset */
+                return (8 * distance) / 30 + 1;
+            } else {
+                /* Jad ranged: no projectile, fixed client delay=120 */
+                return 120 / 30 + 1;  /* = 5 game ticks */
+            }
+
+        default:
+            /* Fallback for any other ranged/magic NPC */
+            if (attack_style == ATTACK_RANGED) return (5 * distance) / 30 + 1;
+            return (8 + 8 * distance) / 30 + 1;
+    }
 }
 
 /* ======================================================================== */
@@ -170,8 +229,20 @@ void fc_resolve_player_pending_hits(FcState* state) {
             p->total_damage_taken += final_damage;
             p->hit_landed_this_tick = 1;
 
-            /* Tz-Kih prayer drain (happens regardless of prayer block) */
-            if (h->prayer_drain > 0 && !blocked) {
+            /* Auto-retaliate: if player has no target, target the attacker.
+             * approach_target stays 0 — player attacks in place, doesn't chase. */
+            if (p->attack_target_idx < 0 && h->source_npc_idx >= 0) {
+                FcNpc* attacker = &state->npcs[h->source_npc_idx];
+                if (attacker->active && !attacker->is_dead) {
+                    p->attack_target_idx = h->source_npc_idx;
+                    p->approach_target = 0;  /* don't chase, attack from here */
+                }
+            }
+
+            /* Tz-Kih prayer drain — RSPS impact_drain fires unconditionally on attack
+             * impact, separate from damage. Drains even when prayer blocks the damage.
+             * (combat.toml: impact_drain = { skill = "prayer", amount = 1 }) */
+            if (h->prayer_drain > 0) {
                 p->current_prayer -= h->prayer_drain;
                 if (p->current_prayer < 0) p->current_prayer = 0;
             }
@@ -220,22 +291,28 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
                 npc->healer_distracted = 1;
             }
 
-            /* NPC death */
+            /* NPC death — keep active for a few ticks so viewer can
+             * show the killing hitsplat and death animation. */
             if (npc->current_hp <= 0 && !npc->is_dead) {
                 npc->is_dead = 1;
                 npc->died_this_tick = 1;
-                npc->active = 0;
+                npc->death_timer = 3;  /* remain visible for 3 ticks */
                 state->npcs_killed_this_tick++;
                 state->total_npcs_killed++;
-                state->npcs_remaining--;
 
                 if (npc->npc_type == NPC_TZTOK_JAD) {
                     state->jad_killed = 1;
                 }
 
-                /* Tz-Kek: split into 2 small Tz-Kek */
+                /* Tz-Kek parent: split into 2 small Tz-Kek.
+                 * RSPS: parent death does NOT decrement remaining (not in despawn list).
+                 * The parent was pre-counted as 2 at spawn time.
+                 * Only the split children decrement on death. */
                 if (npc->npc_type == NPC_TZ_KEK) {
                     fc_npc_tz_kek_split(state, npc->x, npc->y);
+                    /* Don't decrement remaining — children will do it */
+                } else {
+                    state->npcs_remaining--;
                 }
             }
 

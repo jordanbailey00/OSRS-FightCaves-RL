@@ -1,9 +1,0 @@
-[seagull]
-attack_speed = 4
-retreat_range = 8
-defend_anim = "seagull_defend"
-death_anim = "seagull_death"
-
-[seagull.melee]
-range = 1
-target_hit = { offense = "crush", max = 0 }

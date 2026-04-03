@@ -1,7 +1,0 @@
-[select_quick_prayers]
-id = 181
-format = "boolean"
-
-[using_quick_prayers]
-id = 182
-format = "boolean"

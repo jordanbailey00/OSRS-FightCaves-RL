@@ -1,6 +1,5 @@
 #include "fc_api.h"
 #include "fc_npc.h"
-#include "fc_debug.h"
 
 /*
  * fc_combat.c — OSRS combat math and pending hit resolution.

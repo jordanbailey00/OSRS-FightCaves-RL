@@ -1,5 +1,0 @@
-[baby_tanglefoot_drop_table]
-type = "all"
-drops = [
-    { id = "leaves" },
-]

@@ -1,4 +1,0 @@
-[shantay_state]
-format = "list"
-persist = true
-values = [ "new_player", "returning", "jailed" ]

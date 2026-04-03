@@ -3,10 +3,14 @@
 /*
  * fc_prayer.c — Prayer activation, drain, and potion restore.
  *
- * OSRS prayer drain:
- *   drain_counter accumulates each tick based on active prayer cost.
- *   When counter >= (60 + 2 * prayer_bonus), subtract 1 prayer point (in tenths: 10).
- *   Protection prayers cost 12 drain per tick.
+ * OSRS prayer drain (from PrayerDrain.kt):
+ *   Each tick: prayerDrainCounter += totalDrainEffect (sum of active prayer drains)
+ *   prayerDrainResistance = 60 + (prayerBonus * 2)
+ *   While counter > resistance: drain 1 prayer point, counter -= resistance
+ *
+ *   Protection prayers all cost drain=12 per tick (from prayers.toml).
+ *   Prayer points are in tenths (430 = 43 prayer points).
+ *   Each "drain 1 point" = subtract 10 tenths.
  *
  * Prayer potion restore:
  *   floor(prayer_level * 0.25) + 7 points per dose.
@@ -20,39 +24,27 @@ void fc_prayer_drain_tick(FcPlayer* p) {
     if (p->current_prayer <= 0) {
         /* Auto-deactivate if prayer points depleted */
         p->prayer = PRAYER_NONE;
+        p->prayer_drain_counter = 0;
         return;
     }
 
-    /* Drain 1 point per tick for overhead prayers.
-     * Simplified from the accumulator model — at prayer bonus 5,
-     * OSRS drains ~1 point every ~5.8 ticks. We use a simpler model:
-     * drain_rate / (60 + 2 * prayer_bonus) points per tick, accumulated. */
+    /* Counter-based drain matching OSRS PrayerDrain.kt exactly:
+     * Accumulate drain rate each tick, drain 1 point when counter exceeds resistance. */
+    int drain_rate = PRAYER_OVERHEAD_DRAIN_RATE;  /* all 3 protect prayers = 12 */
     int resistance = 60 + 2 * p->prayer_bonus;
-    /* We track drain in the attack_timer's unused bits — actually let's just
-     * do a direct per-tick drain in tenths. At bonus 5, resistance = 70.
-     * 12/70 ≈ 0.171 points/tick. In tenths: ~1.71/tick.
-     * Simpler: accumulate drain_rate, when >= resistance, subtract 10 (1 point in tenths). */
 
-    /* We'll use a static drain counter approach. Since we don't have a dedicated
-     * field, we'll drain directly: subtract (drain_rate * 10 / resistance) tenths per tick,
-     * but that loses precision. Better: track via a counter on the state.
-     *
-     * For simplicity and accuracy: drain 10 tenths (1 point) every
-     * ceil(resistance / drain_rate) ticks = ceil(70/12) = 6 ticks at bonus 5.
-     * That's ~7.2 points per 43 ticks, fairly close to OSRS.
-     *
-     * Implementation: use a modular tick counter. */
+    p->prayer_drain_counter += drain_rate;
 
-    /* Actually, just drain a fixed amount per tick in tenths for now.
-     * OSRS at prayer bonus 5: ~1 point per 5.83 ticks.
-     * In tenths: 10 / 5.83 ≈ 1.71 tenths per tick.
-     * Round to integer: drain 2 tenths per tick (slightly fast, close enough). */
-    int drain = (PRAYER_OVERHEAD_DRAIN_RATE * 10 + resistance - 1) / resistance;
-    /* drain = ceil(120 / 70) = ceil(1.71) = 2 tenths per tick at bonus 5 */
-    p->current_prayer -= drain;
-    if (p->current_prayer <= 0) {
-        p->current_prayer = 0;
-        p->prayer = PRAYER_NONE;
+    while (p->prayer_drain_counter > resistance) {
+        p->current_prayer -= 10;  /* drain 1 prayer point (10 tenths) */
+        p->prayer_drain_counter -= resistance;
+
+        if (p->current_prayer <= 0) {
+            p->current_prayer = 0;
+            p->prayer = PRAYER_NONE;
+            p->prayer_drain_counter = 0;
+            return;
+        }
     }
 }
 

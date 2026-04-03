@@ -1,8 +1,0 @@
-package sim.buffer.read
-
-internal class BufferReaderTest : ReaderTest() {
-    override fun packet(vararg bytes: Int) {
-        buffer = BufferReader(bytes.map { it.toByte() }.toByteArray())
-    }
-
-}
