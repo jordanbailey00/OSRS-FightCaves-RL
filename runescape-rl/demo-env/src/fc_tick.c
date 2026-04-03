@@ -2,6 +2,8 @@
 #include "fc_combat.h"
 #include "fc_prayer.h"
 #include "fc_pathfinding.h"
+#include <math.h>
+#include <stdio.h>
 #include "fc_npc.h"
 #include "fc_wave.h"
 #include "fc_contracts.h"
@@ -163,6 +165,13 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
             int nx = p->route_x[p->route_idx];
             int ny = p->route_y[p->route_idx];
             if (fc_tile_walkable(nx, ny, state->walkable)) {
+                /* Update facing based on movement direction */
+                int dx = nx - p->x;
+                int dy = ny - p->y;
+                if (dx != 0 || dy != 0) {
+                    /* atan2 of world X delta and negated world Y delta (for Raylib Z) */
+                    p->facing_angle = atan2f((float)dx, (float)(-dy)) * (180.0f / 3.14159f);
+                }
                 p->x = nx;
                 p->y = ny;
                 state->movement_this_tick = 1;
@@ -232,6 +241,22 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                     p->route_len = fc_pathfind_bfs(p->x, p->y, best_x, best_y,
                                                     state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
                     p->route_idx = 0;
+                    fprintf(stderr, "APPROACH: player(%d,%d)→tile(%d,%d) dist=%d route=%d steps\n",
+                            p->x, p->y, best_x, best_y, dist, p->route_len);
+                } else {
+                    fprintf(stderr, "APPROACH: no valid tile found! player(%d,%d) npc(%d,%d) size=%d dist=%d\n",
+                            p->x, p->y, target->x, target->y, target->size, dist);
+                }
+            }
+
+            /* Face the attack target */
+            {
+                float tx = (float)target->x + (float)target->size*0.5f;
+                float ty = (float)target->y + (float)target->size*0.5f;
+                float dx = tx - ((float)p->x + 0.5f);
+                float dy = ty - ((float)p->y + 0.5f);
+                if (dx != 0 || dy != 0) {
+                    p->facing_angle = atan2f(dx, -dy) * (180.0f / 3.14159f);
                 }
             }
 

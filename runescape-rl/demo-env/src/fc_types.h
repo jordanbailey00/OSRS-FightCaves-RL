@@ -214,6 +214,9 @@ typedef struct {
     int route_len;      /* total steps in current route */
     int route_idx;      /* next step to consume (0..route_len-1) */
 
+    /* Facing direction — angle in degrees, set each movement step */
+    float facing_angle;
+
     /* Attack target — NPC array index, or -1 for none. */
     int attack_target_idx;
     /* 1 = player explicitly clicked this NPC (approach + attack).

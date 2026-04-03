@@ -482,7 +482,24 @@ Fix plan:
      Make them large enough to read (font size 16+).
   4. Attack indication: brief flash or pulse on attacker when they swing.
 
---- PHASE 8e: VISUAL PROJECTILES ---
+--- PHASE 8e: VISUAL PROJECTILES WITH ACTUAL MODELS ---
+
+Projectile model IDs (from osrs-dumps dump.spot):
+  Crossbow bolt:           model 3135 (crossbowbolt_travel, spotanim 27)
+  Tok-Xil spine:           model 9340 (tzhaar_spine_attack, spotanim 443)
+  Ket-Zek fire launch:     model 9335 (tzhaar_fire_launch_travel, spotanim 445)
+  Jad ranged fire:         model 6434 (tzhaar_ranged_fire_attack, spotanim 440)
+  Jad magic fireball:      model 9334 (tzhaar_firebreath_attack, spotanim 439)
+  Yt-MejKot heal:          model 9341 (tzhaar_heal, spotanim 444)
+
+Implementation:
+  1. Export projectile models from b237 cache (same pipeline as NPC models)
+  2. Load as separate model set in viewer
+  3. Replace colored sphere projectiles with actual 3D model instances
+  4. Rotate projectile to face travel direction
+  5. Scale per spotanim definition (resizeh/resizev)
+
+--- PHASE 8e-old: VISUAL PROJECTILES ---
 
 Requirements:
   - Ranged/magic attacks show an actual projectile moving from attacker to target

@@ -39,6 +39,12 @@ typedef struct {
     uint32_t model_id;
     Model model;
     int loaded;
+    /* Animation data (from MDL2 binary) */
+    int16_t* base_verts;       /* [base_vert_count * 3] original OSRS coords */
+    uint8_t* vertex_skins;     /* [base_vert_count] skin label per base vertex */
+    uint16_t* face_indices;    /* [face_count * 3] index buffer */
+    int base_vert_count;
+    int face_count;
 } NpcModelEntry;
 
 typedef struct {
@@ -155,11 +161,30 @@ static NpcModelSet* fc_npc_models_load(const char* path) {
 
         UploadMesh(&mesh, false);
 
+        /* Read animation data (base verts, skins, face indices) */
+        int bvc = (int)base_vc;
+        int16_t* base_v = (int16_t*)malloc(bvc * 3 * sizeof(int16_t));
+        fread(base_v, sizeof(int16_t), bvc * 3, f);
+
+        uint8_t* skins = (uint8_t*)malloc(bvc);
+        fread(skins, 1, bvc, f);
+
+        uint16_t* findices = (uint16_t*)malloc(tc * 3 * sizeof(uint16_t));
+        fread(findices, sizeof(uint16_t), tc * 3, f);
+
+        /* Skip face priorities (uint8 per face) */
+        fseek(f, tc, SEEK_CUR);
+
         set->entries[m].model_id = model_id;
         set->entries[m].model = LoadModelFromMesh(mesh);
         set->entries[m].loaded = 1;
+        set->entries[m].base_verts = base_v;
+        set->entries[m].vertex_skins = skins;
+        set->entries[m].face_indices = findices;
+        set->entries[m].base_vert_count = bvc;
+        set->entries[m].face_count = tc;
 
-        fprintf(stderr, "  NPC model %u: %d tris loaded\n", model_id, tc);
+        fprintf(stderr, "  NPC model %u: %d tris, %d base verts loaded\n", model_id, tc, bvc);
     }
 
     free(offsets);
@@ -174,6 +199,9 @@ static void fc_npc_models_unload(NpcModelSet* set) {
     for (int i = 0; i < set->count; i++) {
         if (set->entries[i].loaded) {
             UnloadModel(set->entries[i].model);
+            free(set->entries[i].base_verts);
+            free(set->entries[i].vertex_skins);
+            free(set->entries[i].face_indices);
         }
     }
     free(set);

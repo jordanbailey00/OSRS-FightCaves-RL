@@ -25,6 +25,7 @@
 #include "osrs_pvp_terrain.h"
 #include "osrs_pvp_objects.h"
 #include "fc_npc_models.h"
+#include "osrs_pvp_anim.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,14 @@
 #define MAX_TPS         30
 #define MIN_TPS         1
 #define MAX_HITSPLATS   32
+
+/* Player animation sequence IDs (from osrs-dumps seq.sym) */
+#define PLAYER_ANIM_IDLE   4591  /* xbows_human_ready */
+#define PLAYER_ANIM_WALK   4226  /* xbows_human_walk_f */
+#define PLAYER_ANIM_RUN    4228  /* xbows_human_run */
+#define PLAYER_ANIM_ATTACK 4230  /* xbows_human_fire_and_reload */
+#define PLAYER_ANIM_EAT    829   /* human_eat */
+#define PLAYER_ANIM_DEATH  836   /* human_death */
 
 /* Colors */
 #define COL_BG          CLITERAL(Color){ 80, 80, 85, 255 }
@@ -122,7 +131,13 @@ typedef struct {
     TerrainMesh* terrain;
     ObjectMesh* objects;
     NpcModelSet* npc_models;
-    NpcModelSet* player_model;  /* reuse same loader for player equipment model */
+    NpcModelSet* player_model;
+    /* Player animation */
+    AnimCache* player_anims;
+    AnimModelState* player_anim_state;
+    uint16_t player_anim_seq;     /* current animation sequence ID */
+    int player_anim_frame;        /* current frame index within sequence */
+    float player_anim_timer;      /* seconds remaining in current frame */
     /* Hitsplats */
     Hitsplat hitsplats[MAX_HITSPLATS];
     /* Buffered key inputs (captured every frame, consumed on tick) */
@@ -519,8 +534,10 @@ static void draw_scene(ViewerState* v) {
                 ? &v->player_model->entries[0] : NULL;
             if (pm && pm->loaded) {
                 Vector3 pos = {ex, gy, ey};
+                /* Use the backend-computed facing angle (set per movement step or when targeting) */
+                float face_angle = v->state.player.facing_angle;
                 rlDisableBackfaceCulling();
-                DrawModel(pm->model, pos, 1.0f, WHITE);
+                DrawModelEx(pm->model, pos, (Vector3){0,1,0}, face_angle, (Vector3){1,1,1}, WHITE);
                 rlEnableBackfaceCulling();
             } else {
                 DrawCylinder((Vector3){ex, gy, ey}, 0.4f, 0.4f, 2.0f, 8, COL_PLAYER);
@@ -921,6 +938,33 @@ int main(int argc, char** argv) {
         }
     }
 
+    /* Load player animations */
+    {
+        const char* anim_paths[] = {
+            "demo-env/assets/fc_player.anims",
+            "../demo-env/assets/fc_player.anims",
+            "assets/fc_player.anims", NULL };
+        for (int i = 0; anim_paths[i]; i++) {
+            if (FileExists(anim_paths[i])) {
+                v.player_anims = anim_cache_load(anim_paths[i]);
+                break;
+            }
+        }
+        /* Create animation model state from player model's vertex skins */
+        if (v.player_anims && v.player_model && v.player_model->count > 0) {
+            NpcModelEntry* pm = &v.player_model->entries[0];
+            if (pm->loaded && pm->vertex_skins) {
+                v.player_anim_state = anim_model_state_create(
+                    pm->vertex_skins, pm->base_vert_count);
+                v.player_anim_seq = PLAYER_ANIM_IDLE;
+                v.player_anim_frame = 0;
+                v.player_anim_timer = 0;
+                fprintf(stderr, "Player animation state created (%d base verts)\n",
+                        pm->base_vert_count);
+            }
+        }
+    }
+
     /* Load prayer overhead icon textures */
     {
         const char* pray_dirs[] = {"demo-env/assets/", "../demo-env/assets/", "assets/", NULL};
@@ -1163,6 +1207,72 @@ int main(int argc, char** argv) {
             }
         }
 
+        /* Update player animation */
+        if (v.player_anim_state && v.player_anims && v.player_model &&
+            v.player_model->count > 0) {
+            NpcModelEntry* pm = &v.player_model->entries[0];
+            float dt = GetFrameTime();
+
+            /* Select animation based on player state.
+             * attack_timer == 5 means player JUST fired (crossbow speed = 5 ticks).
+             * hit_landed_this_tick fires for both player attacks AND incoming hits,
+             * so we don't use it for the attack animation. */
+            uint16_t desired_seq = PLAYER_ANIM_IDLE;
+            if (v.state.terminal == TERMINAL_PLAYER_DEATH) {
+                desired_seq = PLAYER_ANIM_DEATH;
+            } else if (v.state.player.food_eaten_this_tick) {
+                desired_seq = PLAYER_ANIM_EAT;
+            } else if (v.state.player.attack_timer == 5) {
+                desired_seq = PLAYER_ANIM_ATTACK;
+            } else if (v.state.movement_this_tick) {
+                desired_seq = v.state.player.is_running ? PLAYER_ANIM_RUN : PLAYER_ANIM_WALK;
+            }
+
+            /* Switch animation if needed */
+            if (desired_seq != v.player_anim_seq) {
+                v.player_anim_seq = desired_seq;
+                v.player_anim_frame = 0;
+                v.player_anim_timer = 0;
+            }
+
+            /* Advance frame timer */
+            AnimSequence* seq = anim_get_sequence(v.player_anims, v.player_anim_seq);
+            if (seq && seq->frame_count > 0) {
+                v.player_anim_timer -= dt;
+                if (v.player_anim_timer <= 0) {
+                    v.player_anim_frame = (v.player_anim_frame + 1) % seq->frame_count;
+                    /* Delay in game ticks → seconds: delay * 0.6 / game_speed
+                     * At TPS=2, each game tick = 0.5s; at TPS=1 = 1s. Use 0.02s per frame for smooth playback. */
+                    float frame_delay = (float)seq->frames[v.player_anim_frame].delay * 0.02f;
+                    if (frame_delay < 0.016f) frame_delay = 0.016f;
+                    v.player_anim_timer = frame_delay;
+                }
+
+                /* Apply animation frame to model */
+                AnimFrameData* frame_data = &seq->frames[v.player_anim_frame].frame;
+                AnimFrameBase* fb = anim_get_framebase(v.player_anims, frame_data->framebase_id);
+                if (fb) {
+                    anim_apply_frame(v.player_anim_state, pm->base_verts, frame_data, fb);
+
+                    /* Re-expand into mesh vertices and scale to tile units */
+                    float* mesh_verts = pm->model.meshes[0].vertices;
+                    anim_update_mesh(mesh_verts, v.player_anim_state,
+                                     pm->face_indices, pm->face_count);
+
+                    /* Scale from OSRS units to tile units (same as initial load) */
+                    int evc = pm->face_count * 3;
+                    for (int vi = 0; vi < evc; vi++) {
+                        mesh_verts[vi*3+0] /=  128.0f;
+                        mesh_verts[vi*3+1] /=  128.0f;
+                        mesh_verts[vi*3+2] /= -128.0f;
+                    }
+
+                    UpdateMeshBuffer(pm->model.meshes[0], 0, mesh_verts,
+                                     evc * 3 * sizeof(float), 0);
+                }
+            }
+        }
+
         /* Draw */
         BeginDrawing();
         ClearBackground(COL_BG);
@@ -1194,6 +1304,8 @@ int main(int argc, char** argv) {
     if (v.pray_melee_tex.id > 0) UnloadTexture(v.pray_melee_tex);
     if (v.pray_missiles_tex.id > 0) UnloadTexture(v.pray_missiles_tex);
     if (v.pray_magic_tex.id > 0) UnloadTexture(v.pray_magic_tex);
+    if (v.player_anim_state) anim_model_state_free(v.player_anim_state);
+    if (v.player_anims) anim_cache_free(v.player_anims);
     if (v.player_model) fc_npc_models_unload(v.player_model);
     if (v.npc_models) fc_npc_models_unload(v.npc_models);
     if (v.objects && v.objects->loaded) { UnloadModel(v.objects->model); free(v.objects); }
