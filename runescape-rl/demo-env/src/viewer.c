@@ -48,6 +48,28 @@
 #define PLAYER_ANIM_EAT    829   /* human_eat */
 #define PLAYER_ANIM_DEATH  836   /* human_death */
 
+/* NPC animation sequence IDs (from osrs-dumps seq.sym) */
+/* NPC animation IDs — Jad uses lordmagmus anims (same model as FC Jad in cache) */
+static const uint16_t NPC_ANIM_IDLE[] = {
+    0, 2618, 2624, 2624, 2631, 2636, 2642, 2650, 2636  /* indexed by NPC type 0-8 */
+};
+static const uint16_t NPC_ANIM_WALK[] = {
+    0, 2619, 2623, 2623, 2632, 2634, 2643, 2651, 2634
+};
+static const uint16_t NPC_ANIM_ATTACK[] = {
+    0, 2621, 2625, 2625, 2628, 2637, 2644, 2655, 2637
+};
+static const uint16_t NPC_ANIM_DEATH[] = {
+    0, 2620, 2627, 2627, 2630, 2638, 2646, 2654, 2638
+};
+
+/* Projectile spotanim IDs for model lookup */
+#define PROJ_CROSSBOW_BOLT  27
+#define PROJ_TOK_XIL_SPINE  443
+#define PROJ_KET_ZEK_FIRE   445
+#define PROJ_JAD_RANGED     440
+#define PROJ_JAD_MAGIC      439
+
 /* Colors */
 #define COL_BG          CLITERAL(Color){ 80, 80, 85, 255 }
 #define COL_HEADER      CLITERAL(Color){ 30, 30, 40, 255 }
@@ -91,12 +113,13 @@ typedef struct {
 #define MAX_PROJECTILES 16
 typedef struct {
     int active;
-    float src_x, src_y, src_z;   /* 3D source position */
-    float dst_x, dst_y, dst_z;   /* 3D destination position */
-    float total_time;             /* total travel time in seconds */
-    float elapsed;                /* elapsed time in seconds */
+    float src_x, src_y, src_z;
+    float dst_x, dst_y, dst_z;
+    float total_time;
+    float elapsed;
     Color color;
     float radius;
+    uint32_t spot_id;            /* spotanim ID for model lookup (0 = use sphere) */
 } VisualProjectile;
 
 /* NPC colors by type */
@@ -132,12 +155,19 @@ typedef struct {
     ObjectMesh* objects;
     NpcModelSet* npc_models;
     NpcModelSet* player_model;
-    /* Player animation */
-    AnimCache* player_anims;
+    NpcModelSet* projectile_models;
+    /* Animation cache (shared by player + all NPCs) */
+    AnimCache* anim_cache;
+    /* Player animation state */
     AnimModelState* player_anim_state;
-    uint16_t player_anim_seq;     /* current animation sequence ID */
-    int player_anim_frame;        /* current frame index within sequence */
-    float player_anim_timer;      /* seconds remaining in current frame */
+    uint16_t player_anim_seq;
+    int player_anim_frame;
+    float player_anim_timer;
+    /* Per-NPC animation state */
+    AnimModelState* npc_anim_states[FC_MAX_NPCS];
+    uint16_t npc_anim_seq[FC_MAX_NPCS];
+    int npc_anim_frame[FC_MAX_NPCS];
+    float npc_anim_timer[FC_MAX_NPCS];
     /* Hitsplats */
     Hitsplat hitsplats[MAX_HITSPLATS];
     /* Buffered key inputs (captured every frame, consumed on tick) */
@@ -150,6 +180,16 @@ typedef struct {
     VisualProjectile projectiles[MAX_PROJECTILES];
     /* Prayer overhead icon textures */
     Texture2D pray_melee_tex, pray_missiles_tex, pray_magic_tex;
+    /* Side panel tabs (Phase 8h) */
+    int active_tab;     /* 0=inventory, 1=combat, 2=prayer */
+    int tab_area_y;     /* screen Y where tab buttons start (set during draw) */
+    int combat_style;   /* 0=accurate, 1=rapid, 2=long range */
+    /* Item / tab sprites */
+    Texture2D tex_ppot, tex_shark;
+    Texture2D tex_pray_melee_on, tex_pray_melee_off;
+    Texture2D tex_pray_range_on, tex_pray_range_off;
+    Texture2D tex_pray_magic_on, tex_pray_magic_off;
+    Texture2D tex_tab_inv, tex_tab_combat, tex_tab_prayer;
     /* Debug toggles */
     int godmode;        /* 1 = player can't die */
     int debug_spawn;    /* NPC type to spawn (0 = off, 1-8 = type) */
@@ -160,6 +200,9 @@ typedef struct {
     int prev_npc_active[FC_MAX_NPCS];  /* was this NPC active last tick? */
     float tick_frac;
 } ViewerState;
+
+/* Forward declarations */
+static int process_tab_click(ViewerState* v, float mx, float my);
 
 /* Helpers */
 static void text_s(const char* t, int x, int y, int sz, Color c) {
@@ -184,21 +227,35 @@ static void reset_ep(ViewerState* v) {
     /* Initialize prev positions */
     v->prev_player_x = (float)v->state.player.x;
     v->prev_player_y = (float)v->state.player.y;
+    /* Reset NPC animation states */
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         v->prev_npc_x[i] = (float)v->state.npcs[i].x;
         v->prev_npc_y[i] = (float)v->state.npcs[i].y;
         v->prev_npc_active[i] = v->state.npcs[i].active;
+        if (v->npc_anim_states[i]) {
+            anim_model_state_free(v->npc_anim_states[i]);
+            v->npc_anim_states[i] = NULL;
+        }
+        v->npc_anim_seq[i] = 0;
+        v->npc_anim_frame[i] = 0;
+        v->npc_anim_timer[i] = 0;
     }
 }
 
 static void spawn_projectile(ViewerState* v,
                              float sx, float sy, float sz,
                              float dx, float dy, float dz,
-                             float travel_secs, Color col, float radius) {
+                             float travel_secs, Color col, float radius,
+                             uint32_t spot_id) {
     for (int i = 0; i < MAX_PROJECTILES; i++) {
         if (!v->projectiles[i].active) {
-            v->projectiles[i] = (VisualProjectile){
-                1, sx, sy, sz, dx, dy, dz, travel_secs, 0.0f, col, radius};
+            VisualProjectile* vp = &v->projectiles[i];
+            vp->active = 1;
+            vp->src_x = sx; vp->src_y = sy; vp->src_z = sz;
+            vp->dst_x = dx; vp->dst_y = dy; vp->dst_z = dz;
+            vp->total_time = travel_secs; vp->elapsed = 0;
+            vp->color = col; vp->radius = radius;
+            vp->spot_id = spot_id;
             return;
         }
     }
@@ -364,16 +421,18 @@ static void process_human_clicks(ViewerState* v) {
                 fprintf(stderr, " → MISS (raycast failed)\n");
             }
         } else {
-            /* Click in side panel — check if clicking an NPC health bar */
-            for (int pi = 0; pi < v->panel_npc_count; pi++) {
-                if (mpos.y >= v->panel_npc_y[pi] && mpos.y < v->panel_npc_y[pi] + 12) {
-                    int ni = v->panel_npc_slot[pi];
-                    p->attack_target_idx = ni;
-                    p->approach_target = 1;
-                    p->route_len = 0;
-                    p->route_idx = 0;
-                    fprintf(stderr, "PANEL CLICK → ATTACK npc_idx=%d\n", ni);
-                    break;
+            /* Click in side panel — try tabs first, then NPC health bars */
+            if (!process_tab_click(v, mpos.x, mpos.y)) {
+                for (int pi = 0; pi < v->panel_npc_count; pi++) {
+                    if (mpos.y >= v->panel_npc_y[pi] && mpos.y < v->panel_npc_y[pi] + 12) {
+                        int ni = v->panel_npc_slot[pi];
+                        p->attack_target_idx = ni;
+                        p->approach_target = 1;
+                        p->route_len = 0;
+                        p->route_idx = 0;
+                        fprintf(stderr, "PANEL CLICK → ATTACK npc_idx=%d\n", ni);
+                        break;
+                    }
                 }
             }
         }
@@ -603,17 +662,31 @@ static void draw_scene(ViewerState* v) {
         DrawCircle3D((Vector3){ex, 0.05f, ey}, r, (Vector3){1,0,0}, 90.0f, COL_TARGET);
     }
 
-    /* Draw active visual projectiles as colored spheres */
+    /* Draw active visual projectiles — use 3D model if available, sphere fallback */
     for (int pi = 0; pi < MAX_PROJECTILES; pi++) {
         VisualProjectile* vp = &v->projectiles[pi];
         if (!vp->active) continue;
         float t = (vp->total_time > 0) ? vp->elapsed / vp->total_time : 1.0f;
         if (t > 1.0f) t = 1.0f;
-        /* Lerp position with slight arc (parabolic Y offset for visual polish) */
         float px = vp->src_x + (vp->dst_x - vp->src_x) * t;
         float py = vp->src_y + (vp->dst_y - vp->src_y) * t + sinf(t * 3.14159f) * 1.5f;
         float pz = vp->src_z + (vp->dst_z - vp->src_z) * t;
-        DrawSphere((Vector3){px, py, pz}, vp->radius, vp->color);
+
+        /* Try to render actual projectile model */
+        NpcModelEntry* pm = (vp->spot_id > 0 && v->projectile_models)
+            ? fc_npc_model_find(v->projectile_models, vp->spot_id) : NULL;
+        if (pm && pm->loaded) {
+            /* Rotate projectile to face travel direction */
+            float ddx = vp->dst_x - vp->src_x;
+            float ddz = vp->dst_z - vp->src_z;
+            float angle = atan2f(ddx, ddz) * (180.0f / 3.14159f);
+            rlDisableBackfaceCulling();
+            DrawModelEx(pm->model, (Vector3){px, py, pz},
+                        (Vector3){0,1,0}, angle, (Vector3){1,1,1}, WHITE);
+            rlEnableBackfaceCulling();
+        } else {
+            DrawSphere((Vector3){px, py, pz}, vp->radius, vp->color);
+        }
     }
 
     EndMode3D();
@@ -720,6 +793,401 @@ static void draw_header(ViewerState* v) {
     text_s(b,WINDOW_W-MeasureText(b,14)-10,8,14,COL_TEXT_WHITE);
 }
 
+/* ======================================================================== */
+/* Side panel tab contents (Phase 8h)                                       */
+/* ======================================================================== */
+
+/* Tab button colors */
+#define COL_TAB_ACTIVE   CLITERAL(Color){ 82, 73, 61, 255 }
+#define COL_TAB_INACTIVE CLITERAL(Color){ 52, 45, 35, 255 }
+#define COL_TAB_HOVER    CLITERAL(Color){ 72, 63, 51, 255 }
+#define COL_SLOT_BG      CLITERAL(Color){ 40, 35, 28, 255 }
+#define COL_SLOT_HOVER   CLITERAL(Color){ 60, 52, 40, 255 }
+#define COL_SLOT_EMPTY   CLITERAL(Color){ 30, 26, 20, 255 }
+#define COL_PRAY_ACTIVE  CLITERAL(Color){ 60, 120, 200, 200 }
+#define COL_PRAY_BUTTON  CLITERAL(Color){ 50, 44, 36, 255 }
+#define COL_COMBAT_BTN   CLITERAL(Color){ 50, 44, 36, 255 }
+
+/* Inventory slot dimensions */
+#define INV_COLS   4
+#define INV_ROWS   7
+#define INV_SLOTS  28
+
+/* Helper: draw a texture scaled to fit a rectangle, centered */
+static void draw_tex_fit(Texture2D tex, int dx, int dy, int dw, int dh, Color tint) {
+    if (tex.id == 0) return;
+    Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };
+    /* Fit within dw x dh preserving aspect ratio */
+    float sx = (float)dw / (float)tex.width;
+    float sy = (float)dh / (float)tex.height;
+    float s = (sx < sy) ? sx : sy;
+    int rw = (int)(tex.width * s);
+    int rh = (int)(tex.height * s);
+    Rectangle dst = { (float)(dx + (dw - rw) / 2), (float)(dy + (dh - rh) / 2), (float)rw, (float)rh };
+    DrawTexturePro(tex, src, dst, (Vector2){0,0}, 0, tint);
+}
+
+/* Inventory slot layout:
+ *   Slots 0-7:   prayer potions (8 pots, 4 doses each)
+ *   Slots 8-27:  sharks (20 sharks)
+ * Consumed items empty from the end of their group. */
+static int draw_inventory_tab(ViewerState* v, int px, int x, int by) {
+    FcPlayer* p = &v->state.player;
+    char b[32];
+
+    int doses = p->prayer_doses_remaining;  /* 0..32 */
+    int sharks = p->sharks_remaining;       /* 0..20 */
+
+    int slot_w = (PANEL_WIDTH - 20) / INV_COLS;
+    int slot_h = 32;
+    int icon_sz = 20;  /* sprite draw size within slot */
+
+    for (int row = 0; row < INV_ROWS; row++) {
+        for (int col = 0; col < INV_COLS; col++) {
+            int slot = row * INV_COLS + col;
+            int sx = x + col * slot_w;
+            int sy = by + row * (slot_h + 2);
+            Rectangle sr = { (float)sx, (float)sy, (float)slot_w - 2, (float)slot_h };
+
+            int has_item = 0;
+            int is_ppot = 0;
+            int ppot_dose = 0;  /* 1-4, or 0 = vial */
+            int is_shark = 0;
+
+            if (slot < 8) {
+                /* Prayer potion slots (0-7) */
+                int full_pots = doses / 4;
+                int partial = doses % 4;
+                int consumed_pots = 8 - full_pots - (partial > 0 ? 1 : 0);
+                if (slot < full_pots) {
+                    has_item = 1; is_ppot = 1; ppot_dose = 4;
+                } else if (slot == full_pots && partial > 0) {
+                    has_item = 1; is_ppot = 1; ppot_dose = partial;
+                } else if (slot < 8 && slot >= full_pots + (partial > 0 ? 1 : 0)) {
+                    /* Consumed pot → vial */
+                    has_item = 1; is_ppot = 1; ppot_dose = 0;
+                }
+            } else {
+                int shark_idx = slot - 8;
+                if (shark_idx < sharks) {
+                    has_item = 1; is_shark = 1;
+                }
+            }
+
+            /* Draw slot background */
+            int hovered = CheckCollisionPointRec(GetMousePosition(), sr);
+            Color bg;
+            if (is_ppot && ppot_dose == 0) {
+                bg = COL_SLOT_EMPTY;  /* vial = dark */
+            } else if (has_item) {
+                bg = hovered ? COL_SLOT_HOVER : COL_SLOT_BG;
+            } else {
+                bg = COL_SLOT_EMPTY;
+            }
+            DrawRectangleRec(sr, bg);
+            DrawRectangleLinesEx(sr, 1, COL_PANEL_BORDER);
+
+            if (is_ppot && ppot_dose > 0) {
+                /* Prayer potion with sprite + dose label */
+                Color tint = WHITE;
+                if (ppot_dose == 3) tint = CLITERAL(Color){220,220,255,255};
+                if (ppot_dose == 2) tint = CLITERAL(Color){200,200,240,255};
+                if (ppot_dose == 1) tint = CLITERAL(Color){180,180,220,255};
+                draw_tex_fit(v->tex_ppot, sx + 1, sy + 1, icon_sz, slot_h - 6, tint);
+                snprintf(b, sizeof(b), "(%d)", ppot_dose);
+                int tw = MeasureText(b, 9);
+                text_s(b, sx + slot_w - 2 - tw - 2, sy + slot_h - 12, 9, COL_PRAY_BLUE);
+            } else if (is_ppot && ppot_dose == 0) {
+                /* Empty vial */
+                text_s("Vial", sx + 6, sy + 10, 8, COL_TEXT_DIM);
+            } else if (is_shark) {
+                draw_tex_fit(v->tex_shark, sx + 2, sy + 2, slot_w - 6, slot_h - 4, WHITE);
+            }
+        }
+    }
+    return by + INV_ROWS * (slot_h + 2);
+}
+
+static int draw_combat_tab(ViewerState* v, int px, int x, int by) {
+    FcPlayer* p = &v->state.player;
+    char b[128];
+
+    /* Weapon */
+    text_s("Rune crossbow", x, by, 10, COL_TEXT_YELLOW); by += 16;
+    DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+
+    /* Attack styles — read from v->combat_style */
+    text_s("Attack style:", x, by, 9, COL_TEXT_DIM); by += 14;
+    static const char* styles[] = { "Accurate", "Rapid", "Long range" };
+    static const char* style_desc[] = { "+3 Ranged", "1 tick faster", "+2 Defence" };
+    for (int i = 0; i < 3; i++) {
+        int btn_y = by;
+        int btn_w = PANEL_WIDTH - 20;
+        int btn_h = 28;
+        Rectangle br = { (float)x, (float)btn_y, (float)btn_w, (float)btn_h };
+        int hovered = CheckCollisionPointRec(GetMousePosition(), br);
+        int selected = (i == v->combat_style);
+        Color bg = selected ? COL_TAB_ACTIVE : (hovered ? COL_TAB_HOVER : COL_COMBAT_BTN);
+        DrawRectangleRec(br, bg);
+        Color border = selected ? COL_TEXT_YELLOW : COL_PANEL_BORDER;
+        DrawRectangleLinesEx(br, selected ? 2 : 1, border);
+        Color tc = selected ? COL_TEXT_YELLOW : COL_TEXT_WHITE;
+        text_s(styles[i], x + 8, btn_y + 4, 10, tc);
+        text_s(style_desc[i], x + 8, btn_y + 16, 8, selected ? COL_TEXT_DIM : CLITERAL(Color){100,90,80,255});
+        by += btn_h + 3;
+    }
+    by += 6;
+
+    /* Auto retaliate */
+    text_s("Auto retaliate:", x, by, 9, COL_TEXT_DIM);
+    text_s("ON", x + 96, by, 9, COL_TEXT_GREEN);
+    by += 18;
+
+    /* Weapon stats */
+    DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+    int spd = (v->combat_style == 1) ? 5 : 6;  /* Rapid = 5 ticks, others = 6 */
+    snprintf(b, sizeof(b), "Speed: %d ticks (%s)", spd, styles[v->combat_style]);
+    text_s(b, x, by, 9, COL_TEXT_DIM); by += 12;
+    snprintf(b, sizeof(b), "Range: 7 tiles");
+    text_s(b, x, by, 9, COL_TEXT_DIM); by += 12;
+    snprintf(b, sizeof(b), "Ammo: %d bolts", p->ammo_count);
+    text_s(b, x, by, 9, COL_TEXT_WHITE); by += 16;
+
+    /* Current target */
+    DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+    if (p->attack_target_idx >= 0) {
+        static const char* NPC_NAMES[] = {"?","Tz-Kih","Tz-Kek","Kek-Sm","Tok-Xil",
+            "MejKot","Ket-Zek","Jad","HurKot"};
+        FcNpc* tgt = &v->state.npcs[p->attack_target_idx];
+        const char* name = (tgt->npc_type > 0 && tgt->npc_type < 9) ? NPC_NAMES[tgt->npc_type] : "?";
+        snprintf(b, sizeof(b), "Target: %s", name);
+        text_s(b, x, by, 10, COL_TEXT_YELLOW); by += 14;
+        int bar_w = PANEL_WIDTH - 20;
+        float hp_frac = (tgt->max_hp > 0) ? (float)tgt->current_hp / (float)tgt->max_hp : 0;
+        DrawRectangle(x, by, bar_w, 10, COL_HP_RED);
+        DrawRectangle(x, by, (int)(bar_w * hp_frac), 10, COL_HP_GREEN);
+        snprintf(b, sizeof(b), "%d/%d", tgt->current_hp / 10, tgt->max_hp / 10);
+        text_s(b, x + bar_w / 2 - MeasureText(b, 9) / 2, by + 1, 9, COL_TEXT_WHITE);
+        by += 14;
+        int dist = fc_distance_to_npc(p->x, p->y, tgt);
+        snprintf(b, sizeof(b), "Distance: %d tiles", dist);
+        text_s(b, x, by, 9, COL_TEXT_DIM); by += 12;
+    } else {
+        text_s("Target: none [Tab]", x, by, 10, COL_TEXT_DIM); by += 14;
+    }
+    return by;
+}
+
+static int draw_prayer_tab(ViewerState* v, int px, int x, int by) {
+    FcPlayer* p = &v->state.player;
+    char b[64];
+
+    /* Prayer points */
+    snprintf(b, sizeof(b), "Prayer: %d / %d", p->current_prayer / 10, p->max_prayer / 10);
+    text_s(b, x, by, 10, COL_PRAY_BLUE); by += 16;
+
+    /* Drain info */
+    if (p->prayer != PRAYER_NONE) {
+        int resistance = 60 + 2 * p->prayer_bonus;
+        snprintf(b, sizeof(b), "Drain rate: 12 / %d resist", resistance);
+        text_s(b, x, by, 8, COL_TEXT_DIM);
+    } else {
+        text_s("No prayer active", x, by, 8, COL_TEXT_DIM);
+    }
+    by += 14;
+
+    DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+    by += 4;
+
+    /* Prayer buttons — 3 clickable buttons with icon sprites */
+    static const char* pray_names[] = { "Prot. Melee", "Prot. Range", "Prot. Magic" };
+    static const int pray_vals[] = { PRAYER_PROTECT_MELEE, PRAYER_PROTECT_RANGE, PRAYER_PROTECT_MAGIC };
+    Color pray_colors[] = { COL_TEXT_YELLOW, COL_TEXT_GREEN, COL_PRAY_BLUE };
+
+    /* On/off texture pairs indexed by prayer [melee=0, range=1, magic=2] */
+    Texture2D tex_on[] = { v->tex_pray_melee_on, v->tex_pray_range_on, v->tex_pray_magic_on };
+    Texture2D tex_off[] = { v->tex_pray_melee_off, v->tex_pray_range_off, v->tex_pray_magic_off };
+
+    int btn_w = PANEL_WIDTH - 20;
+    int btn_h = 34;
+    int no_points = (p->current_prayer <= 0);
+
+    for (int i = 0; i < 3; i++) {
+        int btn_y = by;
+        Rectangle br = { (float)x, (float)btn_y, (float)btn_w, (float)btn_h };
+        int is_active = (p->prayer == pray_vals[i]);
+        int hovered = CheckCollisionPointRec(GetMousePosition(), br);
+
+        Color bg;
+        if (no_points) {
+            bg = COL_SLOT_EMPTY;
+        } else if (is_active) {
+            bg = COL_PRAY_ACTIVE;
+        } else if (hovered) {
+            bg = COL_TAB_HOVER;
+        } else {
+            bg = COL_PRAY_BUTTON;
+        }
+        DrawRectangleRec(br, bg);
+        DrawRectangleLinesEx(br, is_active ? 2 : 1, is_active ? pray_colors[i] : COL_PANEL_BORDER);
+
+        /* Prayer icon sprite */
+        Texture2D icon = is_active ? tex_on[i] : tex_off[i];
+        Color icon_tint = no_points ? CLITERAL(Color){80,80,80,255} : WHITE;
+        draw_tex_fit(icon, x + 4, btn_y + 2, 30, 30, icon_tint);
+
+        /* Label */
+        Color tc = no_points ? COL_TEXT_DIM : (is_active ? COL_TEXT_WHITE : pray_colors[i]);
+        text_s(pray_names[i], x + 38, btn_y + 7, 10, tc);
+
+        /* Hotkey + status */
+        snprintf(b, sizeof(b), "[%d]", i + 1);
+        text_s(b, x + 38, btn_y + 21, 8, COL_TEXT_DIM);
+        if (is_active) {
+            text_s("ACTIVE", x + btn_w - 44, btn_y + 21, 8, COL_TEXT_WHITE);
+        }
+
+        by += btn_h + 3;
+    }
+
+    by += 6;
+    snprintf(b, sizeof(b), "Prayer bonus: +%d", p->prayer_bonus);
+    text_s(b, x, by, 8, COL_TEXT_DIM); by += 12;
+    return by;
+}
+
+/* Handle clicks in the tab area. Returns 1 if click was consumed. */
+static int process_tab_click(ViewerState* v, float mx, float my) {
+    int px = FC_ARENA_WIDTH * TILE_SIZE;
+    int x = px + 8;
+    int tab_y = v->tab_area_y;
+    if (tab_y <= 0) return 0;  /* tabs not drawn yet */
+    FcPlayer* p = &v->state.player;
+
+    /* Tab buttons: 3 equal-width buttons at tab_y */
+    int tab_w = (PANEL_WIDTH - 12) / 3;
+    int tab_h = 18;
+    for (int t = 0; t < 3; t++) {
+        int tx = px + 4 + t * tab_w;
+        if (mx >= tx && mx < tx + tab_w && my >= tab_y && my < tab_y + tab_h) {
+            v->active_tab = t;
+            return 1;
+        }
+    }
+
+    /* Content area starts below tab buttons */
+    int content_y = tab_y + tab_h + 4;
+    if (my < content_y) return 0;
+
+    if (v->active_tab == 0) {
+        /* Inventory tab clicks */
+        int slot_w = (PANEL_WIDTH - 20) / INV_COLS;
+        int slot_h = 32;
+        for (int row = 0; row < INV_ROWS; row++) {
+            for (int col = 0; col < INV_COLS; col++) {
+                int sx = x + col * slot_w;
+                int sy = content_y + row * (slot_h + 2);
+                if (mx >= sx && mx < sx + slot_w - 2 && my >= sy && my < sy + slot_h) {
+                    int slot = row * INV_COLS + col;
+                    if (slot < 8) {
+                        /* Prayer potion slot — check if it has doses */
+                        int full_pots = p->prayer_doses_remaining / 4;
+                        int partial = p->prayer_doses_remaining % 4;
+                        if (slot < full_pots || (slot == full_pots && partial > 0)) {
+                            v->pending_drink = FC_DRINK_PRAYER_POT;
+                            return 1;
+                        }
+                    } else {
+                        /* Shark slot */
+                        int shark_idx = slot - 8;
+                        if (shark_idx < p->sharks_remaining) {
+                            v->pending_eat = FC_EAT_SHARK;
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+    } else if (v->active_tab == 1) {
+        /* Combat tab clicks — attack style buttons */
+        /* Skip weapon label (16px) + separator + "Attack style:" (14px) = 30px offset */
+        int btn_w = PANEL_WIDTH - 20;
+        int btn_h = 28;
+        int btn_start = content_y + 30;
+        for (int i = 0; i < 3; i++) {
+            int btn_y = btn_start + i * (btn_h + 3);
+            if (mx >= x && mx < x + btn_w && my >= btn_y && my < btn_y + btn_h) {
+                v->combat_style = i;
+                return 1;
+            }
+        }
+    } else if (v->active_tab == 2) {
+        /* Prayer tab clicks — check prayer buttons */
+        int btn_w = PANEL_WIDTH - 20;
+        int btn_h = 34;
+        /* Skip past prayer points text + drain info + separator (approx 34px) */
+        int btn_start = content_y + 34;
+        for (int i = 0; i < 3; i++) {
+            int btn_y = btn_start + i * (btn_h + 3);
+            if (mx >= x && mx < x + btn_w && my >= btn_y && my < btn_y + btn_h) {
+                if (p->current_prayer > 0) {
+                    static const int pray_enum[] = { PRAYER_PROTECT_MELEE, PRAYER_PROTECT_RANGE, PRAYER_PROTECT_MAGIC };
+                    static const int pray_action[] = { FC_PRAYER_MELEE, FC_PRAYER_RANGE, FC_PRAYER_MAGIC };
+                    if (p->prayer == pray_enum[i]) {
+                        v->pending_prayer = FC_PRAYER_OFF;
+                    } else {
+                        v->pending_prayer = pray_action[i];
+                    }
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+/* ======================================================================== */
+/* Main panel draw                                                           */
+/* ======================================================================== */
+
+/* Draw NPC health bars (clickable to target). Returns Y position after bars. */
+static int draw_npc_bars(ViewerState* v, int px, int x, int by) {
+    char b[128];
+    DrawLine(px+4, by, px+PANEL_WIDTH-4, by, COL_PANEL_BORDER); by += 4;
+    v->panel_npc_count = 0;
+    static const char* NPC_SHORT[] = {"?","Tz-Kih","Tz-Kek","Kek-Sm","Tok-Xil",
+        "MejKot","Ket-Zek","Jad","HurKot"};
+    int shown = 0;
+    for (int ni = 0; ni < FC_MAX_NPCS && shown < 8; ni++) {
+        FcNpc* n = &v->state.npcs[ni];
+        if (!n->active || n->is_dead) continue;
+        if (v->panel_npc_count < 8) {
+            v->panel_npc_slot[v->panel_npc_count] = ni;
+            v->panel_npc_y[v->panel_npc_count] = by;
+            v->panel_npc_count++;
+        }
+        const char* nname = (n->npc_type > 0 && n->npc_type < 9) ? NPC_SHORT[n->npc_type] : "?";
+        int is_target = (ni == v->state.player.attack_target_idx);
+        if (is_target) text_s(">", x, by, 10, COL_TEXT_YELLOW);
+        Color name_col = is_target ? COL_TEXT_YELLOW : COL_TEXT_WHITE;
+        text_s(nname, x + 10, by, 9, name_col);
+        int bar_x = x + 65;
+        int bar_w = PANEL_WIDTH - 82;
+        float hp_frac = (n->max_hp > 0) ? (float)n->current_hp / (float)n->max_hp : 0;
+        DrawRectangle(bar_x, by + 1, bar_w, 8, COL_HP_RED);
+        DrawRectangle(bar_x, by + 1, (int)(bar_w * hp_frac), 8, COL_HP_GREEN);
+        snprintf(b, sizeof(b), "%d", n->current_hp / 10);
+        DrawText(b, bar_x + bar_w + 2, by, 9, COL_TEXT_DIM);
+        by += 12;
+        shown++;
+    }
+    if (shown == 0) {
+        text_s("No NPCs alive", x, by, 9, COL_TEXT_DIM);
+        by += 12;
+    }
+    return by + 4;
+}
+
 static void draw_panel(ViewerState* v) {
     int px=FC_ARENA_WIDTH*TILE_SIZE, py=HEADER_HEIGHT;
     DrawRectangle(px,py,PANEL_WIDTH,WINDOW_H-py,COL_PANEL);
@@ -741,93 +1209,12 @@ static void draw_panel(ViewerState* v) {
     snprintf(b,sizeof(b),"Pray %d/%d",p->current_prayer/10,p->max_prayer/10);
     text_s(b,x+(PANEL_WIDTH-16)/2-MeasureText(b,10)/2,by+1,10,COL_TEXT_WHITE); by+=18;
 
-    /* Wave info */
+    /* Wave info + timers */
     snprintf(b,sizeof(b),"Wave %d/%d  NPCs:%d",v->state.current_wave,FC_NUM_WAVES,v->state.npcs_remaining);
-    text_s(b,x,by,10,COL_TEXT_YELLOW); by+=16;
-
-    /* Consumables */
-    snprintf(b,sizeof(b),"Sharks: %d  Ppots: %d",p->sharks_remaining,p->prayer_doses_remaining);
-    text_s(b,x,by,10,COL_TEXT_WHITE); by+=14;
-    snprintf(b,sizeof(b),"Ammo: %d",p->ammo_count);
-    text_s(b,x,by,10,COL_TEXT_WHITE); by+=18;
-
-    /* Active prayer (highlighted) */
-    text_s("Prayer:",x,by,10,COL_TEXT_DIM); by+=14;
-    Color c_mel = (p->prayer==PRAYER_PROTECT_MELEE) ? COL_TEXT_YELLOW : COL_TEXT_DIM;
-    Color c_rng = (p->prayer==PRAYER_PROTECT_RANGE) ? COL_TEXT_GREEN : COL_TEXT_DIM;
-    Color c_mag = (p->prayer==PRAYER_PROTECT_MAGIC) ? COL_PRAY_BLUE : COL_TEXT_DIM;
-    text_s("[1] Melee",x,by,10,c_mel);
-    text_s("[2] Range",x+70,by,10,c_rng); by+=14;
-    text_s("[3] Magic",x,by,10,c_mag); by+=18;
-
-    /* Attack target */
-    if (v->attack_target >= 0 && v->attack_target < v->entity_count - 1) {
-        FcRenderEntity* tgt = &v->entities[v->attack_target + 1];
-        static const char* NPC_NAMES[] = {"?","Tz-Kih","Tz-Kek","Kek-Sm","Tok-Xil",
-            "MejKot","Ket-Zek","Jad","HurKot"};
-        const char* name = (tgt->npc_type > 0 && tgt->npc_type < 9) ? NPC_NAMES[tgt->npc_type] : "?";
-        snprintf(b,sizeof(b),"Target: %s (%d%%)", name,
-            tgt->max_hp > 0 ? tgt->current_hp * 100 / tgt->max_hp : 0);
-        text_s(b,x,by,10,COL_TEXT_YELLOW);
-    } else {
-        text_s("Target: none [Tab]",x,by,10,COL_TEXT_DIM);
-    }
-    by += 18;
-
-    /* Timers */
+    text_s(b,x,by,10,COL_TEXT_YELLOW); by+=14;
     snprintf(b,sizeof(b),"AtkTmr:%d Food:%d Pot:%d",
         p->attack_timer, p->food_timer, p->potion_timer);
     text_s(b,x,by,10,COL_TEXT_DIM); by+=14;
-
-    /* Live NPC health bars (clickable to target) */
-    DrawLine(px+4, by, px+PANEL_WIDTH-4, by, COL_PANEL_BORDER); by += 4;
-    v->panel_npc_count = 0;
-    {
-        static const char* NPC_SHORT[] = {"?","Tz-Kih","Tz-Kek","Kek-Sm","Tok-Xil",
-            "MejKot","Ket-Zek","Jad","HurKot"};
-        int shown = 0;
-        for (int ni = 0; ni < FC_MAX_NPCS && shown < 8; ni++) {
-            FcNpc* n = &v->state.npcs[ni];
-            if (!n->active || n->is_dead) continue;
-            /* Store for click detection */
-            if (v->panel_npc_count < 8) {
-                v->panel_npc_slot[v->panel_npc_count] = ni;
-                v->panel_npc_y[v->panel_npc_count] = by;
-                v->panel_npc_count++;
-            }
-            const char* nname = (n->npc_type > 0 && n->npc_type < 9) ? NPC_SHORT[n->npc_type] : "?";
-            int is_target = (ni == v->state.player.attack_target_idx);
-
-            /* Sword icon for current target */
-            if (is_target) {
-                text_s(">", x, by, 10, COL_TEXT_YELLOW);
-            }
-
-            /* NPC name */
-            snprintf(b, sizeof(b), "%s", nname);
-            Color name_col = is_target ? COL_TEXT_YELLOW : COL_TEXT_WHITE;
-            text_s(b, x + 10, by, 9, name_col);
-
-            /* HP bar */
-            int bar_x = x + 65;
-            int bar_w = PANEL_WIDTH - 82;
-            float hp_frac = (n->max_hp > 0) ? (float)n->current_hp / (float)n->max_hp : 0;
-            DrawRectangle(bar_x, by + 1, bar_w, 8, COL_HP_RED);
-            DrawRectangle(bar_x, by + 1, (int)(bar_w * hp_frac), 8, COL_HP_GREEN);
-
-            /* HP text */
-            snprintf(b, sizeof(b), "%d", n->current_hp / 10);
-            DrawText(b, bar_x + bar_w + 2, by, 9, COL_TEXT_DIM);
-
-            by += 12;
-            shown++;
-        }
-        if (shown == 0) {
-            text_s("No NPCs alive", x, by, 9, COL_TEXT_DIM);
-            by += 12;
-        }
-    }
-    by += 4;
 
     /* Terminal state */
     if (v->state.terminal != TERMINAL_NONE) {
@@ -839,21 +1226,48 @@ static void draw_panel(ViewerState* v) {
             case TERMINAL_TICK_CAP:      t="TICK CAP"; break;
         }
         text_s(t, x, by, 16, tc); by += 20;
-        text_s("[R] to restart", x, by, 10, COL_TEXT_DIM);
+        text_s("[R] to restart", x, by, 10, COL_TEXT_DIM); by += 16;
     }
 
-    /* Controls help at bottom of panel */
-    int help_y = WINDOW_H - 130;
-    if (help_y < by + 10) help_y = by + 10;
-    DrawLine(px+4, help_y-4, px+PANEL_WIDTH-4, help_y-4, COL_PANEL_BORDER);
-    text_s("--- Controls ---", x, help_y, 10, COL_TEXT_DIM); help_y += 14;
-    text_s("WASD  Move", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("1/2/3 Prayer", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("F Eat  P Drink", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("Tab Target  A Auto", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("Space Pause  R Reset", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("D Debug  G Grid  C Coll", x, help_y, 9, COL_TEXT_DIM); help_y += 12;
-    text_s("4 Aerial  5 Game cam", x, help_y, 9, COL_TEXT_DIM);
+    /* ---- Tab buttons ---- */
+    DrawLine(px+4, by, px+PANEL_WIDTH-4, by, COL_PANEL_BORDER); by += 2;
+    v->tab_area_y = by;
+
+    int tab_w = (PANEL_WIDTH - 12) / 3;
+    int tab_h = 18;
+    static const char* tab_labels[] = { "Inven", "Combat", "Prayer" };
+    Texture2D tab_icons[] = { v->tex_tab_inv, v->tex_tab_combat, v->tex_tab_prayer };
+    for (int t = 0; t < 3; t++) {
+        int tx = px + 4 + t * tab_w;
+        Rectangle tr = { (float)tx, (float)by, (float)tab_w, (float)tab_h };
+        int hovered = CheckCollisionPointRec(GetMousePosition(), tr);
+        Color bg = (t == v->active_tab) ? COL_TAB_ACTIVE : (hovered ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleRec(tr, bg);
+        Color tc = (t == v->active_tab) ? COL_TEXT_YELLOW : COL_TEXT_DIM;
+        if (tab_icons[t].id > 0) {
+            Color icon_tint = (t == v->active_tab) ? WHITE : CLITERAL(Color){160,160,160,255};
+            draw_tex_fit(tab_icons[t], tx + 2, by + 1, 16, 16, icon_tint);
+            text_s(tab_labels[t], tx + 20, by + 5, 8, tc);
+        } else {
+            int tw = MeasureText(tab_labels[t], 9);
+            text_s(tab_labels[t], tx + (tab_w - tw) / 2, by + 5, 9, tc);
+        }
+        if (t == v->active_tab) {
+            DrawLine(tx + 2, by + tab_h - 1, tx + tab_w - 2, by + tab_h - 1, COL_TEXT_YELLOW);
+        }
+    }
+    by += tab_h + 4;
+
+    /* ---- Tab content ---- */
+    int tab_end_y = by;
+    switch (v->active_tab) {
+        case 0: tab_end_y = draw_inventory_tab(v, px, x, by); break;
+        case 1: tab_end_y = draw_combat_tab(v, px, x, by); break;
+        case 2: tab_end_y = draw_prayer_tab(v, px, x, by); break;
+    }
+
+    /* ---- NPC health bars (always visible, below tab content) ---- */
+    draw_npc_bars(v, px, x, tab_end_y);
 }
 
 static void draw_debug(ViewerState* v) {
@@ -938,29 +1352,56 @@ int main(int argc, char** argv) {
         }
     }
 
-    /* Load player animations */
+    /* Load animations (combined NPC + player) */
     {
         const char* anim_paths[] = {
-            "demo-env/assets/fc_player.anims",
-            "../demo-env/assets/fc_player.anims",
-            "assets/fc_player.anims", NULL };
+            "demo-env/assets/fc_all.anims",
+            "../demo-env/assets/fc_all.anims",
+            "assets/fc_all.anims", NULL };
         for (int i = 0; anim_paths[i]; i++) {
             if (FileExists(anim_paths[i])) {
-                v.player_anims = anim_cache_load(anim_paths[i]);
+                v.anim_cache = anim_cache_load(anim_paths[i]);
                 break;
             }
         }
-        /* Create animation model state from player model's vertex skins */
-        if (v.player_anims && v.player_model && v.player_model->count > 0) {
+        /* Create player animation state */
+        if (v.anim_cache && v.player_model && v.player_model->count > 0) {
             NpcModelEntry* pm = &v.player_model->entries[0];
             if (pm->loaded && pm->vertex_skins) {
                 v.player_anim_state = anim_model_state_create(
                     pm->vertex_skins, pm->base_vert_count);
                 v.player_anim_seq = PLAYER_ANIM_IDLE;
-                v.player_anim_frame = 0;
-                v.player_anim_timer = 0;
                 fprintf(stderr, "Player animation state created (%d base verts)\n",
                         pm->base_vert_count);
+            }
+        }
+        /* Create NPC animation states */
+        if (v.anim_cache && v.npc_models) {
+            for (int i = 0; i < v.npc_models->count; i++) {
+                NpcModelEntry* nm = &v.npc_models->entries[i];
+                if (nm->loaded && nm->vertex_skins) {
+                    /* Find which NPC type this model corresponds to */
+                    for (int t = 1; t <= 8; t++) {
+                        if (fc_npc_type_to_model_id(t) == nm->model_id) {
+                            /* Store anim state indexed by model entry, not NPC type */
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* Load projectile models */
+    {
+        const char* proj_paths[] = {
+            "demo-env/assets/fc_projectiles.models",
+            "../demo-env/assets/fc_projectiles.models",
+            "assets/fc_projectiles.models", NULL };
+        for (int i = 0; proj_paths[i]; i++) {
+            if (FileExists(proj_paths[i])) {
+                v.projectile_models = fc_npc_models_load(proj_paths[i]);
+                break;
             }
         }
     }
@@ -982,6 +1423,42 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    /* Load tab/inventory sprites (Phase 8h) */
+    {
+        const char* spr_dirs[] = {"demo-env/assets/sprites/", "../demo-env/assets/sprites/", "assets/sprites/", NULL};
+        for (int i = 0; spr_dirs[i]; i++) {
+            char path[256];
+            snprintf(path, sizeof(path), "%sprayer_potion.png", spr_dirs[i]);
+            if (FileExists(path)) {
+                v.tex_ppot = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sshark.png", spr_dirs[i]);
+                v.tex_shark = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_melee_on.png", spr_dirs[i]);
+                v.tex_pray_melee_on = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_melee_off.png", spr_dirs[i]);
+                v.tex_pray_melee_off = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_missiles_on.png", spr_dirs[i]);
+                v.tex_pray_range_on = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_missiles_off.png", spr_dirs[i]);
+                v.tex_pray_range_off = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_magic_on.png", spr_dirs[i]);
+                v.tex_pray_magic_on = LoadTexture(path);
+                snprintf(path, sizeof(path), "%sprotect_magic_off.png", spr_dirs[i]);
+                v.tex_pray_magic_off = LoadTexture(path);
+                snprintf(path, sizeof(path), "%stab_inventory.png", spr_dirs[i]);
+                v.tex_tab_inv = LoadTexture(path);
+                snprintf(path, sizeof(path), "%stab_combat.png", spr_dirs[i]);
+                v.tex_tab_combat = LoadTexture(path);
+                snprintf(path, sizeof(path), "%stab_prayer.png", spr_dirs[i]);
+                v.tex_tab_prayer = LoadTexture(path);
+                fprintf(stderr, "Tab sprites loaded from %s\n", spr_dirs[i]);
+                break;
+            }
+        }
+    }
+
+    v.combat_style = 1;  /* Rapid default */
 
     reset_ep(&v);
     int frame_count = 0;
@@ -1116,31 +1593,30 @@ int main(int argc, char** argv) {
                 }
 
                 /* Player fired ranged attack → ONE crossbow bolt projectile.
-                 * Detect: new pending hits appeared on target NPC this tick. */
-                if (v.state.player.attack_target_idx >= 0) {
+                 * Detect: attack_timer just reset to 5 (player fired this tick). */
+                if (v.state.player.attack_target_idx >= 0 && v.state.player.attack_timer == 5) {
                     int ti = v.state.player.attack_target_idx;
                     FcNpc* tn = &v.state.npcs[ti];
-                    if (tn->active && tn->num_pending_hits > prev_npc_hits[ti]) {
-                        /* New hit was queued on target NPC → player just attacked */
-                        FcPendingHit* newest = &tn->pending_hits[tn->num_pending_hits - 1];
+                    if (tn->active) {
                         float n3x = (float)tn->x + (float)tn->size*0.5f;
                         float n3y = ground_y(&v, tn->x, tn->y) + 1.0f + (float)tn->size*0.3f;
                         float n3z = -((float)tn->y + (float)tn->size*0.5f);
-                        float travel = (float)newest->ticks_remaining * tick_sec;
+                        int pdist = fc_distance_to_npc(v.state.player.x, v.state.player.y, tn);
+                        float travel = (float)fc_ranged_hit_delay(pdist) * tick_sec;
                         if (travel < 0.1f) travel = 0.1f;
                         spawn_projectile(&v, p3x, p3y, p3z, n3x, n3y, n3z,
                                          travel,
-                                         CLITERAL(Color){200, 200, 50, 255}, 0.12f);
+                                         CLITERAL(Color){200, 200, 50, 255}, 0.12f,
+                                         PROJ_CROSSBOW_BOLT);
                     }
                 }
 
-                /* NPC damage taken — hitsplats (including 0-damage misses) */
+                /* NPC damage taken — hitsplats */
                 for (int i = 0; i < FC_MAX_NPCS; i++) {
                     FcNpc* n = &v.state.npcs[i];
-                    /* Show splat if: took damage, died, OR had pending hits resolve
-                     * (detect by: fewer pending hits than before tick) */
-                    int hit_resolved = (prev_npc_hits[i] > n->num_pending_hits) ||
-                                       n->damage_taken_this_tick > 0 || n->died_this_tick;
+                    if (!n->active && !n->died_this_tick && n->damage_taken_this_tick == 0) continue;
+                    int hit_resolved = n->damage_taken_this_tick > 0 || n->died_this_tick ||
+                                       (prev_npc_hits[i] > n->num_pending_hits);
                     if (hit_resolved) {
                         float gy_n = ground_y(&v, n->x, n->y);
                         float nx = (float)n->x + (float)n->size*0.5f;
@@ -1167,8 +1643,16 @@ int main(int argc, char** argv) {
                         ? CLITERAL(Color){80, 80, 255, 255}
                         : CLITERAL(Color){80, 200, 80, 255};
                     float rad = (src->npc_type == NPC_TZTOK_JAD) ? 0.3f : 0.15f;
+                    /* Pick projectile spot_id based on NPC type and attack style */
+                    uint32_t spot = 0;
+                    if (src->npc_type == NPC_TOK_XIL) spot = PROJ_TOK_XIL_SPINE;
+                    else if (src->npc_type == NPC_KET_ZEK) spot = PROJ_KET_ZEK_FIRE;
+                    else if (src->npc_type == NPC_TZTOK_JAD && ph->attack_style == ATTACK_MAGIC)
+                        spot = PROJ_JAD_MAGIC;
+                    else if (src->npc_type == NPC_TZTOK_JAD && ph->attack_style == ATTACK_RANGED)
+                        spot = PROJ_JAD_RANGED;
                     spawn_projectile(&v, s3x, s3y, s3z, p3x, p3y, p3z,
-                                     travel, pc, rad);
+                                     travel, pc, rad, spot);
                 }
             }
 
@@ -1208,21 +1692,20 @@ int main(int argc, char** argv) {
         }
 
         /* Update player animation */
-        if (v.player_anim_state && v.player_anims && v.player_model &&
+        if (v.player_anim_state && v.anim_cache && v.player_model &&
             v.player_model->count > 0) {
             NpcModelEntry* pm = &v.player_model->entries[0];
             float dt = GetFrameTime();
 
             /* Select animation based on player state.
-             * attack_timer == 5 means player JUST fired (crossbow speed = 5 ticks).
-             * hit_landed_this_tick fires for both player attacks AND incoming hits,
-             * so we don't use it for the attack animation. */
+             * Attack anim plays while attack_timer > 2 (first 3 ticks of the 5-tick cooldown).
+             * This gives the animation time to play before returning to idle. */
             uint16_t desired_seq = PLAYER_ANIM_IDLE;
             if (v.state.terminal == TERMINAL_PLAYER_DEATH) {
                 desired_seq = PLAYER_ANIM_DEATH;
             } else if (v.state.player.food_eaten_this_tick) {
                 desired_seq = PLAYER_ANIM_EAT;
-            } else if (v.state.player.attack_timer == 5) {
+            } else if (v.state.player.attack_timer > 2) {
                 desired_seq = PLAYER_ANIM_ATTACK;
             } else if (v.state.movement_this_tick) {
                 desired_seq = v.state.player.is_running ? PLAYER_ANIM_RUN : PLAYER_ANIM_WALK;
@@ -1236,7 +1719,7 @@ int main(int argc, char** argv) {
             }
 
             /* Advance frame timer */
-            AnimSequence* seq = anim_get_sequence(v.player_anims, v.player_anim_seq);
+            AnimSequence* seq = anim_get_sequence(v.anim_cache, v.player_anim_seq);
             if (seq && seq->frame_count > 0) {
                 v.player_anim_timer -= dt;
                 if (v.player_anim_timer <= 0) {
@@ -1250,7 +1733,7 @@ int main(int argc, char** argv) {
 
                 /* Apply animation frame to model */
                 AnimFrameData* frame_data = &seq->frames[v.player_anim_frame].frame;
-                AnimFrameBase* fb = anim_get_framebase(v.player_anims, frame_data->framebase_id);
+                AnimFrameBase* fb = anim_get_framebase(v.anim_cache, frame_data->framebase_id);
                 if (fb) {
                     anim_apply_frame(v.player_anim_state, pm->base_verts, frame_data, fb);
 
@@ -1269,6 +1752,92 @@ int main(int argc, char** argv) {
 
                     UpdateMeshBuffer(pm->model.meshes[0], 0, mesh_verts,
                                      evc * 3 * sizeof(float), 0);
+                }
+            }
+        }
+
+        /* Update NPC animations */
+        if (v.anim_cache && v.npc_models) {
+            float dt = GetFrameTime();
+            for (int ni = 0; ni < FC_MAX_NPCS; ni++) {
+                FcNpc* n = &v.state.npcs[ni];
+                if (!n->active && !n->died_this_tick) {
+                    /* NPC gone — free anim state */
+                    if (v.npc_anim_states[ni]) {
+                        anim_model_state_free(v.npc_anim_states[ni]);
+                        v.npc_anim_states[ni] = NULL;
+                    }
+                    continue;
+                }
+
+                /* Find model entry for this NPC type */
+                uint32_t mid = fc_npc_type_to_model_id(n->npc_type);
+                NpcModelEntry* nme = fc_npc_model_find(v.npc_models, mid);
+                if (!nme || !nme->loaded || !nme->vertex_skins) continue;
+
+                /* Lazy-create anim state on first use */
+                if (!v.npc_anim_states[ni]) {
+                    v.npc_anim_states[ni] = anim_model_state_create(
+                        nme->vertex_skins, nme->base_vert_count);
+                    v.npc_anim_seq[ni] = (n->npc_type > 0 && n->npc_type < 9)
+                        ? NPC_ANIM_IDLE[n->npc_type] : 0;
+                    v.npc_anim_frame[ni] = 0;
+                    v.npc_anim_timer[ni] = 0;
+                }
+
+                /* Select animation based on NPC state */
+                uint16_t desired = (n->npc_type > 0 && n->npc_type < 9)
+                    ? NPC_ANIM_IDLE[n->npc_type] : 0;
+                if (n->is_dead || n->died_this_tick) {
+                    desired = (n->npc_type > 0 && n->npc_type < 9)
+                        ? NPC_ANIM_DEATH[n->npc_type] : 0;
+                } else if (n->damage_taken_this_tick > 0) {
+                    /* NPC just got hit — brief defend/flinch, handled by staying on current */
+                } else if (n->attack_timer == n->attack_speed) {
+                    /* NPC just attacked */
+                    desired = (n->npc_type > 0 && n->npc_type < 9)
+                        ? NPC_ANIM_ATTACK[n->npc_type] : 0;
+                } else if (v.state.movement_this_tick) {
+                    /* Check if this NPC moved (compare prev position) */
+                    if (v.prev_npc_x[ni] != (float)n->x || v.prev_npc_y[ni] != (float)n->y) {
+                        desired = (n->npc_type > 0 && n->npc_type < 9)
+                            ? NPC_ANIM_WALK[n->npc_type] : 0;
+                    }
+                }
+
+                if (desired != v.npc_anim_seq[ni] && desired != 0) {
+                    v.npc_anim_seq[ni] = desired;
+                    v.npc_anim_frame[ni] = 0;
+                    v.npc_anim_timer[ni] = 0;
+                }
+
+                /* Advance frame and apply animation */
+                AnimSequence* seq = anim_get_sequence(v.anim_cache, v.npc_anim_seq[ni]);
+                if (seq && seq->frame_count > 0) {
+                    v.npc_anim_timer[ni] -= dt;
+                    if (v.npc_anim_timer[ni] <= 0) {
+                        v.npc_anim_frame[ni] = (v.npc_anim_frame[ni] + 1) % seq->frame_count;
+                        float frame_delay = (float)seq->frames[v.npc_anim_frame[ni]].delay * 0.02f;
+                        if (frame_delay < 0.016f) frame_delay = 0.016f;
+                        v.npc_anim_timer[ni] = frame_delay;
+                    }
+
+                    AnimFrameData* fd = &seq->frames[v.npc_anim_frame[ni]].frame;
+                    AnimFrameBase* fb = anim_get_framebase(v.anim_cache, fd->framebase_id);
+                    if (fb) {
+                        anim_apply_frame(v.npc_anim_states[ni], nme->base_verts, fd, fb);
+                        float* mv = nme->model.meshes[0].vertices;
+                        anim_update_mesh(mv, v.npc_anim_states[ni],
+                                         nme->face_indices, nme->face_count);
+                        int evc = nme->face_count * 3;
+                        for (int vi = 0; vi < evc; vi++) {
+                            mv[vi*3+0] /=  128.0f;
+                            mv[vi*3+1] /=  128.0f;
+                            mv[vi*3+2] /= -128.0f;
+                        }
+                        UpdateMeshBuffer(nme->model.meshes[0], 0, mv,
+                                         evc * 3 * sizeof(float), 0);
+                    }
                 }
             }
         }
@@ -1304,8 +1873,24 @@ int main(int argc, char** argv) {
     if (v.pray_melee_tex.id > 0) UnloadTexture(v.pray_melee_tex);
     if (v.pray_missiles_tex.id > 0) UnloadTexture(v.pray_missiles_tex);
     if (v.pray_magic_tex.id > 0) UnloadTexture(v.pray_magic_tex);
+    /* Phase 8h sprites */
+    if (v.tex_ppot.id > 0) UnloadTexture(v.tex_ppot);
+    if (v.tex_shark.id > 0) UnloadTexture(v.tex_shark);
+    if (v.tex_pray_melee_on.id > 0) UnloadTexture(v.tex_pray_melee_on);
+    if (v.tex_pray_melee_off.id > 0) UnloadTexture(v.tex_pray_melee_off);
+    if (v.tex_pray_range_on.id > 0) UnloadTexture(v.tex_pray_range_on);
+    if (v.tex_pray_range_off.id > 0) UnloadTexture(v.tex_pray_range_off);
+    if (v.tex_pray_magic_on.id > 0) UnloadTexture(v.tex_pray_magic_on);
+    if (v.tex_pray_magic_off.id > 0) UnloadTexture(v.tex_pray_magic_off);
+    if (v.tex_tab_inv.id > 0) UnloadTexture(v.tex_tab_inv);
+    if (v.tex_tab_combat.id > 0) UnloadTexture(v.tex_tab_combat);
+    if (v.tex_tab_prayer.id > 0) UnloadTexture(v.tex_tab_prayer);
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        if (v.npc_anim_states[i]) anim_model_state_free(v.npc_anim_states[i]);
+    }
     if (v.player_anim_state) anim_model_state_free(v.player_anim_state);
-    if (v.player_anims) anim_cache_free(v.player_anims);
+    if (v.anim_cache) anim_cache_free(v.anim_cache);
+    if (v.projectile_models) fc_npc_models_unload(v.projectile_models);
     if (v.player_model) fc_npc_models_unload(v.player_model);
     if (v.npc_models) fc_npc_models_unload(v.npc_models);
     if (v.objects && v.objects->loaded) { UnloadModel(v.objects->model); free(v.objects); }

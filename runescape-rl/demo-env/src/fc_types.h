@@ -258,6 +258,7 @@ typedef struct {
     /* Vitals */
     int current_hp, max_hp;
     int is_dead;
+    int death_timer;      /* ticks remaining before despawn (0 = despawn immediately) */
 
     /* Combat */
     int attack_style;       /* FcAttackStyle: what this NPC attacks with */

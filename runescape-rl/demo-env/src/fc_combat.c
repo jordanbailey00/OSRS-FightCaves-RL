@@ -292,11 +292,12 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
                 npc->healer_distracted = 1;
             }
 
-            /* NPC death */
+            /* NPC death — keep active for a few ticks so viewer can
+             * show the killing hitsplat and death animation. */
             if (npc->current_hp <= 0 && !npc->is_dead) {
                 npc->is_dead = 1;
                 npc->died_this_tick = 1;
-                npc->active = 0;
+                npc->death_timer = 3;  /* remain visible for 3 ticks */
                 state->npcs_killed_this_tick++;
                 state->total_npcs_killed++;
 

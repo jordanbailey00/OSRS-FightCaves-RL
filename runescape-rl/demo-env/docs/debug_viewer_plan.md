@@ -633,7 +633,147 @@ This is Phase 10 work pulled forward because it's blocking usability.
     - Single-step (right arrow while paused)
     - Fast-forward (hold shift + space)
 
---- PHASE 9: DEBUG TOOLING & OVERLAYS (Group 8) ---
+--- PHASE 8h: CLICKABLE INVENTORY / COMBAT / PRAYER TABS ---
+
+Goal: Add tabbed side panel with clickable Inventory, Combat, and Prayer tabs.
+This is purely a UI/viewer layer — no backend changes. The tabs provide a more
+intuitive visual interface for human play, mirroring the OSRS game interface.
+
+The existing side panel (HP bar, prayer bar, wave info, consumable counts, NPC
+health bars) remains at the top. Below it, three clickable tabs appear:
+
+  TAB 1: INVENTORY (default)
+    - 28-slot inventory grid (4 columns × 7 rows), styled like OSRS inventory
+    - Slots are filled based on the player's current loadout:
+      Prayer potions: slots 0-7 (8 pots × 4 doses each)
+        Display: "Ppot(4)" → "Ppot(3)" → ... → "Ppot(1)" → empty
+        As doses are consumed, label decrements. When all 4 doses used,
+        slot shows empty (or "Vial"). prayer_doses_remaining / 4 = full pots,
+        prayer_doses_remaining % 4 = partial pot doses.
+      Sharks: slots 8-27 (20 sharks)
+        Display: "Shark" icon/label. As sharks are eaten, slots empty from end.
+    - Click a prayer potion slot → drink one dose (same as pressing P)
+    - Click a shark slot → eat shark (same as pressing F)
+    - Empty slots are dark/inactive (no click action)
+
+  TAB 2: COMBAT
+    - Shows current attack style info:
+      "Accurate" / "Rapid" / "Long range" radio buttons (Rapid is default for FC)
+      For FC v1, attack style is fixed (Rapid — 1 tick faster, no bonus),
+      but display shows it so we can verify/change if needed.
+    - Auto retaliate toggle: checkbox/button, currently always ON in FC
+      When ON: player auto-targets aggressor if no current target
+    - Current weapon: "Rune crossbow"
+    - Attack speed: "5 ticks (Rapid)"
+    - Weapon range: "7 tiles"
+    - Current target info (name, HP bar, distance)
+
+  TAB 3: PRAYER
+    - Grid of prayer icons (simplified: just the 3 protection prayers for v1)
+    - Each prayer shown as a clickable button:
+      "Protect from Melee"  — click to toggle (same as pressing 1)
+      "Protect from Range"  — click to toggle (same as pressing 2)
+      "Protect from Magic"  — click to toggle (same as pressing 3)
+    - Active prayer highlighted (bright icon/border)
+    - Prayer points display: "43/43" with drain rate info
+    - If prayer points = 0, buttons grayed out
+
+  Implementation:
+    1. Add tab state to ViewerState: active_tab enum (TAB_INVENTORY=0, TAB_COMBAT=1, TAB_PRAYER=2)
+    2. Draw 3 tab buttons at the separator line between existing panel info and new tab area
+    3. Click tab button → switch active_tab
+    4. Based on active_tab, draw the appropriate sub-panel content
+    5. For inventory tab: compute slot contents from sharks_remaining + prayer_doses_remaining
+    6. For combat tab: display static info (style, auto-retal toggle)
+    7. For prayer tab: draw 3 prayer buttons with toggle-on-click
+    8. All clicks in tab area translate to the SAME backend actions (pending_eat, pending_drink,
+       pending_prayer) — no new backend code needed, purely viewer-side UI
+
+  Reference: OSRS inventory/prayer/combat tab layout from Void RSPS
+    Inventory.kt — slot layout
+    Prayer.kt — prayer grid icons
+    CombatDefinition.kt — combat style display
+
+--- PHASE 9a: AGENT-VIEWER ACTION PARITY ---
+
+Goal: Every action available to a human in the viewer must be expressible by an
+RL agent through the action API, and produce identical results. The viewer is
+the demo-env — it must serve both human play and machine control interchangeably.
+
+Current gap:
+  Human clicks tile (25,30) → BFS pathfind → route stored → consumed per tick
+  Agent sends action[0]=FC_MOVE_WALK_NE → one directional step per tick
+  These are NOT equivalent. The human gets intelligent pathfinding; the agent
+  gets raw per-tick directional nudges.
+
+Similarly:
+  Human clicks NPC → sets attack_target_idx + approach_target
+  Agent sends action[1]=3 → sets target via slot index, no approach
+
+Fix: Unify by making ALL actions go through the same backend interface.
+
+Option A — Elevate the agent API to match human capabilities:
+  Add new action types to fc_step:
+    FC_ACTION_WALK_TO_TILE(x, y) — pathfind + route, same as click-to-move
+    FC_ACTION_ATTACK_NPC(npc_idx) — set target + approach, same as click NPC
+  The existing directional actions (FC_MOVE_WALK_N etc.) remain for fine-grained
+  RL control, but the agent CAN use the higher-level actions too.
+
+Option B — Lower the human input to match the agent API:
+  Human clicks translate to the same per-tick directional actions the agent uses.
+  Problem: pathfinding disappears, movement becomes clunky for humans.
+
+Recommendation: Option A. Add high-level action types that both human and agent
+can use. The viewer translates clicks → high-level actions. The agent can send
+either high-level (walk_to_tile) or low-level (directional) actions.
+
+Action parity checklist:
+  [x] Movement: agent uses directional actions (FC_MOVE_WALK_N etc.) for
+      per-tick movement. Human gets BFS pathfinding via click-to-tile, but
+      this is a UI convenience — the backend route system + directional
+      actions both go through the same tick loop. Agent can reach any tile.
+  [x] Attack: agent targets NPC by slot index via act_attack head.
+      Now sets approach_target=1 (same as human click) so the auto-walk-
+      into-range + auto-attack logic kicks in identically.
+  [x] Prayer: agent toggles via action head 2 (already equivalent)
+  [x] Eat/drink: agent consumes via action heads 3/4 (already equivalent)
+  [ ] Run toggle: human has X key. No action head for it. Low priority —
+      FC is almost always walking. Could add to prayer head or new head.
+  [x] Wait/idle: FC_MOVE_IDLE (already equivalent)
+
+--- PHASE 9b: BACKEND AGENT PLAYABILITY VERIFICATION ---
+
+Goal: Verify the backend is fully playable by an agent using ONLY the action
+API — no viewer, no human input, no GUI. This is the critical gate before
+copying the backend to training-env.
+
+  Steps:
+    1. Write a simple test harness (C or Python via ctypes) that:
+       a. Calls fc_reset() to start an episode
+       b. Each tick: reads observation, computes action mask, selects a valid
+          random action per head, calls fc_tick() with those actions
+       c. Runs for multiple full episodes (wave 1 through death or completion)
+       d. Logs: waves reached, ticks survived, damage dealt, prayer usage
+    2. Verify all action heads work correctly without viewer:
+       - Directional movement: agent can navigate the arena
+       - NPC targeting: agent can select and attack NPCs by slot index
+       - Prayer switching: agent can toggle prayers via action head
+       - Eating/drinking: agent consumes items via action head
+       - Action mask: masked actions are correctly rejected
+    3. Verify combat parity:
+       - Same damage rolls, hit delays, prayer checks as viewer play
+       - NPC AI behaves identically
+       - Wave progression works (all 63 waves, Jad healers, splits)
+       - Terminal conditions fire correctly
+    4. Verify observation correctness:
+       - All 126 policy obs features are populated and normalized to [0,1]
+       - 16 reward features fire at correct times
+       - Action mask reflects valid actions each tick
+    5. Verify determinism:
+       - Same seed + same actions → identical state hash at every tick
+       - Run twice with recorded actions, compare hash traces
+
+--- PHASE 9c: DEBUG TOOLING & OVERLAYS ---
 
 Goal: Make the viewer a powerful debugging tool for RL development.
 
@@ -666,6 +806,98 @@ Goal: Make the viewer a powerful debugging tool for RL development.
     - Combat roll details (att_roll, def_roll, damage)
     - Prayer check results
     - NPC AI decisions
+
+--- PHASE 9d: TRAINING-ENV CODE AUDIT ---
+
+Goal: Determine exactly which files and code from demo-env/ belong in the
+headless training-env, and what must be excluded. The rule: keep everything
+that affects game logic, mechanics, timing, stats, or simulation. Exclude
+everything that only exists for rendering, sprites, UI, or human interaction.
+
+  AUDIT RESULT (completed):
+
+  BACKEND — COPY TO TRAINING-ENV (20 files):
+    fc_types.h          — Core structs (FcState, FcPlayer, FcNpc, FcPendingHit)
+    fc_contracts.h      — Observation/action/reward/mask buffer layouts
+    fc_api.h            — Public sim API (init, reset, step, obs, mask, reward)
+    fc_capi.h           — Python ctypes FFI interface (PufferLib bridge)
+    fc_capi.c           — FFI implementation + environment lifecycle
+    fc_state.c          — State init/reset + fc_fill_render_entities serializer
+    fc_tick.c           — Main tick loop, player action processing
+    fc_combat.c         — OSRS combat math (accuracy, max hit, prayer blocking)
+    fc_combat.h         — Combat interface
+    fc_npc.c            — NPC stat table + per-type AI dispatch
+    fc_npc.h            — NPC interface
+    fc_wave.c           — 63-wave spawn tables with 15 rotations (40KB pure data)
+    fc_wave.h           — Wave interface
+    fc_prayer.c         — Prayer drain counter + potion restore formula
+    fc_prayer.h         — Prayer interface
+    fc_pathfinding.c    — Grid movement, LOS, BFS pathfinding
+    fc_pathfinding.h    — Pathfinding interface
+    fc_rng.c            — XORshift32 deterministic RNG
+    fc_hash.c           — FNV-1a state hash for determinism verification
+    fc_debug.h          — Debug hooks + replay trace (guarded by FC_DEBUG)
+    fc_debug.c          — Debug log + action trace buffer
+
+  VIEWER-ONLY — DO NOT COPY (5 files):
+    viewer.c            — 1900 LOC Raylib 3D viewer, UI, input handling
+    fc_npc_models.h     — Raylib MDL2 model loader (depends on raylib.h)
+    osrs_pvp_terrain.h  — Raylib terrain mesh loader (depends on raylib.h)
+    osrs_pvp_objects.h  — Raylib placed objects + atlas loader (depends on raylib.h)
+    osrs_pvp_anim.h     — OSRS vertex-group animation runtime (graphics-focused)
+
+  KEY SAFETY CHECKS:
+    - NO fc_*.c file includes raylib.h — clean separation confirmed
+    - fc_fill_render_entities() is in fc_state.c but is a pure serializer
+      (reads FcState, writes FcRenderEntity). Zero I/O, zero alloc, zero
+      graphics. Safe to include — training-env can ignore the output.
+    - death_timer (FcNpc field): affects despawn timing in the sim, not just
+      visuals. Keep it — it's 3 ticks of dead-but-active state that the
+      observation writer and wave logic correctly handle.
+    - fc_debug.h uses #ifdef FC_DEBUG guards — debug logging compiles to
+      no-ops without the flag. Trace infrastructure is always compiled
+      (safe for replay recording in training).
+
+  THINGS THAT MUST NOT BE STRIPPED:
+    - Pathfinding (BFS) — agent uses directional actions but route-based
+      movement is part of the backend contract
+    - fc_fill_render_entities — it's the observation serializer interface
+    - death_timer / died_this_tick — simulation timing, not cosmetic
+    - All combat formulas, NPC stats, prayer drain rates, wave data
+    - Action mask computation (used by RL policy)
+    - Reward feature extraction (used by RL trainer)
+
+--- PHASE 9e: COPY BACKEND TO TRAINING-ENV ---
+
+Goal: training-env/ has a complete, independently buildable copy of the FC
+backend — identical game logic, no rendering, ready for PufferLib integration.
+
+  Current state: training-env/ has STALE copies of fc_*.c/h from 2026-03-24.
+  The demo-env backend has evolved significantly since then (click-to-move,
+  combat fixes, animation state, NPC models, prayer/combat improvements).
+
+  Steps:
+    1. Snapshot the demo-env backend files to copy:
+       - All fc_*.c and fc_*.h from demo-env/src/
+       - EXCLUDE viewer-only files: viewer.c, osrs_pvp_terrain.h,
+         osrs_pvp_objects.h, fc_npc_models.h, osrs_pvp_anim.h
+       - EXCLUDE assets/ directory (terrain, objects, atlas, models, anims)
+    2. Copy fc_*.c/h into training-env/src/ and training-env/include/,
+       replacing the stale versions
+    3. Verify training-env CMakeLists.txt compiles all backend sources
+       (no Raylib dependency — headless build)
+    4. Verify training-env/src/fc_capi.c (the PufferLib C API bridge) still
+       compiles and links against the updated backend
+    5. Run the agent playability test from Phase 9b against the training-env
+       build to confirm identical behavior
+    6. Run determinism check: same seed + actions in demo-env and training-env
+       must produce identical state hashes at every tick
+
+  CRITICAL: After this step, both demo-env and training-env share the same
+  backend logic. Future backend changes must be applied to BOTH, or we must
+  establish a shared-source build system. For v1, manual sync is acceptable.
+  Phase 10+ may introduce a shared fc_core/ directory with symlinks or
+  CMake add_subdirectory() to eliminate drift.
 
 --- PHASE 10: NPC MODELS (Visual Polish) ---
 

@@ -196,7 +196,10 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
     if (act_attack > FC_ATTACK_NONE) {
         int slot = act_attack - 1;
         int npc_idx = npc_slot_to_index(state, slot);
-        if (npc_idx >= 0) p->attack_target_idx = npc_idx;
+        if (npc_idx >= 0) {
+            p->attack_target_idx = npc_idx;
+            p->approach_target = 1;  /* auto-walk into range, same as human click */
+        }
     }
 
     /* ---- Auto-attack current target ---- */
@@ -212,41 +215,28 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
             int weapon_range = 7;  /* rune crossbow */
 
             if (dist > weapon_range && p->approach_target && p->route_idx >= p->route_len) {
-                /* Player explicitly clicked NPC — pathfind to a tile within weapon range.
-                 * Find the closest walkable tile that's within range of the NPC footprint. */
-                int best_x = -1, best_y = -1, best_d = 9999;
-                int cx = target->x + target->size / 2;
-                int cy = target->y + target->size / 2;
-                /* Search tiles around the NPC within weapon_range */
-                for (int dy = -weapon_range - 1; dy <= weapon_range + target->size; dy++) {
-                    for (int dx = -weapon_range - 1; dx <= weapon_range + target->size; dx++) {
-                        int tx = target->x + dx, ty = target->y + dy;
-                        if (tx < 0 || tx >= FC_ARENA_WIDTH || ty < 0 || ty >= FC_ARENA_HEIGHT) continue;
-                        if (!state->walkable[tx][ty]) continue;
-                        /* Check this tile is within weapon range of NPC footprint */
-                        int nx = (tx < target->x) ? target->x : (tx > target->x + target->size - 1) ? target->x + target->size - 1 : tx;
-                        int ny = (ty < target->y) ? target->y : (ty > target->y + target->size - 1) ? target->y + target->size - 1 : ty;
-                        int ndx = (tx > nx) ? tx - nx : nx - tx;
-                        int ndy = (ty > ny) ? ty - ny : ny - ty;
-                        int ndist = (ndx > ndy) ? ndx : ndy;
-                        if (ndist > weapon_range) continue;
-                        /* Pick tile closest to player */
-                        int pdx = (p->x > tx) ? p->x - tx : tx - p->x;
-                        int pdy = (p->y > ty) ? p->y - ty : ty - p->y;
-                        int pdist = (pdx > pdy) ? pdx : pdy;
-                        if (pdist < best_d) { best_d = pdist; best_x = tx; best_y = ty; }
+                /* Walk toward the NPC center. The greedy pathfinder will head
+                 * straight toward the target. The route consumer in the movement
+                 * section will stop once we're in range (checked next tick). */
+                int npc_cx = target->x + target->size / 2;
+                int npc_cy = target->y + target->size / 2;
+                p->route_len = fc_pathfind_bfs(p->x, p->y, npc_cx, npc_cy,
+                                                state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
+                /* Trim the route to stop at weapon range */
+                for (int ri = 0; ri < p->route_len; ri++) {
+                    int rx = p->route_x[ri], ry = p->route_y[ri];
+                    /* Chebyshev distance to nearest NPC footprint tile */
+                    int nx = (rx < target->x) ? target->x : (rx > target->x + target->size - 1) ? target->x + target->size - 1 : rx;
+                    int ny = (ry < target->y) ? target->y : (ry > target->y + target->size - 1) ? target->y + target->size - 1 : ry;
+                    int rdx = (rx > nx) ? rx - nx : nx - rx;
+                    int rdy = (ry > ny) ? ry - ny : ny - ry;
+                    int rdist = (rdx > rdy) ? rdx : rdy;
+                    if (rdist <= weapon_range) {
+                        p->route_len = ri + 1;  /* stop here */
+                        break;
                     }
                 }
-                if (best_x >= 0) {
-                    p->route_len = fc_pathfind_bfs(p->x, p->y, best_x, best_y,
-                                                    state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
-                    p->route_idx = 0;
-                    fprintf(stderr, "APPROACH: player(%d,%d)→tile(%d,%d) dist=%d route=%d steps\n",
-                            p->x, p->y, best_x, best_y, dist, p->route_len);
-                } else {
-                    fprintf(stderr, "APPROACH: no valid tile found! player(%d,%d) npc(%d,%d) size=%d dist=%d\n",
-                            p->x, p->y, target->x, target->y, target->size, dist);
-                }
+                p->route_idx = 0;
             }
 
             /* Face the attack target */
@@ -431,6 +421,18 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         if (state->npcs[i].active) {
             fc_resolve_npc_pending_hits(state, i);
+        }
+    }
+
+    /* 6b. Process death timers — dead NPCs stay visible briefly */
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        FcNpc* n = &state->npcs[i];
+        if (n->is_dead && n->active) {
+            if (n->death_timer > 0) {
+                n->death_timer--;
+            } else {
+                n->active = 0;  /* fully despawn */
+            }
         }
     }
 
