@@ -403,62 +403,323 @@ Both scripts require the OSRS cache at `runescape-rl/reference/legacy-headless-e
 
 ---
 
-### PR 9a: Viewer Parity — Terrain, Player Composite, Tabbed UI, Item Sprites — IN PROGRESS
+### HISTORICAL — PR 9a.1 / 9a.2 / 9a.3 (Superseded First-Pass Viewer Work)
 
----
+> **STATUS: SUPERSEDED.** The following sub-slices (9a.1 terrain coordinate fix, 9a.2 viewer recovery, 9a.3 scene construction Steps 1–8, texture 521 UV mapping approach) document the first-pass viewer work from 2026-03-30. This viewer was archived as `viewer_archived_20260331.c` due to accumulated stale paths, dual render modes, and unverifiable visual state. The viewer was then reset to a clean shell (PR9a-R1) and the oracle instrumentation pass (PR9a-R0) was completed to establish a trustworthy planning foundation. All terrain/scene work below is preserved as historical record only.
+
+<details>
+<summary>Click to expand superseded first-pass viewer work (Steps 1-8, texture 521 approach)</summary>
 
 #### PR 9a.1: Terrain coordinate fix (done, terrain aligned)
 
 Terrain export cropped from 192x128 to 64x64 matching fc_core arena.
 
----
+#### PR 9a.2: Viewer Recovery / Asset-Backed Mode Restoration
 
-#### PR 9a.2: Viewer Recovery / Asset-Backed Mode Restoration — IN PROGRESS
+**Problem**: Viewer had dual-render-path architecture bug. 3D mode (`use_3d_models=true`) used NPC models and terrain mesh, but 2D mode fell back to colored primitives.
 
-**Problem**: Viewer has a dual-render-path architecture bug. 3D mode (`use_3d_models=true`) uses NPC models and terrain mesh, but 2D mode falls back to colored primitives (checkerboard, blue circles, orange rects) with zero asset integration. When the user sees the 2D view, it looks like a complete regression. The 2D fallback should not exist as a separate un-asset-backed path.
+**Delivered before reset**:
+- `export_fc_terrain.py`: Terrain exporter with VoidPS floor definition opcode handling. Cropped to 64x64.
+- `fight_caves.terrain`: TERR binary, 23,814 vertices, 7,938 triangles, 381KB.
+- `fc_terrain_loader.h`: TERR binary loader.
+- Tabbed UI panel (Inventory, Prayer, Combat).
+- Prayer icon sprites with on/off states.
 
-**Root cause**: The render loop has `if (use_3d_models && model_cache) { draw_3d(); } else { draw_2d_primitives(); }`. The 2D path was never updated to use exported assets. The viewer defaults to 3D mode but the user may not be in 3D mode, or the condition may fail silently.
+#### PR 9a.3: Scene Construction Correctness Recovery — Steps 1-8
 
-**Fix**: Eliminate the dual path. Make ONE render path that always uses the 3D camera + exported terrain + NPC models when assets are loaded. Add explicit on-screen diagnostic banner when assets fail to load. Add startup diagnostics (CWD, asset paths, load status).
+Steps 1-3: Terrain height formula, parser bug, opcode fix. Steps 4-5: Oracle reconciliation, opcode 40 recolor. Step 6: Scene decomposition. Step 7: Alpha blending + camera calibration. Step 8: Camera pitch fix + terrain definition colours.
 
-**Delivered so far (PR9a total)**:
-- `demo-env/scripts/export_fc_terrain.py`: Terrain exporter with VoidPS floor definition opcode handling. Now correctly cropped to fc_core 64x64 arena.
-- `demo-env/assets/fight_caves.terrain`: TERR binary, 23,814 vertices, 7,938 triangles, 381KB. Coordinates [0,63]x[0,63] aligned with fc_core arena.
-- `demo-env/src/fc_terrain_loader.h`: TERR binary loader.
-- Terrain mesh integrated into 3D mode — entities and terrain share the same coordinate space.
-- **Tabbed UI panel**: 3 tabs (Inventory, Prayer, Combat) with tab switching and exported tab icon sprites.
-- **Inventory tab**: Shark slots (20) and prayer potion slots (8). Clicking queues EAT/DRINK actions.
-- **Prayer tab**: 3 protection prayers with exported on/off icon sprites, clickable to toggle.
-- **Combat tab**: Damage dealt/taken, food/potion usage, position, cooldown timers.
-- Off-state prayer sprites (`protect_*_off.png`) loaded alongside on-state versions.
+**Remaining blocker at time of reset**: Texture 521 BITMAP decode from cache index 9 + UV mapping onto terrain. This approach is now **superseded** by the Kotlin `FightCavesTerrainExporter` baked PNG path discovered during the oracle instrumentation pass (PR9a-R0). The texture 521 decode + UV mapping approach is preserved as historical/research context only.
 
-**Not yet done**:
-- Player model (still blue cylinder). Requires either PufferLib PlayerComposite assembly or a pre-composed fixed-loadout model export. Documented blocker.
-- Item sprites for inventory (using colored rectangles with letter labels, not cache-rendered item sprites). Requires ExportItemSprites.java (needs JVM) or pre-rendering from 3D item models.
+</details>
 
 ---
 
-### PR 9a: Viewer Parity — Terrain, Player Composite, Tabbed UI, Item Sprites
+## Active Viewer Rebuild Plan (PR9a-R0 through PR9a-R7)
 
-Blocked by: PR 8c (asset pipeline must exist).
+**Planning foundation**: Oracle instrumentation pass (2026-03-31). Findings in `docs/debug_reviewer.md` under "Oracle Instrumentation Matrix" and "Instrumentation Findings".
 
-**What**: Close the remaining viewer gaps so the viewer looks and plays like Fight Caves.
+**Key principles derived from the oracle**:
+- All terrain, static objects, and models are **100% static after load**. Only entity state changes per tick.
+- Terrain source: Kotlin `FightCavesTerrainExporter` baked PNG (correct server-side decode pipeline). NOT the old texture 521 UV mapping approach.
+- Arena contract: Region 9551, 64×64 tiles, centre tile (2400,5088), 1 tile = 1.0 world unit.
+- Render order: opaque terrain → static objects → depth/blend setup → transparent objects → UI.
+- The viewer reads entity state exclusively via `fc_fill_render_entities`. No direct FcState access for simulation data.
 
-- Fix VoidPS terrain/floor-definition blocker OR use RSPS/Kotlin export path for pre-baked FC terrain mesh. Procedural terrain not accepted as final.
-- Replace player cylinder with actual player representation using the fixed FC loadout (rune crossbow, black d'hide). Pre-composed model or assembled composite.
-- Build RS-like tabbed panel (inventory, prayer, combat/stats tabs) using exported tab/slot sprites.
-- Export and display real item sprites for sharks, prayer potions, adamant bolts in inventory slots.
-- Make inventory items clickable (routes to EAT/DRINK action heads).
-- Make prayer icons clickable (routes to PRAYER action head).
-- Tab switching must work.
+**Layer order** (each slice adds one visual layer to the clean shell):
+1. Floor (R2) → 2. Walls/static geometry (R3) → 3. Decor/clutter with alpha (R4) → 4. Player (R5) → 5. NPCs (R6) → 6. UI polish (R7)
 
-**Acceptance**:
-- Viewer no longer uses procedural terrain as the primary arena presentation.
-- Player is no longer a blue cylinder/circle.
-- RS-like tabbed UI exists and is functional (tabs switch, items visible as sprites).
-- Sharks/prayer pots/bolts visible as inventory items with real sprites.
-- Prayer and inventory interactions work through the UI (routed to canonical actions).
-- Screenshot is materially closer to actual RuneScape Fight Caves play/debug.
+---
+
+### PR9a-R0: Oracle Instrumentation + Arena Rebuild Contract — COMPLETE
+
+**Type**: Discovery / specification phase. NOT an implementation phase.
+
+**Purpose**: Produce a trustworthy, phase-by-phase understanding of what the headed oracle does, so the viewer rebuild proceeds in a controlled order without guessing. Establish the exact arena contract and data requirements.
+
+**What was delivered**:
+- 9-phase instrumentation matrix (63 targeted probes)
+- Phase-by-phase findings with exact file paths, code algorithms, data tables
+- Arena rebuild contract: Region 9551, 64×64 tiles, centre (2400,5088), 1 tile = 1.0 world unit
+- World/tile scale contract: tile coords are direct array indices; client uses tileX×128 for sub-tile render units; height = MapTile.height × -8 render units
+- Static vs dynamic split: terrain/objects/models static after load; entity positions, HP, animations, combat events dynamic per tick
+- Baked vs runtime split: 10 static asset types exportable offline, 11 dynamic data types computed at runtime
+- Minimum data/runtime behavior spec per layer: floor, walls, decor, player, NPCs, UI
+- Discovery of Kotlin `FightCavesTerrainExporter` tool as the recommended terrain bake path
+
+**What R0 explicitly is NOT**:
+- Not an implementation of the arena floor
+- Not a validation that the arena renders correctly
+- Not a viewer code change
+- The arena rebuild contract is a SPECIFICATION — it is not "complete" as an implementation until PR9a-R2 validates it visually
+
+**Status assessment**: R0 **remains COMPLETE** as a discovery/specification phase. All required outputs listed above were delivered in `docs/debug_reviewer.md` under the instrumentation findings sections. The arena contract, scale contract, static/dynamic split, baked/runtime split, and per-layer requirements are all documented.
+
+---
+
+### PR9a-R1: Clean Viewer Shell Reset — COMPLETE
+
+**Type**: Shell-reset / trustworthy foundation phase. NOT a terrain parity phase. NOT an arena validation phase.
+
+**Purpose**: Establish a minimal, stable, single-render-path viewer base with no stale code, no broken asset loading, and no dual render modes. This shell must be trustworthy enough that each subsequent slice can add exactly one visual layer and verify it in isolation.
+
+**What was delivered** (`viewer.c`, 355 lines):
+- Single render path (3D Camera3D, no 2D/3D toggle, no conditional fallback paths)
+- Game loop: fc_init → fc_reset → fc_step with random demo actions
+- Pause/resume (Space), single-step (Right), speed control (Up/Down), reset (R)
+- Camera: oracle-calibrated defaults (pitch=0.6 rad, dist=28, fovy=32°), right-drag orbit, scroll zoom
+- Header: wave/episode/HP/prayer display
+- Panel: HP/Pray bars, wave info, inventory summary, prayer status, terminal state
+- Debug overlay (D key): camera values, hash, entity count
+- 3D viewport: grid placeholder (wireframe grid on Y=0), player cylinder, NPC cubes, HP bars
+- Controls help bar at bottom
+
+**What R1 explicitly is NOT**:
+- No terrain mesh or texture (grid placeholder only)
+- No scene objects (walls, rocks, bone piles)
+- No NPC 3D models (placeholder cubes only)
+- No sprite loading
+- No asset file dependencies (viewer runs with zero external assets)
+
+**Acceptance criteria**:
+- Readable UI/text: YES — header, panel, debug overlay all render correctly
+- Normal stepping/tick progression: YES — fc_step runs, entities move, wave advances
+- Normal camera movement/orbit/zoom: YES — right-drag orbit, scroll zoom, oracle-calibrated defaults
+- No corruption: YES — clean dark background, no visual artifacts
+- No stale broken render path: YES — single 3D path, no 2D fallback, no conditional asset branching
+- Single active render path: YES — one draw_scene() function, one draw path
+- Minimal stable base for floor-only work: YES — grid on Y=0 plane, entities in correct tile-space coordinates
+
+**Status assessment**: R1 **remains COMPLETE** as a shell-reset phase. The current `viewer.c` (355 lines) satisfies all acceptance criteria above. It has a single render path, oracle-calibrated camera, working game loop, working UI, and no stale code. It is ready to receive the floor-only terrain layer (PR9a-R2) on top of the existing grid placeholder.
+
+**Note**: R1 does NOT validate the arena contract. It provides a grid placeholder at the correct coordinate scale (FC_ARENA_WIDTH × FC_ARENA_HEIGHT tiles), but the grid has not been compared against the oracle floor. Arena validation happens in R2.
+
+---
+
+### PR9a-R2: Floor-Only Rebuild — R2a COMPLETE, R2b SKIPPED
+
+**Type**: First visual layer implementation. Split into geometry/footprint (R2a) and material/visual (R2b).
+
+**Floor-source history**:
+- Option A (Kotlin orthographic colour bake) → **ACCEPTED as R2 floor**. Produces correct arena shape, warm dark cave palette, smooth blending via the full Kotlin colour pipeline. 256×256 PNG at 4px/tile = exact 64×64 footprint.
+- Option A-refined → exhausted (Kotlin renderer is flat colour, hardcoded 4px/tile, no texture bitmaps)
+- Option B (structured per-tile binary) → EXPORTED successfully (`fc_floor_structured.bin`, 64×64 per-tile data with height/underlay/overlay/colour) but vertex-coloured mesh from raw definition RGB produced wrong colours (blue/gray). Rejected as active render path, retained as data artifact.
+- Option C (oracle screenshot crop) → REJECTED. Perspective screenshots are not valid render assets.
+
+#### PR9a-R2a: Floor geometry, footprint, mapping — COMPLETE
+
+**Purpose**: Validate that the floor occupies the correct 64×64 footprint with correct tile/world mapping and center/origin.
+
+**Floor source**: Option A — Kotlin `FightCavesTerrainExporter` bake (`fc_floor_region_37_79.png`, 256×256 RGBA, 4px/tile). Loaded as Raylib texture on a flat quad covering (0,0,0) to (64,0,64).
+
+**Acceptance verification**:
+1. Floor builds and renders: YES — texture on 64×64 world-unit quad
+2. 64×64 tile footprint: YES — 256px / 4px/tile = 64 tiles per axis
+3. Player at (32,32) on floor: YES — camera follows player, player stands on quad
+4. Tile/world scale 1:1: YES — quad width = FC_ARENA_WIDTH = 64.0 world units
+5. Grid overlay aligns: YES — G key draws lines at integer tile boundaries
+6. Arena shape matches oracle: YES — user confirmed acceptable via screenshot comparison
+7. Camera presets: YES — 1=aerial, 2=gameplay, 3=close
+8. Footprint verification: YES — printed to stderr at startup
+
+**Note**: Floor is flat at Y=0 (no per-tile height variation). The structured export has per-tile height data available in `fc_floor_structured.bin` if height is needed later. Flat floor is acceptable for R2a.
+
+#### PR9a-R2b: Floor material / visual parity — SKIPPED
+
+The oracle floor has bright orange lava-crack web pattern (texture 521, procedurally generated by the HD client). The Kotlin bake produces definition colours only (dark cave interior + orange volcanic rim). The user accepted the Option A visual as sufficient for current needs. R2b (lava-crack texture parity) is deferred — can be revisited later if needed, but is not blocking R3.
+
+---
+
+### PR9a-R3: Walls / Static Cave Geometry — NEXT
+
+**Type**: Second visual layer. Static scene objects.
+
+**Purpose**: Add cave wall formations and major static geometry. This defines the visible arena boundary and makes the arena read as an enclosed cave rather than an open plane.
+
+**Oracle reference**: `current_fightcaves_demo` running on Linux (server + client at `127.0.0.1:43594`). Oracle shows tall, dark brown/black stalagmite formations at the arena rim, with orange/brown volcanic rock features. Walls are opaque, rendered before any transparent objects.
+
+**Floor artifact already available**: `debug_walls_only.scene` — 2.7MB SCNE binary (little-endian), 169,464 vertices, 56,488 triangles, 547 wall object instances. Exported from the correct cache with opcode 40 recoloring already applied. Coordinates are in viewer space: X=[0,64], Z=[0,64], Y=height (range [-1.5, 9.6] tiles). Wall colours are very dark (RGB 0-64 range, dark browns/blacks).
+
+**SCNE binary format** (little-endian):
+- `uint32 magic` = 0x53434E45 ("SCNE")
+- `uint32 vertex_count` (total vertices, every 3 = one triangle)
+- `uint32 instance_count` (diagnostic only)
+- `float[vertex_count * 3]` — flat X, Y, Z coordinates in viewer space
+- `uint8[vertex_count * 4]` — RGBA colours per vertex
+
+**What is included**:
+- Load `debug_walls_only.scene` (shapes 0-3, 9: walls, wall corners, diagonal walls)
+- Build a Raylib Mesh from vertex positions + vertex colours
+- Render as opaque geometry alongside the floor
+- No texture needed — vertex colours only (recoloring already baked into the export)
+
+**What is excluded**:
+- Ground decor / bone piles (R4 — needs alpha blending, separate pass)
+- Centre pieces / ceiling tiles (shape 10-11 — these are above the viewport at most angles)
+- Object brightness/contrast (lighting parameters — deferred, would need directional lighting engine)
+- Object retexturing opcode 41 (deferred — requires texture pipeline)
+- Roof geometry (planes 1-3 not rendered)
+
+**Why this order**: Walls define the visible arena boundary. Without them, the floor is an open plane. With them, the arena reads as an enclosed cave. Walls must be in place before decor/clutter so that the relative proportions (floor vs walls vs clutter density) can be visually assessed.
+
+**Acceptance criteria**:
+- Cave wall formations visible at arena edges at both camera presets
+- Arena reads as an enclosed cave, not an open plane
+- Wall colours are dark brown/black (matching oracle's wall palette)
+- Wall positions align with the floor texture boundary (walls sit at the edges where the floor ends)
+- No walls floating above or below the floor
+- Viewer remains healthy: single render path, readable UI, no corruption
+
+**What would make this phase fail / remain incomplete**:
+- Walls render but at wrong position (not aligned with floor boundary)
+- Walls render but wrong scale (too large or too small relative to floor)
+- SCNE loader fails to parse the binary format
+- Walls obscure the floor or player (Z-fighting, wrong draw order)
+
+---
+
+### PR9a-R4: Decor / Clutter with Correct Alpha — PLANNED
+
+**Type**: Third visual layer. Semi-transparent ground decor.
+
+**Purpose**: Add bone pile ground decorations (objects 9370-9373) with correct alpha blending. These are the most face-dense layer (~237K faces across 2,336 instances) and must render semi-transparent to avoid obscuring the floor.
+
+**Oracle reference**: In the oracle, bone piles appear as subtle, see-through warm-brown debris scattered across the dark floor. They are NOT an opaque carpet — the floor is visible through them.
+
+**Floor artifact already available**: `debug_bonepiles_only.scene` — 4.7MB SCNE binary, contains only objects 9370-9373 (shape 22 ground decor). Also available: `debug_ground_decor_only.scene` (6.1MB, all shape-22 objects including non-bone-pile ground decor).
+
+**What is included**:
+- Load `debug_bonepiles_only.scene` as a separate mesh
+- Two-pass rendering (critical for correct appearance):
+  - Pass 1: Opaque — floor texture + wall mesh (depth writes ON)
+  - Pass 2: Transparent — bone pile mesh (depth writes OFF, alpha blending ON)
+- Per-vertex alpha from the SCNE export (RS alpha 110=57% opacity, 170=33% opacity)
+- `rlEnableColorBlend()` + `rlDisableDepthMask()` for the transparent pass
+
+**What is excluded**:
+- Entity model upgrades (R5, R6)
+- Object brightness/contrast
+- Non-bone-pile ground decor (can be added later if needed)
+
+**Why this order**: Bone piles are the densest geometry layer. Adding them after walls ensures the two-pass render approach can be validated. If alpha blending is wrong, the bone piles will create an opaque orange-brown carpet that hides the floor — this was the exact failure mode in the first-pass viewer.
+
+**Acceptance criteria**:
+- Bone piles render semi-transparent (floor visible through them)
+- Dark floor texture visible through the semi-transparent bone debris
+- Scene composition at gameplay angle matches oracle: dark cave floor with scattered warm-brown debris, dark walls at edges, open playable interior
+- No opaque bone pile carpet effect (the failure mode from the first-pass viewer)
+- Two-pass render order is correct: opaque geometry first, then transparent
+
+**What would make this phase fail / remain incomplete**:
+- Bone piles render fully opaque (alpha blending not enabled or not working)
+- Floor completely hidden under bone pile carpet
+- Bone piles render but in wrong position relative to floor/walls
+- Z-fighting between floor and bone piles (both at Y≈0)
+
+---
+
+### PR9a-R5: Player Representation — PLANNED
+
+**Type**: Fourth visual layer. Player entity visual upgrade.
+
+**Purpose**: Replace the blue cylinder placeholder with a recognizable player representation.
+
+**What is included**:
+- Options (in preference order):
+  1. Pre-baked composite model from the canonical FC loadout (rune crossbow, black d'hide set)
+  2. Simple coloured capsule/humanoid shape with equipment-like colouring
+  3. Keep cylinder but with correct height/width proportions (0.6 tiles wide, 1.2 tiles tall)
+- Prayer overhead indicator (text or sprite)
+- HP bar positioning adjusted for new model height
+
+**What is excluded**:
+- Animation (static pose only)
+- Dynamic equipment changes (fixed loadout)
+
+**Why this order**: Player visual upgrade after floor + walls + decor so the player can be seen IN the correct scene context. Validates that entity-to-floor alignment is correct.
+
+**Acceptance criteria**:
+- Player is visually distinguishable from NPCs
+- Player stands at correct position on the floor (not floating, not underground)
+- Player scale is proportional to cave walls and floor tiles
+
+---
+
+### PR9a-R6: NPC Visual Layer — PLANNED
+
+**Type**: Fifth visual layer. NPC entity visual upgrade.
+
+**Purpose**: Replace placeholder cubes with recognizable NPC representations.
+
+**What is included**:
+- Per-type visual distinction (at minimum: size + colour + name label)
+- Options (in preference order):
+  1. Cache-exported MDL2 models (already exported in PR8b, 8 NPC types)
+  2. Type-coloured scaled shapes with correct relative proportions (Jad height=512 vs others ~128)
+- Jad telegraph indicator (MAGIC/RANGE visual cue)
+- HP bars above NPCs
+- Dead NPCs hidden or translucent
+
+**What is excluded**:
+- Animation (static idle pose only)
+- Projectile flight visualization
+
+**Why this order**: NPCs are the last major 3D element. Adding them last means their scale/position can be immediately validated against the floor, walls, and player already in the scene.
+
+**Acceptance criteria**:
+- All 8 NPC types visually distinguishable
+- Jad is visibly larger than other NPCs
+- NPC positions match simulation tile coordinates
+- Jad telegraph is visible
+
+---
+
+### PR9a-R7: UI Polish / Interactions — PLANNED
+
+**Type**: Sixth and final PR9a layer. UI completion.
+
+**Purpose**: Bring the UI panel to a functional state for human play readiness (PR9b).
+
+**What is included**:
+- Tabbed UI panel (Inventory, Prayer, Combat tabs)
+- Prayer icons (exported sprites or procedural indicators), clickable → PRAYER action head
+- Inventory items (shark/ppot/bolt counts), clickable → EAT/DRINK action heads
+- Hitsplat damage numbers in 3D viewport (billboard text above entities)
+- Wave transition display
+
+**What is excluded**:
+- Click-to-move (PR9b)
+- Click-to-attack NPC (PR9b)
+- Keyboard shortcut bindings (PR9b)
+- Replay/rewind (PR10)
+
+**Why this order**: UI is the final polish layer. It depends on all visual elements being in place so that UI elements (HP bars, hitsplats, prayer indicators) can be positioned correctly relative to 3D entities.
+
+**Acceptance criteria**:
+- Tabbed panel with functional tab switching
+- Prayer and inventory interactions route to correct action heads
+- Hitsplat numbers visible when entities take damage
+- Wave counter displays correctly
 
 ---
 
