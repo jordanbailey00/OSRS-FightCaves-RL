@@ -119,6 +119,28 @@ is hitting the tick cap, meaning it's surviving but not clearing waves.
 It may have learned to just stand still and pray, avoiding damage but not
 fighting. Need to visually observe agent behavior.
 
+Notable from wandb config dump:
+- Network: MinGRU (PufferLib default, not plain MLP — has recurrent state)
+- Encoder/Decoder: DefaultEncoder/DefaultDecoder
+- anneal_lr: 1 (LR annealing is ON — LR decreases over training)
+- replay_ratio: 1.0, vtrace enabled (V-trace importance sampling active)
+- cudagraphs: 10 (CUDA graph optimization enabled)
+- eval_episodes: 10000 (large eval batch)
+- checkpoint_interval: 200 epochs
+
+Interesting observations:
+- MinGRU gives the agent memory across ticks — it can remember what
+  happened several ticks ago (e.g., "Ket-Zek attacked with magic 3 ticks
+  ago, I should still be praying magic"). This is better than a stateless
+  MLP for prayer switching.
+- anneal_lr=1 means the LR of 0.001 decreases toward 0 over the 5B steps.
+  By 2.5B steps it's already at 0.0005. This could explain why the agent
+  stops improving — LR becomes too small. Consider setting anneal_lr=0.
+- Episode length hitting 30001 (tick cap) is suspicious. With curriculum
+  starting 50% of episodes at wave 28, the agent may have learned to just
+  survive at wave 28-30 without progressing (no deaths = no tick penalty
+  accumulation worth worrying about at -0.001/tick).
+
 Next steps: implement policy replay in demo-env viewer to visually observe
 what the agent is actually doing at wave 30.
 
