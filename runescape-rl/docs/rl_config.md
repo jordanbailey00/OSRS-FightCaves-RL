@@ -5,7 +5,102 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v6 (2026-04-04)
+## CURRENT: v7 (2026-04-04)
+
+Changes from v6/v6.1 (based on policy replay observations):
+
+Critical bug fix:
+- Collision map was never loaded during training. PufferLib runs from
+  pufferlib_4/ directory where none of the search paths in fc_state.c
+  resolved, so setup_arena() fell back to an open arena (all tiles
+  walkable, border walls only). ALL v1-v6.1 runs trained without cave
+  walls. Agent walked through terrain because walls didn't exist in
+  training. Fixed by copying fightcaves.collision to pufferlib_4/assets/.
+
+Reward shaping changes:
+- w_food_used: -0.01 → -0.5. Waste scaling (overheal fraction × 9)
+  now produces meaningful punishment. Eating at 1 HP missing = -4.8.
+  Eating at 20+ HP missing = -0.5 (acceptable base cost).
+- w_food_used_well: NEW, +1.0. Positive reward for eating when 20+ HP
+  missing (200+ tenths). Net reward for well-timed eat = +0.5.
+  Agent learns to eat when actually hurt, not for chip damage.
+- w_prayer_pot_used: -0.01 → -1.0. Same waste scaling logic. Drinking
+  at 1 prayer missing = -9.5. Drinking at 17+ missing = -1.0.
+- w_damage_taken: -0.75 (unchanged). Quadratic scaling kept — agent must
+  learn that big hits are catastrophic. This is damage taken, not HP
+  missing — directly punishes taking hits from hard-hitting NPCs.
+- w_correct_danger_prayer: 0.0 → 2.0. NEW reward feature. Fires per-hit
+  when correct prayer blocks a ranged/magic attack from ANY NPC.
+- w_wrong_danger_prayer: 0.0 → -2.0. NEW reward feature. Fires per-hit
+  when wrong/no prayer active and hit by ranged/magic. Symmetrical with
+  correct prayer (+2/-2). Agent needs this signal to learn prayer switching.
+
+Backend changes:
+- Added correct_danger_prayer / wrong_danger_prayer flags to FcState
+- Tracking in fc_combat.c: fires when ranged/magic hit resolves, checks
+  if active prayer matches attack style. Per-hit, not per-tick.
+- FC_RWD_CORRECT_DANGER_PRAY (16), FC_RWD_WRONG_DANGER_PRAY (17)
+- FC_REWARD_FEATURES: 16 → 18
+- w_food_used_well field added to FightCaves struct + binding.c
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.75
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 2.0
+w_wrong_danger_prayer = -2.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 2_500_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+---
+
+## v6.1 (2026-04-04) — Tick cap experiment (archived)
+
+Same config as v6 except FC_MAX_EPISODE_TICKS: 30000 → 200000.
+See v6.1 section below for full results.
+
+---
+
+## v6 (2026-04-04) (archived)
 
 Changes from v5:
 

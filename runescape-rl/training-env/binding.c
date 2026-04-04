@@ -40,6 +40,8 @@ void my_init(Env* env, Dict* kwargs) {
     env->w_cave_complete = item ? (float)item->value : 100.0f;
     item = dict_get_unsafe(kwargs, "w_food_used");
     env->w_food_used = item ? (float)item->value : -0.05f;
+    item = dict_get_unsafe(kwargs, "w_food_used_well");
+    env->w_food_used_well = item ? (float)item->value : 1.0f;
     item = dict_get_unsafe(kwargs, "w_prayer_pot_used");
     env->w_prayer_pot_used = item ? (float)item->value : -0.05f;
     item = dict_get_unsafe(kwargs, "w_correct_jad_prayer");

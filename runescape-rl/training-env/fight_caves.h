@@ -88,6 +88,7 @@ typedef struct FightCaves {
     float w_player_death;
     float w_cave_complete;
     float w_food_used;
+    float w_food_used_well;       /* positive reward for eating with 20+ HP missing */
     float w_prayer_pot_used;
     float w_correct_jad_prayer;
     float w_wrong_jad_prayer;
@@ -163,10 +164,15 @@ static float fc_puffer_compute_reward(FightCaves* env) {
      * Same logic for prayer pots (restore 170 tenths = 17 points). */
     if (rwd[FC_RWD_FOOD_USED] > 0.0f) {
         int shark_heal = 200;  /* tenths */
+        int hp_missing = env->state.player.max_hp - env->state.player.current_hp;
         int overheal = (env->state.player.current_hp + shark_heal) - env->state.player.max_hp;
         if (overheal < 0) overheal = 0;
         float waste_frac = (float)overheal / (float)shark_heal;  /* 0 = no waste, 1 = total waste */
         reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_frac * 9.0f);
+        /* Reward eating at the right time (20+ HP = 200+ tenths missing) */
+        if (hp_missing >= 200) {
+            reward += env->w_food_used_well;
+        }
     }
     if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
         int pot_restore = 170;  /* tenths (17 prayer points) */
