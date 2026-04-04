@@ -2,6 +2,7 @@
 #include "fc_wave.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /*
  * fc_state.c — State allocation, initialization, reset, rendering.
@@ -25,11 +26,19 @@
  * If the file is missing, falls back to an open arena with border walls.
  */
 static void setup_arena(FcState* state) {
-    /* Try to load collision from binary file */
-    FILE* f = fopen("assets/fightcaves.collision", "rb");
-    if (!f) {
-        /* Also try relative to build directory */
-        f = fopen("../demo-env/assets/fightcaves.collision", "rb");
+    /* Try to load collision from binary file (search multiple paths) */
+    static const char* collision_paths[] = {
+        "assets/fightcaves.collision",
+        "../demo-env/assets/fightcaves.collision",
+        "../training-env/assets/fightcaves.collision",
+        NULL
+    };
+    /* Also check FC_COLLISION_PATH env var for custom location */
+    FILE* f = NULL;
+    const char* env_path = getenv("FC_COLLISION_PATH");
+    if (env_path) f = fopen(env_path, "rb");
+    for (int p = 0; !f && collision_paths[p]; p++) {
+        f = fopen(collision_paths[p], "rb");
     }
     if (f) {
         uint8_t buf[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
