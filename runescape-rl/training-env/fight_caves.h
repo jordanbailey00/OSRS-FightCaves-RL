@@ -135,8 +135,20 @@ static float fc_puffer_compute_reward(FightCaves* env) {
     reward += rwd[FC_RWD_JAD_KILL]         * env->w_jad_kill;
     reward += rwd[FC_RWD_PLAYER_DEATH]     * env->w_player_death;
     reward += rwd[FC_RWD_CAVE_COMPLETE]    * env->w_cave_complete;
-    reward += rwd[FC_RWD_FOOD_USED]        * env->w_food_used;
-    reward += rwd[FC_RWD_PRAYER_POT_USED]  * env->w_prayer_pot_used;
+    /* Food/pot penalty scales with how wasteful the use was.
+     * Eating at full HP or high HP = full penalty (wasteful).
+     * Eating at low HP = no penalty (smart survival).
+     * Threshold: penalty applies when HP > 50% (shark) or prayer > 50% (pot). */
+    if (rwd[FC_RWD_FOOD_USED] > 0.0f) {
+        float hp_frac = (float)env->state.player.current_hp / (float)env->state.player.max_hp;
+        float waste_factor = (hp_frac > 0.5f) ? (hp_frac - 0.5f) * 2.0f : 0.0f;  /* 0 at 50%, 1 at 100% */
+        reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_factor * 4.0f);
+    }
+    if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
+        float pray_frac = (float)env->state.player.current_prayer / (float)env->state.player.max_prayer;
+        float waste_factor = (pray_frac > 0.5f) ? (pray_frac - 0.5f) * 2.0f : 0.0f;
+        reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_factor * 4.0f);
+    }
     reward += rwd[FC_RWD_CORRECT_JAD_PRAY] * env->w_correct_jad_prayer;
     reward += rwd[FC_RWD_WRONG_JAD_PRAY]   * env->w_wrong_jad_prayer;
     reward += rwd[FC_RWD_INVALID_ACTION]   * env->w_invalid_action;

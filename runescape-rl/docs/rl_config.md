@@ -13,6 +13,9 @@ Changes from v1:
 - ent_coef: 0.01 → 0.05 (entropy dropped from 8.3→5.8 in v1, keep exploration alive)
 - w_correct_jad_prayer: 5.0 → 10.0 (stronger signal for correct prayer switching)
 - w_wrong_jad_prayer: -10.0 → -20.0 (harsher penalty for wrong prayer)
+- Food/pot waste penalty: now scales with HP/prayer %. Eating at high HP
+  gets 4x normal penalty. Eating at <50% HP gets zero penalty. Prevents
+  agent from wasting sharks on 1-2 HP of damage. Same for prayer pots.
 
 ```ini
 [base]
