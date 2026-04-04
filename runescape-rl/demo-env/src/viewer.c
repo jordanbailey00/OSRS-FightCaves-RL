@@ -202,6 +202,7 @@ typedef struct {
     /* Debug toggles */
     int godmode;        /* 1 = player can't die */
     int debug_spawn;    /* NPC type to spawn (0 = off, 1-8 = type) */
+    int policy_pipe;    /* 1 = read actions from stdin, write obs to stdout */
     /* Smooth movement interpolation — stored by stable slot (player + NPC array index) */
     float prev_player_x, prev_player_y;
     float prev_npc_x[FC_MAX_NPCS];
@@ -661,6 +662,38 @@ static void draw_test_overlay(ViewerState* v) {
                  v->state.player.x, v->state.player.y);
         DrawText(buf, bx + 8, by + 42, 11, COL_TEXT_DIM);
     }
+}
+
+/* ======================================================================== */
+/* Policy pipe mode — read actions from stdin, write obs to stdout          */
+/* ======================================================================== */
+
+static int read_policy_actions(ViewerState* v) {
+    int a[5];
+    if (scanf("%d %d %d %d %d", &a[0], &a[1], &a[2], &a[3], &a[4]) != 5)
+        return 0;
+    for (int i = 0; i < 5; i++) v->actions[i] = a[i];
+    v->actions[5] = 0;
+    v->actions[6] = 0;
+    return 1;
+}
+
+static void write_obs_to_pipe(ViewerState* v) {
+    /* Write policy obs (135) + 5-head action mask (36) = 171 floats */
+    float obs_buf[FC_OBS_SIZE];
+    fc_write_obs(&v->state, obs_buf);
+    float mask_buf[FC_ACTION_MASK_SIZE];
+    fc_write_mask(&v->state, mask_buf);
+
+    /* Policy obs: first FC_POLICY_OBS_SIZE floats */
+    for (int i = 0; i < FC_POLICY_OBS_SIZE; i++)
+        printf("%.6f ", obs_buf[i]);
+    /* 5-head mask: first 36 floats (skip walk-to-tile heads) */
+    int mask5 = FC_MOVE_DIM + FC_ATTACK_DIM + FC_PRAYER_DIM + FC_EAT_DIM + FC_DRINK_DIM;
+    for (int i = 0; i < mask5; i++)
+        printf("%.6f ", mask_buf[i]);
+    printf("\n");
+    fflush(stdout);
 }
 
 /* Entity ground Y — slightly above terrain so entities stand on the flattened cracks */
@@ -1489,13 +1522,20 @@ static void draw_debug(ViewerState* v) {
 int main(int argc, char** argv) {
     int screenshot_mode = 0;
     const char* screenshot_path = NULL;
+    int policy_pipe_flag = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--screenshot") == 0 && i+1 < argc) {
             screenshot_mode = 1;
             screenshot_path = argv[++i];
+        } else if (strcmp(argv[i], "--policy-pipe") == 0) {
+            policy_pipe_flag = 1;
         }
     }
     fprintf(stderr,"=== Fight Caves Viewer (Phase 8 — Playable) ===\n");
+    /* In policy-pipe mode, suppress Raylib's INFO logs which go to stdout
+     * and would corrupt the pipe protocol. */
+    if (policy_pipe_flag)
+        SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);
     InitWindow(WINDOW_W, WINDOW_H, "Fight Caves RL — Playable Viewer");
     SetTargetFPS(60);
@@ -1648,8 +1688,18 @@ int main(int argc, char** argv) {
     }
 
     v.combat_style = 1;  /* Rapid default */
+    v.policy_pipe = policy_pipe_flag;
 
     reset_ep(&v);
+
+    /* Policy pipe: write initial obs so Python can send first action */
+    if (v.policy_pipe) {
+        v.paused = 0;
+        v.auto_mode = 0;
+        fprintf(stderr, "[policy-pipe] Mode active. Reading actions from stdin.\n");
+        write_obs_to_pipe(&v);
+    }
+
     int frame_count = 0;
 
     while (!WindowShouldClose()) {
@@ -1732,12 +1782,21 @@ int main(int argc, char** argv) {
          * The tick loop reads them when the next tick fires. */
         if (!v.auto_mode && v.state.terminal == TERMINAL_NONE) {
             process_human_clicks(&v);
-            process_human_keys(&v);
+            /* In policy_pipe mode, allow UI clicks (tabs, panels) but
+             * don't process gameplay keys (prayer/eat/drink) since
+             * the policy controls those via stdin actions. */
+            if (!v.policy_pipe)
+                process_human_keys(&v);
         }
 
         if (tick && v.state.terminal == TERMINAL_NONE) {
             /* Build action array for this tick */
-            if (v.test_mode && build_test_actions(&v)) {
+            if (v.policy_pipe) {
+                if (!read_policy_actions(&v)) {
+                    fprintf(stderr, "[policy-pipe] EOF on stdin, stopping.\n");
+                    break;
+                }
+            } else if (v.test_mode && build_test_actions(&v)) {
                 /* Test mode provided actions */
             } else if (v.auto_mode) {
                 for (int h = 0; h < FC_NUM_ACTION_HEADS; h++)
@@ -1876,7 +1935,17 @@ int main(int argc, char** argv) {
                 }
             }
 
-            if (v.state.terminal != TERMINAL_NONE) v.paused = 1;
+            if (v.state.terminal != TERMINAL_NONE) {
+                if (v.policy_pipe) {
+                    /* Write terminal obs, then auto-reset */
+                    write_obs_to_pipe(&v);
+                    reset_ep(&v);
+                } else {
+                    v.paused = 1;
+                }
+            } else if (v.policy_pipe) {
+                write_obs_to_pipe(&v);
+            }
         }
 
         /* Update hitsplat lifetimes */

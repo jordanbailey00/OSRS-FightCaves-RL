@@ -27,16 +27,30 @@ fi
 # Parse args
 MODE=""
 PRECISION=""
+RENDER=""
 for arg in "$@"; do
     case $arg in
-        --cpu)   MODE=cpu; PRECISION="-DPRECISION_FLOAT" ;;
-        --local) MODE=local ;;
-        --fast)  MODE=fast ;;
-        --float) PRECISION="-DPRECISION_FLOAT" ;;
-        --debug) DEBUG=1 ;;
+        --cpu)    MODE=cpu; PRECISION="-DPRECISION_FLOAT" ;;
+        --local)  MODE=local ;;
+        --fast)   MODE=fast ;;
+        --float)  PRECISION="-DPRECISION_FLOAT" ;;
+        --debug)  DEBUG=1 ;;
+        --render) RENDER=1 ;;
         *) echo "Unknown arg: $arg" && exit 1 ;;
     esac
 done
+
+# Render mode: add FC_RENDER define and demo-env include path
+RENDER_FLAGS=""
+RENDER_LIBS=""
+DEMO_SRC_DIR="$REPO_DIR/demo-env/src"
+if [ -n "$RENDER" ]; then
+    RENDER_FLAGS="-DFC_RENDER -I$DEMO_SRC_DIR"
+    # Use full paths for X11 libs (dev symlinks may not exist without -dev packages)
+    X11_LIB="/usr/lib/x86_64-linux-gnu"
+    RENDER_LIBS="-ldl -lX11 $X11_LIB/libXrandr.so.2 $X11_LIB/libXinerama.so.1 $X11_LIB/libXcursor.so.1 $X11_LIB/libXi.so.6"
+    echo "Render mode: Raylib rendering enabled"
+fi
 
 ENV=fight_caves
 SRC_DIR="$SCRIPT_DIR"
@@ -68,13 +82,13 @@ mkdir -p build
 # Standalone executable (for testing without Python)
 if [ "$MODE" = "local" ] || [ "$MODE" = "fast" ]; then
     echo "Compiling standalone $ENV..."
-    ${CC:-clang} "${CLANG_OPT[@]}" \
+    ${CC:-gcc} "${CLANG_OPT[@]}" \
         -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$SRC_DIR/src" \
         -I"$RAYLIB_NAME/include" \
-        -DPLATFORM_DESKTOP -DFC_NO_HASH \
+        -DPLATFORM_DESKTOP -DFC_NO_HASH $RENDER_FLAGS \
         "$SRC_DIR/$ENV.c" -o "$ENV" \
         "$RAYLIB_A" \
-        -lGL -lm -lpthread -fopenmp
+        /usr/lib/x86_64-linux-gnu/libGL.so.1 -lm -lpthread -fopenmp $RENDER_LIBS
     echo "Built: ./$ENV"
     exit 0
 fi
@@ -87,7 +101,7 @@ echo "Compiling static library for $ENV..."
 ${CC:-gcc} -c "${CLANG_OPT[@]}" \
     -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$SRC_DIR/src" \
     -I"$RAYLIB_NAME/include" \
-    -DPLATFORM_DESKTOP -DFC_NO_HASH \
+    -DPLATFORM_DESKTOP -DFC_NO_HASH $RENDER_FLAGS \
     -fno-semantic-interposition -fvisibility=hidden \
     -fPIC -fopenmp \
     "$BINDING_SRC" -o "$STATIC_OBJ"
@@ -122,7 +136,7 @@ if [ "$MODE" = "cpu" ]; then
 
     ${CXX:-g++} -shared -fPIC -fopenmp \
         build/bindings_cpu.o "$STATIC_LIB" "$RAYLIB_A" \
-        -lm -lpthread -lomp5 -O2 \
+        -lm -lpthread -lgomp -O2 $RENDER_LIBS \
         -Bsymbolic-functions \
         -o "$OUTPUT"
     echo "Built: $OUTPUT"
@@ -157,6 +171,12 @@ else
     NVCC="$CUDA_HOME/bin/nvcc"
 
     echo "Compiling CUDA ($ARCH) training backend..."
+    # Build RENDER_NVCC_FLAGS: convert -DFC_RENDER -I/path to -Xcompiler= form
+    RENDER_NVCC_FLAGS=""
+    if [ -n "$RENDER" ]; then
+        RENDER_NVCC_FLAGS="-Xcompiler=-DFC_RENDER -I$DEMO_SRC_DIR"
+    fi
+
     $NVCC -c -arch=$ARCH -Xcompiler -fPIC \
         -Xcompiler=-D_GLIBCXX_USE_CXX11_ABI=1 \
         -Xcompiler=-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION \
@@ -168,7 +188,7 @@ else
         -Xcompiler=-fopenmp \
         -DOBS_TENSOR_T=$OBS_TENSOR_T \
         -DENV_NAME=$ENV \
-        $PRECISION -O2 --threads 0 \
+        $PRECISION $RENDER_NVCC_FLAGS -O2 --threads 0 \
         src/bindings.cu -o build/bindings.o
 
     # Find cuDNN from PyTorch's bundled copy if not system-installed
@@ -181,7 +201,7 @@ else
         build/bindings.o "$STATIC_LIB" "$RAYLIB_A" \
         -L"$CUDA_HOME/lib64" $CUDNN_LFLAG \
         -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand -lcudnn \
-        -lgomp -O2 \
+        -lgomp -O2 $RENDER_LIBS \
         -Bsymbolic-functions \
         -o "$OUTPUT"
     echo "Built: $OUTPUT"

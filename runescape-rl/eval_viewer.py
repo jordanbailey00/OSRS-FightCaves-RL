@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""
+eval_viewer.py — Watch a trained policy play in the full debug viewer.
+
+Uses PufferLib's CUDA backend for policy inference, pipes actions to the
+standalone viewer (fc_viewer --policy-pipe) via stdin/stdout.
+
+Usage:
+    python eval_viewer.py --checkpoint <path_to_.bin>
+    python eval_viewer.py --checkpoint latest
+
+Controls (in viewer window):
+    Space       — pause/resume
+    Up/Down     — tick speed
+    Right-drag  — orbit camera
+    Scroll      — zoom
+    4/5         — camera presets
+    O           — debug overlays
+    Q/Esc       — quit
+"""
+
+import argparse
+import glob
+import os
+import subprocess
+import sys
+import struct
+
+import numpy as np
+
+# Observation/action dimensions (must match fc_contracts.h)
+POLICY_OBS_SIZE = 135
+MASK_5HEAD_SIZE = 36   # 17 + 9 + 5 + 3 + 2
+TOTAL_LINE_FLOATS = POLICY_OBS_SIZE + MASK_5HEAD_SIZE  # 171
+NUM_ACTIONS = 5
+ACT_DIMS = [17, 9, 5, 3, 2]
+
+
+def find_viewer():
+    """Find the fc_viewer binary."""
+    candidates = [
+        "build/demo-env/fc_viewer",
+        "../build/demo-env/fc_viewer",
+        "demo-env/build/fc_viewer",
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    # Try from repo root
+    repo = os.path.dirname(os.path.abspath(__file__))
+    for p in candidates:
+        fp = os.path.join(repo, p)
+        if os.path.isfile(fp):
+            return fp
+    return None
+
+
+def find_latest_checkpoint(env_name="fight_caves"):
+    """Find the most recent .bin checkpoint."""
+    puffer_dir = os.environ.get("PUFFERLIB_DIR",
+        "/home/joe/projects/runescape-rl-reference/pufferlib_4")
+    pattern = os.path.join(puffer_dir, "checkpoints", env_name, "**", "*.bin")
+    candidates = glob.glob(pattern, recursive=True)
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getctime)
+
+
+def read_obs_line(proc):
+    """Read one line of space-separated floats from viewer stdout."""
+    line = proc.stdout.readline()
+    if not line:
+        return None
+    values = line.strip().split()
+    if len(values) != TOTAL_LINE_FLOATS:
+        print(f"[eval] Warning: expected {TOTAL_LINE_FLOATS} floats, got {len(values)}",
+              file=sys.stderr)
+        return None
+    return np.array([float(v) for v in values], dtype=np.float32)
+
+
+def send_actions(proc, actions):
+    """Write 5 space-separated ints to viewer stdin."""
+    line = " ".join(str(int(a)) for a in actions) + "\n"
+    proc.stdin.write(line)
+    proc.stdin.flush()
+
+
+def sample_masked(logits_list, mask, deterministic=False):
+    """Sample actions from logits with mask applied."""
+    actions = []
+    mask_offset = 0
+    for head_idx, (logits, dim) in enumerate(zip(logits_list, ACT_DIMS)):
+        head_mask = mask[mask_offset:mask_offset + dim]
+        mask_offset += dim
+
+        # Apply mask: set invalid actions to -inf
+        masked_logits = logits.copy()
+        for i in range(dim):
+            if head_mask[i] < 0.5:
+                masked_logits[i] = -1e9
+
+        if deterministic:
+            action = np.argmax(masked_logits)
+        else:
+            # Softmax + sample
+            logits_shifted = masked_logits - np.max(masked_logits)
+            probs = np.exp(logits_shifted)
+            probs = probs / (probs.sum() + 1e-8)
+            action = np.random.choice(dim, p=probs)
+
+        actions.append(action)
+    return actions
+
+
+def main():
+    # Parse our args FIRST, then clear sys.argv so PufferLib's
+    # load_config() doesn't choke on our flags.
+    parser = argparse.ArgumentParser(description="Watch trained policy in debug viewer")
+    parser.add_argument("--ckpt", type=str, default="latest",
+                        help="Path to .bin checkpoint or 'latest'")
+    parser.add_argument("--deterministic", action="store_true",
+                        help="Use argmax instead of sampling")
+    parser.add_argument("--random", action="store_true",
+                        help="Use random valid actions (no checkpoint needed)")
+    args = parser.parse_args()
+    # Clear sys.argv so PufferLib doesn't see our flags
+    sys.argv = [sys.argv[0]]
+
+    # Find viewer binary
+    viewer_path = find_viewer()
+    if not viewer_path:
+        print("Error: fc_viewer binary not found. Build with: cmake --build build",
+              file=sys.stderr)
+        sys.exit(1)
+    print(f"[eval] Viewer: {viewer_path}", file=sys.stderr)
+
+    # Load checkpoint (unless --random)
+    policy = None
+    if not args.random:
+        checkpoint_path = args.ckpt
+        if checkpoint_path == "latest":
+            checkpoint_path = find_latest_checkpoint()
+            if not checkpoint_path:
+                print("Error: no checkpoints found", file=sys.stderr)
+                sys.exit(1)
+        print(f"[eval] Checkpoint: {checkpoint_path}", file=sys.stderr)
+
+        try:
+            import torch
+            from pufferlib import _C
+            from pufferlib.pufferl import load_config
+
+            eval_args = load_config("fight_caves")
+            # Create a vec to get obs_size/act_sizes for model construction
+            vec = _C.create_vec(eval_args, 0)
+            from pufferlib.torch_pufferl import load_policy
+            policy = load_policy(eval_args, vec)
+            vec.close()
+
+            # Load raw .bin weights into the PyTorch model.
+            # CUDA kernel stores weights with NO biases, in order:
+            #   encoder.weight → network.layers.0..N → decoder.weight → value.weight
+            # PyTorch state_dict has biases (set to zero) and different key order.
+            weights = np.fromfile(checkpoint_path, dtype=np.float32)
+            print(f"[eval] Checkpoint: {len(weights)} floats", file=sys.stderr)
+
+            # Explicit weight mapping in CUDA kernel order (weights only, no biases)
+            cuda_order = [
+                "encoder.encoder.weight",
+                *[f"network.layers.{i}.weight" for i in range(
+                    len([k for k in policy.state_dict() if k.startswith("network.layers.")]))],
+                "decoder.decoder.weight",
+                "decoder.value_function.weight",
+            ]
+
+            sd = policy.state_dict()
+            # Zero all biases first
+            for key in sd:
+                if 'bias' in key:
+                    sd[key] = torch.zeros_like(sd[key])
+
+            offset = 0
+            for key in cuda_order:
+                if key not in sd:
+                    print(f"[eval] Warning: {key} not in model", file=sys.stderr)
+                    continue
+                numel = sd[key].numel()
+                if offset + numel > len(weights):
+                    print(f"[eval] Warning: weights exhausted at {key}", file=sys.stderr)
+                    break
+                sd[key] = torch.from_numpy(
+                    weights[offset:offset+numel].reshape(sd[key].shape).copy())
+                offset += numel
+                print(f"  loaded {key}: {list(sd[key].shape)} ({numel})", file=sys.stderr)
+
+            policy.load_state_dict(sd)
+            print(f"[eval] Loaded {offset}/{len(weights)} weights", file=sys.stderr)
+
+            policy = policy.cpu()
+            policy.eval()
+            print("[eval] Policy ready (CPU)", file=sys.stderr)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[eval] Cannot load policy: {e}", file=sys.stderr)
+            print("[eval] Falling back to random actions", file=sys.stderr)
+            args.random = True
+
+    # Launch viewer subprocess
+    print("[eval] Launching viewer...", file=sys.stderr)
+    proc = subprocess.Popen(
+        [viewer_path, "--policy-pipe"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=None,  # let viewer stderr pass through to terminal
+        text=True,
+        bufsize=1,
+    )
+
+    # Hidden state for recurrent policy (MinGRU)
+    hidden = None
+    if policy is not None:
+        import torch
+        hidden = policy.initial_state(1, 'cpu')
+
+    try:
+        tick = 0
+        while True:
+            # Read observation from viewer
+            obs_data = read_obs_line(proc)
+            if obs_data is None:
+                print("[eval] Viewer closed or read error", file=sys.stderr)
+                break
+
+            obs = obs_data[:POLICY_OBS_SIZE]
+            mask = obs_data[POLICY_OBS_SIZE:]
+
+            if args.random or policy is None:
+                # Random valid actions
+                actions = sample_masked(
+                    [np.zeros(d) for d in ACT_DIMS], mask, deterministic=False)
+            else:
+                # Policy inference — feed full obs+mask (171 floats)
+                import torch
+                with torch.no_grad():
+                    full_input = torch.from_numpy(obs_data).unsqueeze(0)
+                    output = policy.forward_eval(full_input, hidden)
+                    # forward_eval returns (logits, values, state)
+                    logits_raw, _values, hidden = output
+
+                    # Extract per-head logits
+                    if isinstance(logits_raw, (list, tuple)):
+                        logits_list = [l.squeeze(0).numpy() for l in logits_raw]
+                    else:
+                        # Single tensor — split by action dims
+                        lr = logits_raw.squeeze(0).numpy()
+                        logits_list = []
+                        off = 0
+                        for d in ACT_DIMS:
+                            logits_list.append(lr[off:off+d])
+                            off += d
+
+                actions = sample_masked(logits_list, mask, args.deterministic)
+
+            # Send actions to viewer
+            send_actions(proc, actions)
+            tick += 1
+
+            if tick % 100 == 0:
+                print(f"[eval] Tick {tick}", file=sys.stderr)
+
+    except (BrokenPipeError, KeyboardInterrupt):
+        print("[eval] Stopped", file=sys.stderr)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait()
+
+
+if __name__ == "__main__":
+    main()

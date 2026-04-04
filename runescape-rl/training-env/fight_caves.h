@@ -38,6 +38,12 @@
 #include "fc_tick.c"
 #include "fc_state.c"
 
+/* Raylib rendering for eval mode (Phase 11).
+ * Only compiled when FC_RENDER is defined (build.sh --render). */
+#ifdef FC_RENDER
+#include "fc_render.h"
+#endif
+
 /* ======================================================================== */
 /* PufferLib Log struct (required fields)                                    */
 /* ======================================================================== */
@@ -264,8 +270,8 @@ void c_step(FightCaves* env) {
 }
 
 void c_render(FightCaves* env) {
-    /* TODO: Connect to Raylib viewer for eval mode.
-     * For now, no-op. Will reuse demo-env viewer code. */
+    /* Rendering handled by external viewer via --policy-pipe mode.
+     * See eval_viewer.py for the eval pipeline. */
     (void)env;
 }
 
