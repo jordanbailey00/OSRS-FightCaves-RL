@@ -63,10 +63,11 @@ typedef struct {
 typedef struct FightCaves {
     Log log;                    /* required by PufferLib */
     float* observations;        /* required: FC_PUFFER_OBS_SIZE per agent */
-    double* actions;            /* required: FC_PUFFER_NUM_ATNS per agent (from network) */
+    float* actions;             /* required: NUM_ATNS per agent (vecenv uses float*) */
     float* rewards;             /* required: 1 per agent */
-    unsigned char* terminals;   /* required: 1 per agent */
+    float* terminals;           /* required: 1 per agent (vecenv uses float*) */
     int num_agents;             /* always 1 for Fight Caves */
+    int rng;                    /* per-env RNG seed (set by vecenv.h) */
 
     /* Game state */
     FcState state;
@@ -163,10 +164,10 @@ void c_reset(FightCaves* env) {
 
 void c_step(FightCaves* env) {
     env->rewards[0] = 0.0f;
-    env->terminals[0] = 0;
+    env->terminals[0] = 0.0f;
 
-    /* Convert double actions from network to int action heads.
-     * PufferLib sends actions as doubles in a flat array.
+    /* Convert float actions from network to int action heads.
+     * PufferLib sends actions as floats in a flat array.
      * We only use 5 heads for v1 (skip walk-to-tile). */
     int actions[FC_NUM_ACTION_HEADS];
     memset(actions, 0, sizeof(actions));
@@ -186,7 +187,7 @@ void c_step(FightCaves* env) {
 
     /* Check terminal */
     if (fc_is_terminal(&env->state)) {
-        env->terminals[0] = 1;
+        env->terminals[0] = 1.0f;
         env->log.score += (env->state.terminal == TERMINAL_CAVE_COMPLETE) ? 1.0f : 0.0f;
         env->log.episode_return += env->ep_return;
         env->log.episode_length += (float)env->ep_length;
