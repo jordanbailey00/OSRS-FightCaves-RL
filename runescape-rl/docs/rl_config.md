@@ -89,6 +89,27 @@ hidden_size = 256
 num_layers = 2
 ```
 
+Results (2.3B/5B steps, stopped early — wave 30 wall):
+- SPS: 2.2M
+- Wave reached: 30.0 avg (same wall as v5, reached immediately)
+- Episode length: ~5000 ticks
+- Episode return: ~640
+- Score: 0 (no cave completions)
+- Entropy: ~6.5
+- Clipfrac: ~0.000 (still barely updating)
+
+Diagnosis: New observations (hit style, LOS, target) and curriculum at
+wave 28 didn't break the wave 30 wall. Agent reaches wave 30 very quickly
+(within first few epochs) but can't progress further. The wall is at
+waves 30-31 where multiple Ket-Zek (magic+melee) appear together,
+requiring prayer switching between magic threats while handling melee NPCs.
+Quadratic damage penalty may help the agent understand big hits are bad
+but it hasn't translated to prayer switching behavior yet.
+
+Next steps: implement policy replay in demo-env viewer to visually observe
+what the agent is actually doing at wave 30 (is it praying? moving? eating?).
+This will inform whether the issue is strategy, mechanics, or observation.
+
 ---
 
 ## v5 (2026-04-03)

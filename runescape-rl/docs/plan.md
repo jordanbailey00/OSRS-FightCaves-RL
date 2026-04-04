@@ -1402,14 +1402,82 @@ GPU transfer, PPO training, and evaluation automatically.
     7. Run: puffer eval fight_caves --load-model-path <checkpoint>
        - Verify eval mode works (even with random/untrained policy)
 
-  F. Evaluation and rendering:
+  F. Policy replay in demo-env viewer:
 
-    PufferLib 4.0 built-in eval handles policy replay:
-      puffer eval fight_caves --load-model-path checkpoints/fight_caves/*/model.bin
-    This calls c_render() which launches our Raylib viewer.
-    The c_render() implementation reuses viewer.c's rendering code.
-    Press O during eval to enable debug overlays from Phase 9c.
-    No custom trace recording needed — zero training overhead.
+    Goal: Watch a trained policy play Fight Caves in the full debug viewer
+    (terrain, NPC models, animations, hitsplats, debug overlays — everything
+    we built in Phases 8-9). The viewer is NOT modified significantly — we
+    add a "policy mode" that replaces human input with policy inference.
+
+    Architecture:
+      The demo-env viewer (viewer.c) has its own Raylib main loop. PufferLib
+      eval has its own loop. They can't both own the main loop. Instead of
+      putting rendering inside PufferLib's c_render(), we do the reverse:
+      the viewer runs its own loop and calls the policy for actions.
+
+      Python eval script (eval_viewer.py):
+        1. Loads trained checkpoint (PyTorch policy weights)
+        2. Launches the demo-env viewer as a subprocess
+        3. Each tick: viewer sends current observation to Python via pipe/socket
+        4. Python runs policy forward pass, sends actions back
+        5. Viewer applies actions via fc_step(), renders the frame
+
+      Alternatively (simpler, no IPC):
+        1. Export the PyTorch policy to ONNX or TorchScript
+        2. Load it in C using ONNX Runtime or torch C API
+        3. Viewer runs policy inference directly in C — no Python needed
+        4. Add --policy <checkpoint.bin> flag to viewer
+
+      Alternatively (simplest, minimal viewer changes):
+        1. Add a --policy-pipe flag to the viewer
+        2. Viewer reads actions from stdin each tick (one line of 5 ints)
+        3. Viewer writes observation to stdout each tick (135 floats)
+        4. Python eval script runs viewer as subprocess, pipes actions
+        5. No new dependencies, no model loading in C
+
+    Recommended approach: Option 3 (stdin/stdout pipe). Reasons:
+      - Zero changes to viewer rendering code
+      - Zero new C dependencies (no ONNX, no torch C API)
+      - Python handles all PyTorch/checkpoint loading (already works)
+      - Viewer just needs: if (policy_mode) read_actions_from_stdin()
+        instead of build_human_actions()
+      - Debug overlays, event log, all existing features work unchanged
+      - Can also pipe actions from any other source (scripted bots, etc.)
+
+    Implementation steps:
+      1. Add --policy-pipe flag to viewer.c main():
+         - When set, viewer reads 5 ints from stdin each tick (action heads)
+         - Writes 135 floats to stdout each tick (policy observation)
+         - Replaces build_human_actions() with the piped actions
+         - Viewer still renders every frame at normal TPS
+         - All existing controls still work (camera, debug overlay, pause)
+
+      2. Write eval_viewer.py:
+         - Loads PufferLib checkpoint (.bin file)
+         - Reconstructs policy network (same architecture as training)
+         - Launches viewer subprocess: fc_viewer --policy-pipe
+         - Each tick:
+           a. Read 135 floats from viewer's stdout (observation)
+           b. Run policy forward pass → get 5 action logits
+           c. Sample actions (or argmax for deterministic)
+           d. Apply action mask from observation
+           e. Write 5 ints to viewer's stdin (actions)
+         - Handles viewer exit gracefully
+
+      3. Usage:
+         python eval_viewer.py --checkpoint checkpoints/fight_caves/.../model.bin
+         → Opens the full debug viewer with the trained agent playing
+         → Press O for debug overlays, Space to pause, etc.
+         → All viewer features work exactly as in human play mode
+
+    Files to create:
+      eval_viewer.py              — Python eval script (in runescape-rl/)
+    Files to modify:
+      demo-env/src/viewer.c       — Add --policy-pipe mode (~30 lines)
+    Files NOT modified:
+      All fc_*.c/h backend files  — no changes
+      fight_caves.h               — c_render stays no-op (not used)
+      binding.c                   — no changes
 
   F. Milestone tracking:
 
