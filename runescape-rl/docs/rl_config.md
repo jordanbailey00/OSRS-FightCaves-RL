@@ -5,7 +5,86 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v3 (2026-04-03)
+## CURRENT: v4 (2026-04-03)
+
+Changes from v3:
+- CRITICAL FIX: Prayer reward was firing every tick an NPC existed, not
+  when hits actually landed. Caused massive reward inflation (561→3682
+  episode return) and the agent learned to idle with prayer on.
+- Prayer reward now only fires when: (a) player takes damage and had
+  wrong prayer, or (b) NPC attacked and correct prayer blocked it.
+  Max one prayer reward per tick to prevent spam.
+- w_correct_danger_prayer: 2.0 → 0.5 (was too dominant vs other rewards)
+- w_wrong_danger_prayer: -3.0 → -1.0 (proportional reduction)
+- horizon: 512 → 256 (512 slowed SPS from 2.2M to 1.5M)
+- Value loss was 30x higher in v3 (1.9 vs 0.06) due to reward variance
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.75
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.01
+w_prayer_pot_used = -0.01
+w_correct_jad_prayer = 5.0
+w_wrong_jad_prayer = -10.0
+w_correct_danger_prayer = 0.5
+w_wrong_danger_prayer = -1.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 5_000_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+---
+
+## v3 (2026-04-03)
+
+Results (1.7B steps, stopped early):
+- SPS: 1.5M (down from 2.2M — horizon 512 too slow)
+- Wave reached: 15.2 avg (CRASHED from 28.2)
+- Episode length: 4115 ticks (longer but worse)
+- Episode return: 3682 (inflated by prayer reward spam)
+- Score: 0
+- Clipfrac: 0.262 (now clipping — too aggressive)
+- Value loss: 1.9 (30x higher than v2 — unstable)
+- Entropy: 5.7
+
+Diagnosis: Prayer reward fired every tick per NPC, not per hit. Agent
+learned to turn prayer on and idle, collecting +4-8 reward/tick from
+multiple NPCs. Reward inflation destabilized training completely.
+
+---
+
+## v3 original config (2026-04-03)
 
 Changes from v2:
 - MAJOR: Added general prayer protection reward for ALL NPCs (not just Jad).
