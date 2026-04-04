@@ -185,6 +185,10 @@ void c_step(FightCaves* env) {
     env->ep_return += reward;
     env->ep_length++;
 
+    /* Write observations BEFORE checking terminal — agent must see
+     * the terminal state observation, not the post-reset observation. */
+    fc_puffer_write_obs(env);
+
     /* Check terminal */
     if (fc_is_terminal(&env->state)) {
         env->terminals[0] = 1.0f;
@@ -194,12 +198,11 @@ void c_step(FightCaves* env) {
         env->log.wave_reached += (float)env->state.current_wave;
         env->log.n += 1.0f;
 
-        /* Auto-reset for next episode */
+        /* Auto-reset for next episode. Obs already written above
+         * reflecting the terminal state. Next c_step will see the
+         * reset state's obs after stepping. */
         c_reset(env);
     }
-
-    /* Write observations (must be last — reflects post-step or post-reset state) */
-    fc_puffer_write_obs(env);
 }
 
 void c_render(FightCaves* env) {
