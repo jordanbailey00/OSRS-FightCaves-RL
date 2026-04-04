@@ -146,6 +146,73 @@ what the agent is actually doing at wave 30.
 
 ---
 
+## v6.1 (2026-04-04) — Tick cap experiment
+
+Same config as v6 except:
+- FC_MAX_EPISODE_TICKS: 30000 → 200000 (force prayer pot drain)
+- total_timesteps: 5B → 2B (quick test)
+- Hypothesis: agent is hiding behind prayer, hitting 30K tick cap.
+  200K ticks should drain all 32 prayer pot doses and expose whether
+  the agent actually learned to fight.
+
+Results (2.0B steps, ~14m38s):
+- SPS: 2.3M
+- Wave reached: 30.0 avg (still wave 30 wall — unchanged)
+- Episode length: 199,939 ticks (HITTING 200K CAP! agent still not dying!)
+- Episode return: -135.1 (NEGATIVE — tick penalty accumulated over 200K ticks)
+- Score: 0 (no cave completions)
+- Episodes completed: 4,239 (far fewer eps — each one is 6.7x longer)
+- Entropy: 6.90
+- Clipfrac: 0.001 (barely updating)
+- Value loss: 0.0002 (extremely stable — agent found a fixed strategy)
+- Policy loss: -0.006
+- KL: 0.0007
+- VRAM: 3.1/15G (higher than v6's 1.9G — longer episodes need more memory)
+
+KEY FINDINGS:
+1. Agent survives 200K ticks (33+ hours of game time) without dying.
+   Even after all prayer pots are drained, it still doesn't die. This means
+   the agent learned something beyond just "pray and idle":
+   - It may be safespotting (breaking LOS behind terrain so NPCs can't attack)
+   - It may be kiting (running away from melee NPCs, staying out of range)
+   - It may be exploiting a game mechanic (NPC deaggro? stuck pathfinding?)
+   
+2. Episode return is NEGATIVE (-135) because tick_penalty × 200K ticks = -200.
+   The agent's reward from damage/kills doesn't outweigh the tick penalty over
+   such a long episode. This is actually a problem — the agent learned that
+   surviving (even at negative reward) is better than dying quickly.
+
+3. Wave 30 is the hard ceiling. Even with infinite time, the agent can't
+   clear it. This isn't a resource issue — it's a strategy/capability issue.
+
+4. Value loss near 0 (0.0002) means the agent has perfectly predicted its
+   expected return — it knows it will survive indefinitely at wave 30 with
+   a slightly negative reward. It has fully converged to this strategy.
+
+5. Compared to v6 (episode_length 30001 → 199939): the agent was already
+   surviving indefinitely in v6, we just couldn't see it because of the cap.
+   The 30K cap was hiding the true behavior.
+
+IMPLICATIONS FOR v7:
+- The agent has found a degenerate strategy (survive forever, never clear).
+  The current reward structure actually rewards this: dying is -20, but
+  surviving indefinitely at wave 30 only costs -0.001/tick = -200 over 200K
+  ticks, which is much better than dying (-20 death + losing all wave rewards).
+- MUST fix the reward to make clearing waves more valuable than surviving.
+  Options:
+    a. Increase tick penalty significantly (but risks making agent rush/die)
+    b. Add a "wave stall" penalty — if wave doesn't advance for N ticks,
+       heavy penalty. This directly targets the degenerate strategy.
+    c. Cap episodes at death or wave clear — no tick cap at all. If the agent
+       doesn't clear the wave within some timeout, it's a death equivalent.
+    d. Make death less punishing (-5 instead of -20) so the agent is less
+       afraid to try aggressive strategies that might fail.
+- The agent MUST be visually observed to confirm what it's actually doing.
+  If it's safespotting, that's actually impressive and we should build on it.
+  If it's exploiting a bug, we need to fix the game logic.
+
+---
+
 ## v5 (2026-04-03)
 
 Results (5B steps, ~37min):
