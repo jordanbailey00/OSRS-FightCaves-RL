@@ -89,26 +89,38 @@ hidden_size = 256
 num_layers = 2
 ```
 
-Results (2.3B/5B steps, stopped early — wave 30 wall):
-- SPS: 2.2M
+Results (2.5B/5B steps, stopped early — wave 30 wall):
+- SPS: 2.3M
 - Wave reached: 30.0 avg (same wall as v5, reached immediately)
-- Episode length: ~5000 ticks
-- Episode return: ~640
+- Episode length: 30001 ticks (hit tick cap — agent surviving but stuck)
+- Episode return: 37.7 (dropped massively from v5's 636 — quadratic penalty)
 - Score: 0 (no cave completions)
-- Entropy: ~6.5
-- Clipfrac: ~0.000 (still barely updating)
+- Params: 446.5K (slightly more from new obs features)
+- Epochs: 2374
+- Entropy: 7.15 (higher than v5's 6.57 — more exploration)
+- Clipfrac: 0.051 (finally non-zero! policy actually updating)
+- Value loss: 0.001 (very stable)
+- Policy loss: -0.008
+- KL: 0.005
+- Old KL: 0.006
+- Uptime: 18m 42s
 
 Diagnosis: New observations (hit style, LOS, target) and curriculum at
 wave 28 didn't break the wave 30 wall. Agent reaches wave 30 very quickly
-(within first few epochs) but can't progress further. The wall is at
-waves 30-31 where multiple Ket-Zek (magic+melee) appear together,
-requiring prayer switching between magic threats while handling melee NPCs.
-Quadratic damage penalty may help the agent understand big hits are bad
-but it hasn't translated to prayer switching behavior yet.
+(within first few epochs) but can't progress further. Episode length hit
+30001 (tick cap) meaning agent survives indefinitely but can't clear the
+wave — possibly stuck idle or praying without attacking. Episode return
+dropped from 636→38 due to quadratic damage penalty and tick penalty
+accumulating over 30K ticks. Clipfrac finally non-zero (0.051) which is
+healthy — policy is actually updating now unlike v1-v5.
+
+Key insight: episode_length = 30001 = FC_MAX_EPISODE_TICKS + 1. The agent
+is hitting the tick cap, meaning it's surviving but not clearing waves.
+It may have learned to just stand still and pray, avoiding damage but not
+fighting. Need to visually observe agent behavior.
 
 Next steps: implement policy replay in demo-env viewer to visually observe
-what the agent is actually doing at wave 30 (is it praying? moving? eating?).
-This will inform whether the issue is strategy, mechanics, or observation.
+what the agent is actually doing at wave 30.
 
 ---
 
