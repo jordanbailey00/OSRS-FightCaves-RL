@@ -74,7 +74,7 @@
  * equal, which is critical for replay consistency and debug reproducibility.
  */
 #define FC_OBS_NPC_START        FC_OBS_PLAYER_SIZE  /* 20 */
-#define FC_OBS_NPC_STRIDE       12
+#define FC_OBS_NPC_STRIDE       13
 #define FC_OBS_NPC_SLOTS        8   /* FC_VISIBLE_NPCS */
 
 /* Per-NPC feature offsets within stride */
@@ -90,11 +90,12 @@
 #define FC_NPC_IS_HEALER        9   /* is_healer (0 or 1) */
 #define FC_NPC_JAD_TELEGRAPH    10  /* jad_telegraph / 2 (idle=0, magic=0.5, ranged=1.0) */
 #define FC_NPC_AGGRO            11  /* 1 if targeting player, 0 otherwise */
+#define FC_NPC_LOS              12  /* 1 if player has line of sight, 0 if blocked */
 
-#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 96 */
+#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 104 */
 
 /* --- Wave/meta features (10 floats) --- */
-#define FC_OBS_META_START       (FC_OBS_NPC_START + FC_OBS_NPC_TOTAL)  /* 116 */
+#define FC_OBS_META_START       (FC_OBS_NPC_START + FC_OBS_NPC_TOTAL)  /* 124 */
 #define FC_OBS_META_WAVE        0   /* current_wave / NUM_WAVES */
 #define FC_OBS_META_ROTATION    1   /* rotation_id / NUM_ROTATIONS */
 #define FC_OBS_META_REMAINING   2   /* npcs_remaining / MAX_NPCS */
@@ -108,7 +109,7 @@
 #define FC_OBS_META_SIZE        10
 
 /* --- Policy observation total --- */
-#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 126 */
+#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 134 */
 
 /* --- Reward features (16 floats) --- */
 /*
@@ -117,7 +118,7 @@
  * The policy DOES NOT consume these by default.
  * Python applies configurable shaping weights to produce the scalar reward.
  */
-#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 126 */
+#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 134 */
 #define FC_RWD_DAMAGE_DEALT     0   /* NPC HP reduced this tick (normalized) */
 #define FC_RWD_DAMAGE_TAKEN     1   /* player HP reduced this tick */
 #define FC_RWD_NPC_KILL         2   /* NPC death count this tick */
@@ -288,13 +289,13 @@ static const int FC_ACTION_DIMS[FC_NUM_ACTION_HEADS] = FC_ACT_SIZES;
 
 /*
  * Total floats per environment:
- *   FC_POLICY_OBS_SIZE (126) + FC_REWARD_FEATURES (16) + FC_ACTION_MASK_SIZE (166) = 308
+ *   FC_POLICY_OBS_SIZE (134) + FC_REWARD_FEATURES (16) + FC_ACTION_MASK_SIZE (166) = 316
  *
  * PufferLib sees OBS_SIZE = 178.
  * Python trainer slices:
- *   policy_obs   = obs[:126]
- *   reward_feat  = obs[126:142]
- *   action_mask  = obs[142:308]
+ *   policy_obs   = obs[:134]
+ *   reward_feat  = obs[134:150]
+ *   action_mask  = obs[150:316]
  */
 #define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 178 */
 

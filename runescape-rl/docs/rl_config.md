@@ -12,8 +12,12 @@ Changes from v5:
   Agent now sees WHAT attack style hit it each tick (0=none, 0.33=melee,
   0.67=ranged, 1.0=magic). Previously it only knew damage amount, not type.
   This lets it correlate: "I got hit by magic → I should pray magic."
+- Added LOS (line of sight) to NPC observation (new slot 12).
+  Agent now sees whether it has clear LOS to each visible NPC (1=clear, 0=blocked).
+  Critical for safespotting — agent can learn to break LOS behind terrain
+  to avoid ranged/magic attacks while still being safe from melee NPCs.
+  NPC_STRIDE: 12 → 13. FC_POLICY_OBS_SIZE: 126 → 134. OBS_SIZE: 162 → 170.
 - All prayer rewards remain at 0 (organic learning via damage_taken).
-- No config changes — only observation improvement.
 
 ```ini
 [base]

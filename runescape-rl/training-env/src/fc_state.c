@@ -1,5 +1,6 @@
 #include "fc_api.h"
 #include "fc_wave.h"
+#include "fc_pathfinding.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -265,6 +266,8 @@ void fc_write_obs(const FcState* state, float* out) {
         npc_out[FC_NPC_IS_HEALER]     = (float)n->is_healer;
         npc_out[FC_NPC_JAD_TELEGRAPH] = (float)n->jad_telegraph / 2.0f;
         npc_out[FC_NPC_AGGRO]         = (n->aggro_target >= 0) ? 1.0f : 0.0f;
+        npc_out[FC_NPC_LOS]           = (float)fc_has_line_of_sight(
+            p->x, p->y, n->x + n->size/2, n->y + n->size/2, state->walkable);
     }
     /* Remaining NPC slots already zeroed by memset */
 
