@@ -55,9 +55,7 @@ fi
 RAYLIB_A="$RAYLIB_NAME/lib/libraylib.a"
 
 # Compiler settings
-CLANG_WARN=(-Wall -ferror-limit=3 -Werror=return-type
-    -Wno-error=incompatible-pointer-types-discards-qualifiers
-    -Wno-incompatible-pointer-types-discards-qualifiers)
+CLANG_WARN=(-Wall -Werror=return-type -Wno-unused-but-set-variable)
 
 if [ -n "$DEBUG" ] || [ "$MODE" = "local" ]; then
     CLANG_OPT=(-g -O0 "${CLANG_WARN[@]}")
@@ -86,7 +84,7 @@ STATIC_OBJ="build/libstatic_${ENV}.o"
 STATIC_LIB="build/libstatic_${ENV}.a"
 
 echo "Compiling static library for $ENV..."
-${CC:-clang} -c "${CLANG_OPT[@]}" \
+${CC:-gcc} -c "${CLANG_OPT[@]}" \
     -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$SRC_DIR/src" \
     -I"$RAYLIB_NAME/include" \
     -DPLATFORM_DESKTOP -DFC_NO_HASH \
@@ -156,7 +154,7 @@ else
         ARCH=native
     fi
 
-    NVCC="ccache $CUDA_HOME/bin/nvcc"
+    NVCC="$CUDA_HOME/bin/nvcc"
 
     echo "Compiling CUDA ($ARCH) training backend..."
     $NVCC -c -arch=$ARCH -Xcompiler -fPIC \
@@ -173,11 +171,17 @@ else
         $PRECISION -O2 --threads 0 \
         src/bindings.cu -o build/bindings.o
 
+    # Find cuDNN from PyTorch's bundled copy if not system-installed
+    VENV_CUDNN=$(python -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
+    if [ -z "$CUDNN_LFLAG" ] && [ -n "$VENV_CUDNN" ]; then
+        CUDNN_LFLAG="$VENV_CUDNN"
+    fi
+
     ${CXX:-g++} -shared -fPIC -fopenmp \
         build/bindings.o "$STATIC_LIB" "$RAYLIB_A" \
         -L"$CUDA_HOME/lib64" $CUDNN_LFLAG \
         -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand -lcudnn \
-        -lomp5 -O2 \
+        -lgomp -O2 \
         -Bsymbolic-functions \
         -o "$OUTPUT"
     echo "Built: $OUTPUT"
