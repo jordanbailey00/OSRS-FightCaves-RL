@@ -191,29 +191,23 @@ void c_reset(FightCaves* env) {
     env->seed_counter++;
     fc_reset(&env->state, env->seed_counter);
 
-    /* Curriculum: skip to a later wave for a percentage of episodes */
+    /* Curriculum: skip to a later wave for a percentage of episodes.
+     * Directly sets wave number and spawns NPCs — no fc_step loop. */
     if (env->curriculum_wave > 1 && env->curriculum_pct > 0.0f) {
-        /* Use seed_counter for deterministic curriculum selection */
         float roll = (float)(env->seed_counter % 1000) / 1000.0f;
         if (roll < env->curriculum_pct) {
-            /* Fast-forward to curriculum wave by running empty waves */
             int target = env->curriculum_wave;
             if (target > FC_NUM_WAVES) target = FC_NUM_WAVES;
-            int idle_actions[FC_NUM_ACTION_HEADS] = {0};
-            while (env->state.current_wave < target && env->state.terminal == TERMINAL_NONE) {
-                fc_step(&env->state, idle_actions);
-                /* Skip ahead faster: clear NPCs instantly */
-                for (int i = 0; i < FC_MAX_NPCS; i++) {
-                    if (env->state.npcs[i].active && !env->state.npcs[i].is_dead) {
-                        env->state.npcs[i].current_hp = 0;
-                        env->state.npcs[i].is_dead = 1;
-                        env->state.npcs[i].active = 0;
-                        env->state.npcs[i].died_this_tick = 1;
-                        env->state.npcs_remaining--;
-                    }
-                }
+            /* Clear any wave 1 NPCs that fc_reset spawned */
+            for (int i = 0; i < FC_MAX_NPCS; i++) {
+                env->state.npcs[i].active = 0;
+                env->state.npcs[i].is_dead = 0;
             }
-            /* Restore player to full for the actual challenge */
+            env->state.npcs_remaining = 0;
+            /* Set wave and spawn */
+            env->state.current_wave = target;
+            fc_wave_spawn(&env->state, target);
+            /* Restore player to full */
             env->state.player.current_hp = env->state.player.max_hp;
             env->state.player.current_prayer = env->state.player.max_prayer;
         }
