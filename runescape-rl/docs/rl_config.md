@@ -17,7 +17,6 @@ Changes from v3:
 - w_correct_danger_prayer: 2.0 → 0.5 (was too dominant vs other rewards)
 - w_wrong_danger_prayer: -3.0 → -1.0 (proportional reduction)
 - horizon: 512 → 256 (512 slowed SPS from 2.2M to 1.5M)
-- Value loss was 30x higher in v3 (1.9 vs 0.06) due to reward variance
 
 ```ini
 [base]
@@ -68,36 +67,37 @@ num_layers = 2
 
 ## v3 (2026-04-03)
 
-Results (1.7B steps, stopped early):
+Results (1.7B/5B steps, stopped early — broken):
 - SPS: 1.5M (down from 2.2M — horizon 512 too slow)
-- Wave reached: 15.2 avg (CRASHED from 28.2)
-- Episode length: 4115 ticks (longer but worse)
-- Episode return: 3682 (inflated by prayer reward spam)
-- Score: 0
-- Clipfrac: 0.262 (now clipping — too aggressive)
-- Value loss: 1.9 (30x higher than v2 — unstable)
+- Wave reached: 15.2 avg (CRASHED from v2's 28.2)
+- Episode length: 4115 ticks (longer but worse — agent idling)
+- Episode return: 3682.5 (massively inflated by prayer reward spam)
+- Score: 0 (no cave completions)
+- Episodes completed: ~10K
 - Entropy: 5.7
+- Clipfrac: 0.262 (now clipping — updates too aggressive)
+- Value loss: 1.9 (30x higher than v2's 0.06 — unstable)
+- Policy loss: 0.018
+- KL: 0.019
 
 Diagnosis: Prayer reward fired every tick per NPC, not per hit. Agent
 learned to turn prayer on and idle, collecting +4-8 reward/tick from
 multiple NPCs. Reward inflation destabilized training completely.
-
----
-
-## v3 original config (2026-04-03)
+Value network couldn't predict highly variable rewards. Clipfrac spiked
+to 0.26 (from 0.00) indicating policy updates too large. Wave reached
+dropped from 28→15 — agent forgot how to fight, just stood still praying.
 
 Changes from v2:
 - MAJOR: Added general prayer protection reward for ALL NPCs (not just Jad).
-  Agent now gets rewarded for correct prayer vs Ket-Zek magic, Tok-Xil ranged,
-  etc. This is the key fix — agent had zero incentive to pray before wave 63.
   New config fields: w_correct_danger_prayer=2.0, w_wrong_danger_prayer=-3.0
-- w_damage_taken: -0.5 → -0.75 (slightly harsher to encourage prayer use)
-- w_food_used: -0.05 → -0.01 (waste scaling handles heavy penalty already)
-- w_prayer_pot_used: -0.05 → -0.01 (same reasoning)
-- w_idle: -0.01 → 0.0 (don't punish idle, agent should choose when to move)
-- w_tick_penalty: -0.005 → -0.001 (less time pressure, let agent be strategic)
-- ent_coef: 0.05 → 0.02 (v2 entropy was fine at 6.9, don't over-explore)
-- horizon: 256 → 512 (longer rollouts for strategic planning across waves)
+  BUG: Reward fired every tick, not per-hit. Fixed in v4.
+- w_damage_taken: -0.5 → -0.75
+- w_food_used: -0.05 → -0.01 (waste scaling handles heavy penalty)
+- w_prayer_pot_used: -0.05 → -0.01
+- w_idle: -0.01 → 0.0
+- w_tick_penalty: -0.005 → -0.001
+- ent_coef: 0.05 → 0.02
+- horizon: 256 → 512 (caused SPS drop, reverted in v4)
 
 ```ini
 [base]
@@ -154,29 +154,29 @@ Results (2.5B steps, ~19min):
 - Episode length: 3101 ticks
 - Episode return: 561.2
 - Score: 0 (no cave completions)
+- Episodes completed: 10,221
 - Entropy: 6.9 (healthier than v1's 5.8)
 - Clipfrac: 0.000 (STILL zero — policy not updating meaningfully)
+- Value loss: 0.057
+- Policy loss: -0.007
+- KL: 0.00007
 
-Diagnosis: Agent stuck at wave 28 (Ket-Zek). 5x more training didn't help.
+Diagnosis: Agent stuck at wave 28 (Ket-Zek). 5x more training and 3x
+higher LR didn't help. Clipfrac still 0 — policy barely changing.
 Root cause: no prayer reward for non-Jad NPCs. Agent has zero incentive
 to use protection prayers before Jad, so it dies to Ket-Zek magic.
+Higher entropy coef (0.05) kept exploration alive (6.9 vs 5.8) but
+without the right reward signal, exploration doesn't help.
 
 Changes from v1:
-- total_timesteps: 500M → 2.5B (need more training to reach Jad)
-- learning_rate: 0.0003 → 0.001 (clipfrac=0 in v1, policy updates too conservative)
-- ent_coef: 0.01 → 0.05 (entropy dropped from 8.3→5.8 in v1, keep exploration alive)
-- w_correct_jad_prayer: 5.0 → 10.0 (stronger signal for correct prayer switching)
-- w_wrong_jad_prayer: -10.0 → -20.0 (harsher penalty for wrong prayer)
-- Food/pot waste penalty: scales by actual overheal, not HP percentage.
-  Shark heals 20 HP — penalty = base × (wasted HP / 20 heal).
-  Prayer pot restores 17 pts — penalty = base × (wasted pts / 17 restore).
-  Examples:
-    Eat at 50/70 HP: heals full 20, 0 waste → base penalty (-0.05)
-    Eat at 60/70 HP: heals 10, wastes 10 → -0.05 × 5.5 = -0.275
-    Eat at 68/70 HP: heals 2, wastes 18 → -0.05 × 9.1 = -0.455
-    Drink at 30/43 pray: restores 13, 0 waste → base penalty (-0.05)
-    Drink at 40/43 pray: restores 3, wastes 14 → heavy penalty
-  Prevents agent from wasting resources on minor damage/drain.
+- total_timesteps: 500M → 2.5B
+- learning_rate: 0.0003 → 0.001 (clipfrac=0 in v1)
+- ent_coef: 0.01 → 0.05 (prevent premature convergence)
+- w_correct_jad_prayer: 5.0 → 10.0
+- w_wrong_jad_prayer: -10.0 → -20.0
+- Food/pot waste penalty: scales by actual overheal amount.
+  Shark heals 20 HP — penalty = base × (1 + wasted/heal × 9).
+  Eat at 50/70: 0 waste → base only. Eat at 68/70: 90% waste → 10x.
 
 ```ini
 [base]
@@ -234,6 +234,9 @@ Results (500M steps, ~3m43s):
 - Episodes completed: 10,174
 - Entropy: 8.3 → 5.8
 - Clipfrac: 0.000
+- Value loss: 0.057
+- Policy loss: -0.007
+- KL: 0.00007
 
 Observations:
 - Agent plateaus around wave 27-28 (Ket-Zek appears with magic+melee)
