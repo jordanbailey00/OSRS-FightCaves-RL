@@ -1072,75 +1072,358 @@ backend — identical game logic, no rendering, ready for PufferLib integration.
   Phase 10+ may introduce a shared fc_core/ directory with symlinks or
   CMake add_subdirectory() to eliminate drift.
 
---- PHASE 10: RL TRAINING INFRASTRUCTURE ---
+--- PHASE 10: RL TRAINING INFRASTRUCTURE (PufferLib 4.0) ---
 
-Goal: Set up everything needed to train an RL agent on the Fight Caves
-backend using PufferLib. This is the transition from "game engine" to
-"RL environment". The C backend is frozen after Phase 9 — this phase is
-all Python-side infrastructure.
+Goal: Integrate Fight Caves as a PufferLib 4.0 ocean environment and begin
+training. PufferLib 4.0 expects ALL game logic in a single C header file
+with standardized function signatures. The framework handles vectorization,
+GPU transfer, PPO training, and evaluation automatically.
 
-  A. PufferLib environment wrapper:
-    1. Write Python environment class that wraps fc_capi via ctypes
-       - Load the training-env .so
-       - Implement PufferLib's env interface (reset, step, obs, reward, done)
-       - Multi-head action space mapping (7 heads → flat action array)
-       - Observation slicing (policy obs vs reward features vs action mask)
-    2. Vectorized env: PufferLib batch interface using fc_capi_batch_*
-       - N parallel envs in one C allocation (already built in fc_capi.c)
-       - Flat array I/O for obs, actions, rewards, terminals
-    3. Verify env runs: random policy, check obs shapes, reward signals,
-       episode termination and auto-reset
+  ARCHITECTURE CHANGE: PufferLib 4.0 does NOT use ctypes/.so loading.
+  Instead, it compiles the game C code directly into the training binary
+  via build.sh. Our fc_capi.c bridge is NOT needed — PufferLib's vecenv.h
+  provides its own vectorized step/reset/render hooks.
 
-  B. Policy network architecture:
-    1. Design the policy network for multi-head discrete action space
-       - Input: 126 policy observation floats
-       - Output: 7 action heads with different dimensions (17,9,5,3,2,65,65)
-       - Architecture: MLP or small transformer, shared trunk + per-head outputs
-       - Action masking: apply mask before sampling each head
-    2. Value network (critic): shared trunk → single scalar value estimate
-    3. Consider whether the agent should use walk-to-tile (heads 5+6) or
-       directional (head 0) or both. Walk-to-tile has 65×65 coordinate space
-       which may need special handling (factored action space).
+  The training-env/src/ files become the source for a PufferLib ocean env.
+  We adapt them into the PufferLib pattern (fight_caves.h + binding.c).
 
-  C. Training script:
-    1. PPO training loop using PufferLib
-       - Hyperparameters: learning rate, clip ratio, entropy coefficient,
-         GAE lambda, minibatch size, update epochs
-       - Reward shaping weights (configurable, applied to 16 reward features)
-       - Curriculum: start on later waves? or always wave 1?
-    2. Logging: wandb or tensorboard integration
-       - Track: mean reward, waves reached, episode length, Jad encounters,
-         cave completions, prayer accuracy
-    3. Checkpointing: save policy weights every N updates
+  Reference repo: /home/joe/projects/runescape-rl-reference/pufferlib_4/
 
-  D. Policy replay and evaluation:
-    PufferLib has built-in eval/evaluate functionality that handles policy
-    replay. NO custom trace recording needed. The workflow:
-      1. Train produces checkpoint files (policy weights)
-      2. PufferLib eval loads checkpoint + creates single env with render_mode
-      3. Runs policy forward pass live → actions → env.step() → env.render()
-      4. Our demo-env Raylib viewer IS the render target
-      5. Press O during eval to enable debug overlays (LOS, path, range,
-         obs, mask, reward) — all the tooling from Phase 9c
-    
-    No action trace logging during training — zero overhead. Visual replay
-    is done live via PufferLib eval at any saved checkpoint.
-    
-    Key PufferLib files:
-      pufferlib/pufferl.py:372         — C++ eval() entry point
-      pufferlib/python_pufferl.py:995  — Python eval() entry point
-      pufferlib/python_pufferl.py:214  — evaluate() method (rollout loop)
+  A. Create PufferLib-compatible environment (in our repo):
 
-  E. Milestone tracking (lightweight, no per-tick logging):
-    Python training loop tracks aggregate stats per episode (no tick-level
-    logging — too expensive). At episode end, record to wandb/tensorboard:
-      - Waves reached, terminal reason, total reward, episode length
-      - Jad encounters, prayer accuracy, food/pot usage
-    Save checkpoints on milestones:
-      - New highest wave reached
-      - First Jad encounter / first cave completion
-      - Every Nth training update (e.g. every 100 updates)
-    Then use PufferLib eval to watch any checkpoint visually.
+    File structure (inside runescape-rl/training-env/):
+      fight_caves.h     — Main header: FightCaves struct, c_reset, c_step,
+                           c_close, c_render. Includes/inlines all fc_*.c
+                           backend code (or #includes the .c files directly).
+      binding.c          — PufferLib binding: defines OBS_SIZE, NUM_ATNS,
+                           ACT_SIZES, OBS_TYPE. Implements my_init() to
+                           parse config dict and my_log() to extract stats.
+
+    The code lives in OUR repo, not in pufferlib_4/ocean/. We follow the
+    same interface pattern so PufferLib's vecenv.h and build system can
+    compile it. We point the build at our directory or write our own build
+    script using the same flags. Only move to ocean/ if upstreaming to
+    PufferLib as a contribution.
+
+    Steps:
+      1. Write fight_caves.h in training-env/ that wraps our FcState into the PufferLib
+         environment struct pattern:
+           - Log log (required: perf, score, episode_return, episode_length, n)
+           - float* observations (FC_POLICY_OBS_SIZE per agent)
+           - double* actions (NUM_ATNS per agent, from network output)
+           - float* rewards, float* terminals
+           - FcState state (our game state, embedded directly)
+      3. Implement c_reset(): call fc_reset(), compute initial observations
+      4. Implement c_step(): read actions from double* buffer, convert to
+         int action heads, call fc_step(), compute reward from features,
+         write observations, handle terminal + auto-reset
+      5. Implement c_close(): call fc_destroy()
+      6. Implement c_render(): launch our Raylib viewer (optional, for eval)
+      7. Write binding.c with macros and my_init/my_log hooks
+
+    Macros for binding.c (v1 — 5 heads, no walk-to-tile):
+      OBS_SIZE = 162 (126 policy obs + 36 action mask)
+      NUM_ATNS = 5
+      ACT_SIZES = {17, 9, 5, 3, 2}
+      OBS_TYPE = FLOAT
+      ACT_TYPE = DOUBLE
+
+    Action mapping in c_step():
+      int actions[7];
+      for (int h = 0; h < 7; h++)
+          actions[h] = (int)env->actions[agent_idx * 7 + h];
+      fc_step(&env->state, actions);
+
+    Reward computation in c_step():
+      Read reward features from fc_write_reward_features()
+      Apply shaping weights (configurable via config dict):
+        reward += rwd[DAMAGE_DEALT] * w_damage_dealt;
+        reward += rwd[DAMAGE_TAKEN] * w_damage_taken;
+        reward += rwd[NPC_KILL] * w_npc_kill;
+        ... etc for all 16 features ...
+      env->rewards[agent_idx] = reward;
+
+    Observation in c_step():
+      fc_write_obs(&env->state, env->observations + agent_idx * OBS_SIZE);
+      (Only policy obs, NOT reward features or action mask — PufferLib
+       handles action masking separately if needed)
+
+  B. Action masking integration:
+
+    PufferLib 4.0 action masking approach:
+      Option 1: Include mask in observations (append mask floats to obs).
+                Policy network reads obs[:126] for features, obs[126:292]
+                for mask. OBS_SIZE = 126 + 166 = 292.
+      Option 2: Embed mask logic in the policy network (mask invalid logits
+                before sampling). Requires custom network in models.cu.
+      Option 3: No masking — let the agent learn which actions are valid
+                via negative reward for invalid actions. Simplest but slower.
+
+    Recommendation: Option 1 for v1. Include action mask in the observation
+    buffer. The policy network applies the mask before softmax on each head.
+    This is how several ocean envs handle it (see nmmo3 pattern).
+
+  C. Configuration (config/fight_caves.ini):
+
+    [base]
+    env_name = fight_caves
+
+    [env]
+    # Reward shaping weights (from D1 analysis)
+    w_damage_dealt = 0.5
+    w_damage_taken = -0.5
+    w_npc_kill = 3.0
+    w_wave_clear = 10.0
+    w_jad_damage = 2.0
+    w_jad_kill = 50.0
+    w_player_death = -20.0
+    w_cave_complete = 100.0
+    w_food_used = -0.05
+    w_prayer_pot_used = -0.05
+    w_correct_jad_prayer = 5.0
+    w_wrong_jad_prayer = -10.0
+    w_invalid_action = -0.1
+    w_movement = 0.0
+    w_idle = -0.01
+    w_tick_penalty = -0.005
+    # Curriculum
+    start_wave = 1
+    # Collision file path
+    collision_path = assets/fightcaves.collision
+
+    [vec]
+    total_agents = 4096
+    num_buffers = 2
+
+    [train]
+    total_timesteps = 500_000_000
+    learning_rate = 0.0003
+    gamma = 0.999
+    gae_lambda = 0.95
+    clip_coef = 0.2
+    vf_coef = 0.5
+    ent_coef = 0.01
+    max_grad_norm = 0.5
+    horizon = 256
+    minibatch_size = 4096
+
+    [policy]
+    hidden_size = 256
+    num_layers = 2
+
+  D. RL DESIGN DECISIONS:
+
+    These must be decided before implementation. Each directly affects
+    whether the agent learns to get a fire cape.
+
+    --- D1. REWARD WEIGHTS ---
+
+    We have 16 reward features (from fc_contracts.h). The scalar reward
+    each tick = weighted sum of these features. The weights determine what
+    behavior the agent optimizes for.
+
+    Best practice for long-horizon survival games:
+      - Start with DENSE rewards (reward many small things) so the agent
+        gets learning signal early. Sparse rewards (only reward cave
+        complete) make it nearly impossible to learn from scratch.
+      - Avoid rewards that create degenerate behavior. E.g., if damage
+        dealt is rewarded too heavily, the agent may ignore prayer/food
+        and just attack until it dies.
+      - Negative rewards should be mild so the agent isn't paralyzed by
+        fear of punishment. Exception: wrong Jad prayer should be harsh
+        because it's the key skill to learn.
+
+    Proposed v1 weights (will tune after initial training runs):
+
+      POSITIVE (encourage):
+        w_damage_dealt      =  0.5    # small reward per damage, keeps agent engaged
+        w_npc_kill           =  3.0    # meaningful reward for finishing off NPCs
+        w_wave_clear         = 10.0    # major milestone, agent should prioritize
+        w_jad_damage         =  2.0    # extra incentive to attack Jad (not just hide)
+        w_jad_kill           = 50.0    # huge reward — this is the goal
+        w_cave_complete      = 100.0   # ultimate reward
+        w_correct_jad_prayer =  5.0    # reinforce correct prayer switching
+
+      NEGATIVE (discourage):
+        w_damage_taken       = -0.5    # mild punishment, don't want agent to be reckless
+        w_player_death       = -20.0   # significant but not so harsh agent becomes passive
+        w_wrong_jad_prayer   = -10.0   # harsh — this is the #1 mistake to avoid
+        w_invalid_action     = -0.1    # gentle nudge away from masked actions
+        w_food_used          = -0.05   # very slight — food is meant to be used, but conserve
+        w_prayer_pot_used    = -0.05   # same — pots are resources to manage, not hoard
+
+      NEUTRAL/ZERO:
+        w_movement           =  0.0    # don't reward or penalize movement itself
+        w_idle               = -0.01   # tiny penalty to discourage standing still forever
+        w_tick_penalty        = -0.005  # tiny time pressure to prevent infinite stalling
+
+    Key principles:
+      - Wave clear (10.0) > NPC kill (3.0) > damage dealt (0.5)
+        Hierarchy ensures agent prioritizes wave completion over farming damage.
+      - Cave complete (100.0) >> everything else
+        The agent should sacrifice short-term reward for long-term survival.
+      - Jad prayer rewards/penalties are the largest per-tick signals
+        This teaches the agent that prayer switching is critical.
+
+    --- D2. ACTION SPACE ---
+
+    Current: 7 heads, 166 total actions.
+    The walk-to-tile heads (5+6) add 65+65 = 130 actions on top of the
+    base 36. This is a large action space that may slow learning.
+
+    Best practice:
+      - Smaller action spaces learn faster. Most successful RL game agents
+        use <50 discrete actions.
+      - Multi-head discrete is fine if heads are independent (ours are).
+      - Large coordinate spaces (65x65 tiles) are hard for PPO to explore
+        effectively — the agent needs to discover that specific (x,y)
+        pairs are useful, which is exponentially harder than 8 directions.
+
+    Options:
+      A. Full 7 heads (166 actions) — keep walk-to-tile for pathfinding
+      B. 5 heads only (36 actions) — drop walk-to-tile, directional only
+      C. 5 heads + coarse walk-to-tile (e.g., 8x8 grid = 64+64 = 164)
+      D. Start with 5 heads (B), add walk-to-tile later if needed
+
+    Recommendation: Option D. Start simple with the 5 original heads
+    (move:17, attack:9, prayer:5, eat:3, drink:2 = 36 actions). The
+    directional movement + attack auto-approach covers all needed movement.
+    If the agent struggles with pathfinding around obstacles, add walk-to-
+    tile in a later iteration.
+
+    For PufferLib binding:
+      NUM_ATNS = 5
+      ACT_SIZES = {17, 9, 5, 3, 2}
+
+    --- D3. OBSERVATION SPACE ---
+
+    Current: 126 policy features (player:20 + NPC:96 + meta:10).
+    Plus 166 action mask floats = 292 total if mask is in obs buffer.
+
+    Best practice:
+      - Include action mask in observations. The policy network needs to
+        know which actions are valid to avoid wasting exploration on
+        impossible actions. This is standard for masked action PPO.
+      - Normalize all features to [0,1] (already done in fc_write_obs).
+      - 126 features is reasonable — most game RL envs use 50-500.
+      - Don't over-observe: the agent should learn from the same info
+        a human player has (HP, prayer, NPC positions, wave number).
+
+    Decision: Include action mask in the observation buffer.
+      OBS_SIZE = FC_POLICY_OBS_SIZE + FC_ACTION_MASK_SIZE
+      With 5 heads: OBS_SIZE = 126 + 36 = 162
+      With 7 heads: OBS_SIZE = 126 + 166 = 292
+
+      Policy reads obs[:126] for game state, obs[126:] for mask.
+      Apply mask to logits before softmax (standard masked PPO).
+
+    --- D4. HYPERPARAMETERS ---
+
+    Fight Caves is a long-horizon game (~3000+ ticks for a full run).
+    Best practices for long-horizon games:
+
+      gamma = 0.999         # High discount — agent must value future rewards
+                             # (wave 63 is thousands of ticks away from wave 1)
+      gae_lambda = 0.95      # Standard GAE smoothing
+      horizon = 256          # Longer rollouts capture more temporal structure
+                             # (a full wave might take 50-200 ticks)
+      learning_rate = 0.0003 # Conservative LR for stability (PPO standard)
+      clip_coef = 0.2        # Standard PPO clip
+      vf_coef = 0.5          # Standard value loss weight
+      ent_coef = 0.01        # Moderate entropy for exploration
+                             # Increase to 0.05 if agent converges too early
+      max_grad_norm = 0.5    # Standard gradient clipping
+      minibatch_size = 4096  # Large batches for stable gradients
+      total_agents = 4096    # Many parallel envs for throughput
+
+    Network:
+      hidden_size = 256      # Moderate — FC has complex strategy but
+                             # manageable state space
+      num_layers = 2         # Shallow is usually better for PPO
+                             # (deep networks + PPO = instability)
+
+    These are starting points. Key tuning knobs after initial runs:
+      - If agent doesn't explore: increase ent_coef
+      - If training is unstable: decrease learning_rate
+      - If agent is short-sighted: increase gamma toward 0.9995
+      - If agent plateaus early: increase horizon
+
+    --- D5. CURRICULUM ---
+
+    Options:
+      A. Always start wave 1 — simplest, agent learns full game
+      B. Start at random wave (1-30) — faster exposure to harder content
+      C. Progressive: start wave 1, unlock later start waves as agent
+         improves (e.g., once agent reliably clears wave 20, allow
+         starting from wave 15-20)
+
+    Best practice:
+      - Start with Option A. The agent needs to learn basic combat
+        (waves 1-10) before it can handle Ket-Zek or Jad.
+      - If training stalls (agent can't get past wave 30 after days
+        of training), switch to Option C to practice harder waves.
+      - Option B risks the agent never learning early-wave basics.
+
+    Recommendation: Option A for v1. Always wave 1. Revisit if needed.
+
+    Implementation: start_wave config parameter in fight_caves.ini.
+    When start_wave > 1, fc_reset skips to that wave and spawns
+    appropriate NPCs. Player starts with proportionally reduced
+    consumables (fewer sharks/pots for later waves).
+
+  E. Build and verify:
+
+    1. Write build script (or adapt pufferlib_4/build.sh) to compile our
+       training-env/ sources with PufferLib's src/ headers (vecenv.h,
+       pufferlib.cu, bindings.cu). Output: _C.so or standalone binary.
+    2. puffer train fight_caves — verify training starts, obs shapes correct,
+       reward signals firing, episodes terminating and resetting
+    3. puffer eval fight_caves — verify eval mode, rendering works
+    4. Watch wandb dashboard for: mean reward, waves reached, episode length
+
+  E. Evaluation and rendering:
+
+    PufferLib 4.0 built-in eval handles policy replay:
+      puffer eval fight_caves --load-model-path checkpoints/fight_caves/*/model.bin
+    This calls c_render() which launches our Raylib viewer.
+    The c_render() implementation reuses viewer.c's rendering code.
+    Press O during eval to enable debug overlays from Phase 9c.
+    No custom trace recording needed — zero training overhead.
+
+  F. Milestone tracking:
+
+    PufferLib logs via my_log() hook. We export:
+      - score (cumulative reward)
+      - episode_return, episode_length
+      - Custom fields: wave_reached, terminal_reason, jad_encountered
+    These go to wandb automatically via puffer train --wandb.
+    Save checkpoints every N training updates (configurable).
+
+  G. Key reference files in PufferLib 4.0:
+
+    Pattern to follow (all in runescape-rl-reference/pufferlib_4/):
+      ocean/template/         — Minimal working example (start here)
+      ocean/convert/          — Multi-head discrete actions {9,5}
+      ocean/snake/snake.h     — Complex game logic (300+ lines)
+      ocean/whisker_racer/    — Raylib rendering in c_render()
+
+    Training internals (in runescape-rl-reference/pufferlib_4/):
+      pufferlib/pufferl.py    — CLI: train/eval/sweep entry points
+      src/vecenv.h            — Vectorized env interface (study lines 108-131)
+      src/pufferlib.cu        — PPO training kernels
+      config/default.ini      — Base hyperparameters (copy + override)
+      build.sh                — Build script (study lines 119-240)
+
+    Our repo structure after Phase 10:
+      runescape-rl/
+        training-env/
+          src/                — 18 backend files (game logic)
+          fight_caves.h       — PufferLib wrapper (c_reset/c_step/c_render)
+          binding.c           — PufferLib macros + my_init/my_log
+          build.sh            — Build script (compiles with PufferLib headers)
+        config/
+          fight_caves.ini     — Hyperparameters + reward weights
+        demo-env/             — Raylib viewer (unchanged)
 
 --- PHASE 11: NPC MODELS (Visual Polish) ---
 
