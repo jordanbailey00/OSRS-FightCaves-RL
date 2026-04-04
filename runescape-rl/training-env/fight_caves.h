@@ -135,19 +135,25 @@ static float fc_puffer_compute_reward(FightCaves* env) {
     reward += rwd[FC_RWD_JAD_KILL]         * env->w_jad_kill;
     reward += rwd[FC_RWD_PLAYER_DEATH]     * env->w_player_death;
     reward += rwd[FC_RWD_CAVE_COMPLETE]    * env->w_cave_complete;
-    /* Food/pot penalty scales with how wasteful the use was.
-     * Eating at full HP or high HP = full penalty (wasteful).
-     * Eating at low HP = no penalty (smart survival).
-     * Threshold: penalty applies when HP > 50% (shark) or prayer > 50% (pot). */
+    /* Food/pot penalty scales by how much of the heal was wasted.
+     * Shark heals 200 tenths (20 HP). If current_hp + 200 > max_hp,
+     * the overheal is waste. Penalty = base * (wasted / total_heal).
+     * Eating at 50/70 HP: heals to 70, 0 waste → 0 penalty.
+     * Eating at 68/70 HP: heals 2, wastes 18 → penalty * 0.9.
+     * Same logic for prayer pots (restore 170 tenths = 17 points). */
     if (rwd[FC_RWD_FOOD_USED] > 0.0f) {
-        float hp_frac = (float)env->state.player.current_hp / (float)env->state.player.max_hp;
-        float waste_factor = (hp_frac > 0.5f) ? (hp_frac - 0.5f) * 2.0f : 0.0f;  /* 0 at 50%, 1 at 100% */
-        reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_factor * 4.0f);
+        int shark_heal = 200;  /* tenths */
+        int overheal = (env->state.player.current_hp + shark_heal) - env->state.player.max_hp;
+        if (overheal < 0) overheal = 0;
+        float waste_frac = (float)overheal / (float)shark_heal;  /* 0 = no waste, 1 = total waste */
+        reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_frac * 9.0f);
     }
     if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
-        float pray_frac = (float)env->state.player.current_prayer / (float)env->state.player.max_prayer;
-        float waste_factor = (pray_frac > 0.5f) ? (pray_frac - 0.5f) * 2.0f : 0.0f;
-        reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_factor * 4.0f);
+        int pot_restore = 170;  /* tenths (17 prayer points) */
+        int overrestore = (env->state.player.current_prayer + pot_restore) - env->state.player.max_prayer;
+        if (overrestore < 0) overrestore = 0;
+        float waste_frac = (float)overrestore / (float)pot_restore;
+        reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_frac * 9.0f);
     }
     reward += rwd[FC_RWD_CORRECT_JAD_PRAY] * env->w_correct_jad_prayer;
     reward += rwd[FC_RWD_WRONG_JAD_PRAY]   * env->w_wrong_jad_prayer;
