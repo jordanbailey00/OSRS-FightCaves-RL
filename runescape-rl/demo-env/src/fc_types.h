@@ -111,7 +111,7 @@ typedef enum {
 #define FC_FOOD_COOLDOWN_TICKS    3  /* food_delay: 3 ticks */
 #define FC_POTION_COOLDOWN_TICKS  2  /* drink_delay: 2 ticks (NOT 3 — separate clock from food) */
 #define FC_COMBO_EAT_TICKS        1  /* karambwan combo delay after food */
-#define FC_MAX_EPISODE_TICKS   30000 /* ~5 hours at 0.6s/tick */
+#define FC_MAX_EPISODE_TICKS   200000 /* ~33 hours at 0.6s/tick — force prayer drain */
 #define FC_HP_REGEN_INTERVAL     10  /* HP regen: 1 HP every 10 ticks (6 seconds) */
 
 /* Player base stats (from FightCaveEpisodeInitializer.kt) */
