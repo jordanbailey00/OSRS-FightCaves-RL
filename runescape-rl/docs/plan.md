@@ -1373,15 +1373,36 @@ GPU transfer, PPO training, and evaluation automatically.
 
   E. Build and verify:
 
-    1. Write build script (or adapt pufferlib_4/build.sh) to compile our
-       training-env/ sources with PufferLib's src/ headers (vecenv.h,
-       pufferlib.cu, bindings.cu). Output: _C.so or standalone binary.
-    2. puffer train fight_caves — verify training starts, obs shapes correct,
-       reward signals firing, episodes terminating and resetting
-    3. puffer eval fight_caves — verify eval mode, rendering works
-    4. Watch wandb dashboard for: mean reward, waves reached, episode length
+    DONE:
+    [x] Build script (training-env/build.sh) — compiles against PufferLib
+        headers, supports CUDA/CPU/standalone modes
+    [x] Standalone test (fight_caves.c) — 100 episodes, ~1M steps/sec
+    [x] Static lib compiles against vecenv.h (GCC, verified)
+    [x] Collision asset in training-env/assets/fightcaves.collision
+    [x] Struct fields match vecenv.h expectations (float* actions/terminals,
+        int rng field)
+    [x] Auto-reset observation timing fix — obs written BEFORE reset so
+        agent sees terminal state, not post-reset state (verified against
+        ocean/convert and ocean/snake patterns)
+    [x] Action mask included in observation buffer (162 = 126 + 36)
 
-  E. Evaluation and rendering:
+    REMAINING — PufferLib integration test:
+    1. Install PufferLib 4.0 Python package (pip install or dev mode)
+    2. Copy config/fight_caves.ini to pufferlib_4/config/
+    3. Run build: cd training-env && ./build.sh (or ./build.sh --cpu)
+    4. Verify _C.so is produced in pufferlib_4/pufferlib/
+    5. Run: cd pufferlib_4 && puffer train fight_caves
+       - Check: no crashes on startup
+       - Check: obs shape = (total_agents, 162)
+       - Check: action shape = (total_agents, 5)
+       - Check: rewards are non-zero (reward features firing)
+       - Check: episodes terminate and auto-reset
+       - Check: log shows score, episode_return, wave_reached
+    6. Let it train for ~1M steps, verify wandb metrics
+    7. Run: puffer eval fight_caves --load-model-path <checkpoint>
+       - Verify eval mode works (even with random/untrained policy)
+
+  F. Evaluation and rendering:
 
     PufferLib 4.0 built-in eval handles policy replay:
       puffer eval fight_caves --load-model-path checkpoints/fight_caves/*/model.bin
