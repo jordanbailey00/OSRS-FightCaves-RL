@@ -5,17 +5,42 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v7 (2026-04-04)
+## CURRENT: v6 (2026-04-04)
 
-Changes from v6:
-- Added current attack target to player observation (new slot 20).
-  Agent now sees which NPC slot it's currently targeting (0=none, 0.125-1.0=slot 0-7).
-  FC_OBS_PLAYER_SIZE: 20 → 21. FC_POLICY_OBS_SIZE: 134 → 135. OBS_SIZE: 170 → 171.
-- Renamed FC_OBS_PLAYER_STUNNED → FC_OBS_PLAYER_HIT_STYLE for clarity.
-- Added curriculum learning: 50% of episodes start at wave 28 with full HP/prayer.
-  Gives the agent more practice on the hard waves (Ket-Zek+) instead of
-  spending 90% of training time on easy waves 1-20.
-  New config: curriculum_wave=28, curriculum_pct=0.5.
+Changes from v5:
+
+Observation improvements (agent gets better info to make decisions):
+- Player slot 19: hit_style_this_tick — WHAT attack style hit the agent
+  this tick (0=none, 0.33=melee, 0.67=ranged, 1.0=magic). Previously
+  the agent only knew damage amount, not type. Now it can directly
+  correlate "hit by magic → should pray magic."
+- Player slot 20: attack_target — which NPC slot the agent is currently
+  targeting (0=none, 0.125-1.0=slot 0-7). Agent can now track its own
+  target for decision-making about switching targets.
+- NPC slot 12: LOS — line of sight from player to NPC (1=clear, 0=blocked).
+  Critical for safespotting strategies. Agent can learn to break LOS
+  behind terrain to avoid ranged/magic attacks.
+- FC_OBS_PLAYER_SIZE: 20 → 21. NPC_STRIDE: 12 → 13.
+  FC_POLICY_OBS_SIZE: 126 → 135. FC_PUFFER_OBS_SIZE: 162 → 171.
+
+Reward improvements:
+- Damage taken penalty now scales quadratically — big hits hurt
+  disproportionately more than small ones:
+    1 HP: penalty ≈ -0.0002 (barely noticeable, chip damage is ok)
+    10 HP: penalty ≈ -1.1 (moderate, should eat soon)
+    20 HP: penalty ≈ -4.3 (harsh, should have been praying)
+    50 HP: penalty ≈ -26.8 (catastrophic, Jad without prayer)
+  This teaches the agent that praying against big hits matters far
+  more than avoiding small melee pokes.
+- All explicit prayer rewards remain at 0 (organic learning).
+
+Curriculum learning:
+- 50% of episodes start at wave 28 (where agent was dying in v5).
+  Gives the agent more practice on Ket-Zek+ waves instead of
+  spending most training time on easy waves 1-20.
+- Remaining 50% start wave 1 to maintain full-game learning.
+- Player restored to full HP/prayer at curriculum start wave.
+- New config: curriculum_wave=28, curriculum_pct=0.5.
 
 ```ini
 [base]
@@ -42,67 +67,6 @@ w_idle = 0.0
 w_tick_penalty = -0.001
 curriculum_wave = 28
 curriculum_pct = 0.5
-
-[vec]
-total_agents = 4096
-num_buffers = 2
-
-[train]
-total_timesteps = 5_000_000_000
-learning_rate = 0.001
-gamma = 0.999
-gae_lambda = 0.95
-clip_coef = 0.2
-vf_coef = 0.5
-ent_coef = 0.02
-max_grad_norm = 0.5
-horizon = 256
-minibatch_size = 4096
-
-[policy]
-hidden_size = 256
-num_layers = 2
-```
-
----
-
-## v6 (2026-04-04) — not trained, superseded by v7
-
-Changes from v5:
-- Added hit_style_this_tick to player observation (slot 19, was reserved).
-  Agent now sees WHAT attack style hit it each tick (0=none, 0.33=melee,
-  0.67=ranged, 1.0=magic). Previously it only knew damage amount, not type.
-  This lets it correlate: "I got hit by magic → I should pray magic."
-- Added LOS (line of sight) to NPC observation (new slot 12).
-  Agent now sees whether it has clear LOS to each visible NPC (1=clear, 0=blocked).
-  Critical for safespotting — agent can learn to break LOS behind terrain
-  to avoid ranged/magic attacks while still being safe from melee NPCs.
-  NPC_STRIDE: 12 → 13. FC_POLICY_OBS_SIZE: 126 → 134. OBS_SIZE: 162 → 170.
-- All prayer rewards remain at 0 (organic learning via damage_taken).
-
-```ini
-[base]
-env_name = fight_caves
-
-[env]
-w_damage_dealt = 0.5
-w_damage_taken = -0.75
-w_npc_kill = 3.0
-w_wave_clear = 10.0
-w_jad_damage = 2.0
-w_jad_kill = 50.0
-w_player_death = -20.0
-w_cave_complete = 100.0
-w_food_used = -0.01
-w_prayer_pot_used = -0.01
-w_correct_jad_prayer = 0.0
-w_wrong_jad_prayer = 0.0
-w_correct_danger_prayer = 0.0
-w_wrong_danger_prayer = 0.0
-w_invalid_action = -0.1
-w_movement = 0.0
-w_idle = 0.0
-w_tick_penalty = -0.001
 
 [vec]
 total_agents = 4096
