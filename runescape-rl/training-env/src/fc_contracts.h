@@ -136,7 +136,9 @@
 #define FC_RWD_MOVEMENT         13  /* walk/run action executed */
 #define FC_RWD_IDLE             14  /* wait/idle action */
 #define FC_RWD_TICK_PENALTY     15  /* fires every tick (time discount) */
-#define FC_REWARD_FEATURES      16
+#define FC_RWD_CORRECT_DANGER_PRAY 16 /* correct prayer vs ranged/magic hit (any NPC) */
+#define FC_RWD_WRONG_DANGER_PRAY   17 /* wrong/no prayer vs ranged/magic hit (any NPC) */
+#define FC_REWARD_FEATURES      18
 
 /* --- Total observation (policy obs + reward features) --- */
 #define FC_TOTAL_OBS            (FC_POLICY_OBS_SIZE + FC_REWARD_FEATURES)  /* 142 */

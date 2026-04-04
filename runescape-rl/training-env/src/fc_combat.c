@@ -254,6 +254,13 @@ void fc_resolve_player_pending_hits(FcState* state) {
                 else state->wrong_jad_prayer = 1;
             }
 
+            /* Track prayer correctness for ALL ranged/magic hits.
+             * Melee excluded — agent can kite melee, prayer less critical. */
+            if (h->attack_style == ATTACK_RANGED || h->attack_style == ATTACK_MAGIC) {
+                if (blocked) state->correct_danger_prayer = 1;
+                else state->wrong_danger_prayer = 1;
+            }
+
             h->active = 0;  /* consumed */
         } else {
             /* Still in flight — keep */

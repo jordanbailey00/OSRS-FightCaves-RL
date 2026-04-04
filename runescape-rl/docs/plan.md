@@ -1437,75 +1437,157 @@ GPU transfer, PPO training, and evaluation automatically.
           fight_caves.ini     — Hyperparameters + reward weights
         demo-env/             — Raylib viewer (unchanged)
 
---- PHASE 11: POLICY REPLAY IN DEBUG VIEWER ---
+--- PHASE 11: POLICY REPLAY + v7 FIXES ---
 
-Goal: Watch a trained policy play Fight Caves in the full debug viewer with
-all overlays, NPC models, animations, hitsplats — everything we built in
-Phases 8-9. No backend changes. No fc_*.c modifications.
+  STATUS: Policy replay DONE. v7 fixes planned below.
 
-  STATUS: Implementation in progress.
+--- PHASE 11a: POLICY REPLAY (COMPLETE) ---
 
-  APPROACH: PufferLib native c_render() (recommended by PufferLib).
+  Approach: stdin/stdout pipe between existing debug viewer and Python eval
+  script. PufferLib's CUDA backend loads checkpoint, PyTorch model reconstructed
+  with correct weight mapping (CUDA order: encoder→network→decoder, no biases).
 
-    PufferLib's eval loop (pufferl.py:401-428):
-      while True:
-          backend.render(pufferl, 0)   # calls c_render(&envs[0])
-          backend.rollouts(pufferl)    # one policy step + env step
-
-    PufferLib handles ALL ML: checkpoint loading, network reconstruction,
-    inference, action sampling, action masking, hidden state. We only
-    implement the rendering.
-
-    How it works:
-      1. build.sh --render compiles with -DFC_RENDER and Raylib linked
-      2. fight_caves.h c_render() calls into fc_render.h
-      3. fc_render.h provides a focused Raylib renderer (~400 LOC):
-         - Loads terrain, objects, NPC models from demo-env/assets/
-         - Camera orbit (right-drag, scroll zoom, presets)
-         - 3D scene: terrain, objects, entities with HP bars
-         - Hitsplats from per-tick damage flags
-         - UI: header, side panel with HP/prayer/wave/NPC list
-         - TPS control: renders at 60 FPS, blocks until tick time passes
-         - Pause (Space blocks PufferLib from stepping)
-      4. Run: puffer eval fight_caves --load-model-path checkpoint.bin
-
-  FILES:
-
-    CREATED:
-      training-env/fc_render.h        — Raylib rendering module (~400 LOC)
-
-    MODIFIED:
-      training-env/fight_caves.h      — c_render() calls fc_render.h
-      training-env/build.sh           — --render flag adds Raylib deps
-
-    NOT MODIFIED:
-      All fc_*.c/h backend files      — no changes
-      demo-env/src/viewer.c           — standalone viewer unchanged
+  FILES CREATED:
+    eval_viewer.py                  — Python eval script (loads checkpoint,
+                                      pipes actions to viewer subprocess)
+  FILES MODIFIED:
+    demo-env/src/viewer.c           — --policy-pipe mode (~40 lines):
+                                      reads 5 action ints from stdin per tick,
+                                      writes 171 obs+mask floats to stdout,
+                                      suppresses Raylib INFO logs, allows UI
+                                      clicks (tabs/panels) during replay
+    training-env/build.sh           — --render flag, -lomp5→-lgomp fix,
+                                      CUDA build with --float for PyTorch compat
+    training-env/fight_caves.h      — c_render() no-op (viewer is external)
+    training-env/fc_render.h        — simplified renderer (kept for reference)
 
   BUILD & RUN:
+    # Build CUDA _C.so (needed for checkpoint loading)
+    cd training-env && source ../.venv/bin/activate
+    CUDA_HOME=/usr/local/cuda-13.2 ./build.sh --float
 
-    # Build with rendering support
-    cd training-env && ./build.sh --render
+    # Build viewer
+    cd .. && cmake --build build --target fc_viewer
 
-    # Run eval with trained checkpoint
-    cd $PUFFERLIB_DIR && puffer eval fight_caves \
-        --load-model-path checkpoints/fight_caves/.../model.bin
+    # Run policy replay
+    source .venv/bin/activate
+    python3 eval_viewer.py --ckpt <path_to_.bin>
+    python3 eval_viewer.py --ckpt latest         # auto-find latest checkpoint
+    python3 eval_viewer.py --random               # random actions (no checkpoint)
 
-    # Controls in viewer window:
-    #   Space        — pause/resume (blocks game tick while paused)
-    #   Up/Down      — TPS speed (1-30, default 2)
-    #   Right-drag   — orbit camera
-    #   Scroll       — zoom
-    #   4/5          — camera presets (overhead / tactical)
-    #   Q/Esc        — quit
+  CHECKPOINT WEIGHT MAPPING:
+    PufferLib CUDA .bin = flat float32, no biases, order:
+      encoder.encoder.weight    [256, 171]   43776
+      network.layers.0.weight   [768, 256]   196608
+      network.layers.1.weight   [768, 256]   196608
+      decoder.decoder.weight    [36, 256]    9216
+      decoder.value_function.weight [1, 256] 256
+      Total: 446464 floats
 
-  TPS CONTROL:
+--- PHASE 11b: v7 FIXES (from policy replay observations) ---
 
-    c_render() blocks until enough time passes for one tick:
-      - Renders at 60 FPS for smooth camera
-      - Returns after 1/TPS seconds, allowing PufferLib to step
-      - Pause mode: renders indefinitely, never returns (blocks step)
-    This gives responsive camera at any game speed.
+  v6.1 agent observed behavior:
+    1. Walks into terrain (collision map has walkable tiles inside walls)
+    2. Chugs prayer pots immediately on 1 prayer point lost
+    3. Turns on Protect Melee and never switches
+    4. Eats sharks on 1 HP damage
+    5. Constantly running around (acceptable, skip for now)
+
+  FIX 1 — COLLISION MAP (game logic bug):
+
+    The fightcaves.collision binary has tiles marked walkable that are inside
+    cave wall geometry. The agent walks into walls because the map says it can.
+
+    Action:
+      - Re-export fightcaves.collision from b237 cache with correct walkability
+      - Cross-reference against the terrain/objects mesh to verify wall tiles
+        are marked blocked
+      - OR: manually audit the 64x64 collision map using the debug viewer's
+        collision overlay (C key) and fix mismarked tiles
+      - Both demo-env/assets/ and training-env/assets/ collision files must
+        be updated
+
+    Files: fightcaves.collision (both copies)
+
+  FIX 2 — CONSUMABLE WASTE PENALTY (reward shaping):
+
+    Problem: agent drinks prayer pots at 1 prayer point missing, eats sharks
+    at 1 HP missing. Consumable penalties (-0.01) are far too weak compared
+    to the quadratic damage penalty.
+
+    Fix: Increase consumable penalty weights so the existing waste scaling
+    (waste_frac * 9.0 multiplier in fc_puffer_compute_reward) actually bites.
+    No masks — agent learns through punishment, not hard restrictions.
+
+      w_prayer_pot_used: -0.01 → -1.0
+      w_food_used:       -0.01 → -0.5
+
+    Resulting penalties (waste_frac = overheal / total_heal):
+      Prayer pot at 1 prayer missing:  -1.0 × (1 + 0.94×9) = -9.5 (devastating)
+      Prayer pot at 10 missing:        -1.0 × (1 + 0.41×9) = -4.7 (harsh)
+      Prayer pot at 17+ missing:       -1.0 × (1 + 0×9)    = -1.0 (acceptable)
+      Shark at 1 HP missing:           -0.5 × (1 + 0.95×9) = -4.8 (harsh)
+      Shark at 10 HP missing:          -0.5 × (1 + 0.50×9) = -2.75 (moderate)
+      Shark at 20+ HP missing:         -0.5 × (1 + 0×9)    = -0.5 (acceptable)
+
+    Agent learns: potions/food are valuable resources. Using them at the right
+    time (17+ prayer missing, 20+ HP missing) costs ~1 reward. Using them
+    wastefully costs 5-10x more. No hard coding.
+
+    Files: config/fight_caves.ini (reward weights only)
+
+  FIX 3 — PRAYER CORRECTNESS REWARDS (reward shaping):
+
+    Problem: agent turns on Protect Melee and never switches. All explicit
+    prayer rewards are 0. Agent has no signal for correct vs wrong prayer.
+    The hit_style observation (slot 19) tells the agent WHAT hit it, but
+    without a reward signal, it can't learn to react.
+
+    Fix: Re-enable prayer correctness rewards (per-hit, not per-tick):
+      - w_correct_danger_prayer = 1.0 (reward for correct prayer when hit)
+      - w_wrong_danger_prayer = -2.0 (punish wrong/no prayer when hit by
+        ranged or magic — melee is less critical since agent can kite)
+
+    The per-hit firing was fixed in v4 (the v3 per-tick-per-NPC bug is gone).
+    The reward fires when a pending hit resolves and the player's active
+    prayer matches (or doesn't match) the attack style.
+
+    Additionally: verify the observation provides enough info for the agent
+    to react. The agent sees:
+      - hit_style_this_tick (slot 19): 0/0.33/0.67/1.0 for none/melee/ranged/magic
+      - Per-NPC: attack_style (NPC slot offset 6)
+      - Per-NPC: jad_telegraph (NPC slot offset 10)
+    These should be sufficient. The MinGRU's recurrent state can remember
+    what style hit it recently.
+
+    Files: config/fight_caves.ini (reward weights)
+           fight_caves.h (uncomment prayer reward lines in fc_puffer_compute_reward)
+
+  FIX 4 — REDUCE QUADRATIC DAMAGE SCALING:
+
+    Problem: w_damage_taken = -0.75 with quadratic scaling makes even 1 HP
+    damage punishing enough to trigger over-consuming. The agent is terrified
+    of any damage.
+
+    Fix: Reduce to w_damage_taken = -0.3. This keeps the quadratic shape
+    (big hits still punished much more than small ones) but reduces the
+    absolute magnitude so small melee pokes don't trigger panic eating.
+
+    Damage penalty at -0.3:
+      1 HP:  -0.3 × 0.014² × 70 = -0.00006 (ignorable)
+      10 HP: -0.3 × 0.143² × 70 = -0.43 (noticeable)
+      20 HP: -0.3 × 0.286² × 70 = -1.72 (should pray)
+      50 HP: -0.3 × 0.714² × 70 = -10.7 (catastrophic)
+
+    Files: config/fight_caves.ini
+
+  IMPLEMENTATION ORDER:
+    1. Fix collision map (Fix 1) — game logic bug, must fix first
+    2. Add consumable masks (Fix 2) — fc_state.c mask change
+    3. Uncomment prayer rewards (Fix 3) — fight_caves.h + config
+    4. Reduce damage scaling (Fix 4) — config only
+    5. Train v7 with all fixes
+    6. Observe with policy replay, iterate
 
 --- FUTURE WORK: VISUAL POLISH ---
 

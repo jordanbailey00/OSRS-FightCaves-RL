@@ -319,6 +319,8 @@ void fc_write_reward_features(const FcState* state, float* out) {
     out[FC_RWD_MOVEMENT]         = (float)state->movement_this_tick;
     out[FC_RWD_IDLE]             = (float)state->idle_this_tick;
     out[FC_RWD_TICK_PENALTY]     = 1.0f;  /* always fires */
+    out[FC_RWD_CORRECT_DANGER_PRAY] = (float)state->correct_danger_prayer;
+    out[FC_RWD_WRONG_DANGER_PRAY]   = (float)state->wrong_danger_prayer;
 }
 
 void fc_write_mask(const FcState* state, float* out) {

@@ -376,6 +376,8 @@ typedef struct {
     int jad_killed;
     int correct_jad_prayer;
     int wrong_jad_prayer;
+    int correct_danger_prayer;  /* correct prayer blocked a ranged/magic hit (any NPC) */
+    int wrong_danger_prayer;    /* wrong/no prayer when hit by ranged/magic (any NPC) */
     int invalid_action_this_tick;
     int movement_this_tick;
     int idle_this_tick;

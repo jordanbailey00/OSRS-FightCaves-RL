@@ -39,6 +39,8 @@ static void clear_per_tick_flags(FcState* state) {
     state->jad_killed = 0;
     state->correct_jad_prayer = 0;
     state->wrong_jad_prayer = 0;
+    state->correct_danger_prayer = 0;
+    state->wrong_danger_prayer = 0;
     state->invalid_action_this_tick = 0;
     state->movement_this_tick = 0;
     state->idle_this_tick = 0;

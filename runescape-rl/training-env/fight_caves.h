@@ -175,12 +175,11 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         float waste_frac = (float)overrestore / (float)pot_restore;
         reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_frac * 9.0f);
     }
-    /* Prayer rewards disabled in v5. Agent should discover prayer's value
-     * organically through the damage_taken penalty — correct prayer = 0
-     * damage = no penalty. Wrong/no prayer = full damage = penalty.
-     * The reward signal is already implicit in w_damage_taken. */
-    /* reward += rwd[FC_RWD_CORRECT_JAD_PRAY] * env->w_correct_jad_prayer; */
-    /* reward += rwd[FC_RWD_WRONG_JAD_PRAY]   * env->w_wrong_jad_prayer;   */
+    /* Prayer correctness — fires per-hit when ranged/magic damage resolves.
+     * Rewards correct prayer, punishes wrong/no prayer vs dangerous styles.
+     * Re-enabled in v7 (was disabled in v5, per-tick bug fixed in v4). */
+    reward += rwd[FC_RWD_CORRECT_DANGER_PRAY] * env->w_correct_danger_prayer;
+    reward += rwd[FC_RWD_WRONG_DANGER_PRAY]   * env->w_wrong_danger_prayer;
     reward += rwd[FC_RWD_INVALID_ACTION]   * env->w_invalid_action;
     reward += rwd[FC_RWD_MOVEMENT]         * env->w_movement;
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
