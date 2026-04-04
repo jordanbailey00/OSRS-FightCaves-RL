@@ -134,7 +134,15 @@ static float fc_puffer_compute_reward(FightCaves* env) {
 
     float reward = 0.0f;
     reward += rwd[FC_RWD_DAMAGE_DEALT]     * env->w_damage_dealt;
-    reward += rwd[FC_RWD_DAMAGE_TAKEN]     * env->w_damage_taken;
+    /* Damage taken penalty scales quadratically — big hits hurt way more.
+     * 1 HP (0.014): -0.75 × 0.014² × 70 = -0.00015 (tiny)
+     * 10 HP (0.143): -0.75 × 0.143² × 70 = -1.07 (moderate)
+     * 20 HP (0.286): -0.75 × 0.286² × 70 = -4.28 (harsh)
+     * 50 HP (0.714): -0.75 × 0.714² × 70 = -26.8 (devastating — pray!) */
+    {
+        float dmg_frac = rwd[FC_RWD_DAMAGE_TAKEN];
+        reward += dmg_frac * dmg_frac * 70.0f * env->w_damage_taken;
+    }
     reward += rwd[FC_RWD_NPC_KILL]         * env->w_npc_kill;
     reward += rwd[FC_RWD_WAVE_CLEAR]       * env->w_wave_clear;
     reward += rwd[FC_RWD_JAD_DAMAGE]       * env->w_jad_damage;
