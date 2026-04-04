@@ -1402,83 +1402,6 @@ GPU transfer, PPO training, and evaluation automatically.
     7. Run: puffer eval fight_caves --load-model-path <checkpoint>
        - Verify eval mode works (even with random/untrained policy)
 
-  F. Policy replay in demo-env viewer:
-
-    Goal: Watch a trained policy play Fight Caves in the full debug viewer
-    (terrain, NPC models, animations, hitsplats, debug overlays — everything
-    we built in Phases 8-9). The viewer is NOT modified significantly — we
-    add a "policy mode" that replaces human input with policy inference.
-
-    Architecture:
-      The demo-env viewer (viewer.c) has its own Raylib main loop. PufferLib
-      eval has its own loop. They can't both own the main loop. Instead of
-      putting rendering inside PufferLib's c_render(), we do the reverse:
-      the viewer runs its own loop and calls the policy for actions.
-
-      Python eval script (eval_viewer.py):
-        1. Loads trained checkpoint (PyTorch policy weights)
-        2. Launches the demo-env viewer as a subprocess
-        3. Each tick: viewer sends current observation to Python via pipe/socket
-        4. Python runs policy forward pass, sends actions back
-        5. Viewer applies actions via fc_step(), renders the frame
-
-      Alternatively (simpler, no IPC):
-        1. Export the PyTorch policy to ONNX or TorchScript
-        2. Load it in C using ONNX Runtime or torch C API
-        3. Viewer runs policy inference directly in C — no Python needed
-        4. Add --policy <checkpoint.bin> flag to viewer
-
-      Alternatively (simplest, minimal viewer changes):
-        1. Add a --policy-pipe flag to the viewer
-        2. Viewer reads actions from stdin each tick (one line of 5 ints)
-        3. Viewer writes observation to stdout each tick (135 floats)
-        4. Python eval script runs viewer as subprocess, pipes actions
-        5. No new dependencies, no model loading in C
-
-    Recommended approach: Option 3 (stdin/stdout pipe). Reasons:
-      - Zero changes to viewer rendering code
-      - Zero new C dependencies (no ONNX, no torch C API)
-      - Python handles all PyTorch/checkpoint loading (already works)
-      - Viewer just needs: if (policy_mode) read_actions_from_stdin()
-        instead of build_human_actions()
-      - Debug overlays, event log, all existing features work unchanged
-      - Can also pipe actions from any other source (scripted bots, etc.)
-
-    Implementation steps:
-      1. Add --policy-pipe flag to viewer.c main():
-         - When set, viewer reads 5 ints from stdin each tick (action heads)
-         - Writes 135 floats to stdout each tick (policy observation)
-         - Replaces build_human_actions() with the piped actions
-         - Viewer still renders every frame at normal TPS
-         - All existing controls still work (camera, debug overlay, pause)
-
-      2. Write eval_viewer.py:
-         - Loads PufferLib checkpoint (.bin file)
-         - Reconstructs policy network (same architecture as training)
-         - Launches viewer subprocess: fc_viewer --policy-pipe
-         - Each tick:
-           a. Read 135 floats from viewer's stdout (observation)
-           b. Run policy forward pass → get 5 action logits
-           c. Sample actions (or argmax for deterministic)
-           d. Apply action mask from observation
-           e. Write 5 ints to viewer's stdin (actions)
-         - Handles viewer exit gracefully
-
-      3. Usage:
-         python eval_viewer.py --checkpoint checkpoints/fight_caves/.../model.bin
-         → Opens the full debug viewer with the trained agent playing
-         → Press O for debug overlays, Space to pause, etc.
-         → All viewer features work exactly as in human play mode
-
-    Files to create:
-      eval_viewer.py              — Python eval script (in runescape-rl/)
-    Files to modify:
-      demo-env/src/viewer.c       — Add --policy-pipe mode (~30 lines)
-    Files NOT modified:
-      All fc_*.c/h backend files  — no changes
-      fight_caves.h               — c_render stays no-op (not used)
-      binding.c                   — no changes
-
   F. Milestone tracking:
 
     PufferLib logs via my_log() hook. We export:
@@ -1514,26 +1437,235 @@ GPU transfer, PPO training, and evaluation automatically.
           fight_caves.ini     — Hyperparameters + reward weights
         demo-env/             — Raylib viewer (unchanged)
 
---- PHASE 11: NPC MODELS (Visual Polish) ---
+--- PHASE 11: POLICY REPLAY IN DEBUG VIEWER ---
 
-Goal: Replace colored placeholder cubes with actual NPC meshes from b237 cache.
+Goal: Watch a trained policy play Fight Caves in the full debug viewer with
+all overlays, NPC models, animations, hitsplats — everything we built in
+Phases 8-9. No backend changes. No fc_*.c modifications.
 
-  1. Look up b237 NPC definition IDs for each FC NPC type
-     (These will differ from Void 634 IDs — use cache reader to find by name)
-  2. Export NPC models via export_models.py with recoloring
-  3. Load as MDL2 binary meshes in viewer
-  4. Render at entity positions with correct size/rotation
-  5. Stretch goal: idle/attack/death animation playback
+  STATUS: Audit complete. Implementation plan below.
 
---- PHASE 12: FLOOR TEXTURE (Visual Polish) ---
+  AUDIT FINDINGS — PufferLib 4.0 eval system:
 
-Goal: Replace black floor with lava crack texture.
+    PufferLib has a built-in eval() function (pufferl.py:401-428):
+      while True:
+          backend.render(pufferl, 0)   # calls c_render(&envs[0])
+          backend.rollouts(pufferl)    # one policy step + env step
 
-  Options:
-    1. Extract from older OSRS revision where lava texture is static
-    2. Generate procedurally in shader
-    3. Hand-crafted lava texture asset
-    4. Accept current vertex-color height shading
+    - Eval sets horizon=1 (single-step inference) and reset_state=False
+      (preserves MinGRU hidden state across episodes).
+    - c_render() is called BEFORE each rollout step. It gets full access
+      to the env struct (FightCaves*, which contains FcState).
+    - Checkpoints are raw .bin files (float32 weight arrays). Loaded via
+      backend.load_weights(pufferl, path). Network architecture reconstructed
+      from config (hidden_size=256, num_layers=2, MinGRU encoder/decoder).
+    - Ocean envs (whisker_racer, snake) render Raylib INLINE in c_render().
+      They initialize the window on first call, draw one frame per call.
+    - Eval runs ALL vectorized envs (4096 by default). Only env 0 renders.
+
+  AUDIT FINDINGS — viewer.c action input path:
+
+    - Actions flow through int actions[FC_NUM_ACTION_HEADS] in ViewerState.
+    - Three existing non-human action sources:
+      1. build_human_actions() (line 582): fills from buffered keyboard/mouse
+      2. auto_mode (line 1742): random actions per head
+      3. test_mode (line 603): hardcoded AGENT_TESTS[] sequences
+    - Action selection at line 1738-1748 (once per tick):
+        if (test_mode) build_test_actions()
+        else if (auto_mode) random_actions()
+        else build_human_actions()
+    - fc_step(&v.state, v.actions) at line 1766.
+    - NO fc_write_obs() call exists in viewer.c — obs not computed.
+    - --screenshot flag (line 1493) is the argv parsing pattern to follow.
+
+  APPROACH ANALYSIS:
+
+    Option A — PufferLib native c_render() (PufferLib-driven):
+      Implement c_render() in fight_caves.h with full Raylib rendering.
+      Run via: puffer eval fight_caves --load-model-path checkpoint.bin
+      Pro: PufferLib handles all ML (checkpoint loading, inference, action
+           sampling, action masking). Zero custom Python code.
+      Con: Our viewer is 2100 LOC with complex state (camera orbit, smooth
+           interpolation, hitsplats, animations, tab UI, debug overlays).
+           Extracting this into a callable c_render() function is a major
+           refactor. Would also need Raylib linked into the training build.
+           Not how the project is currently structured (training = headless,
+           demo = visual).
+
+    Option B — Viewer-driven with stdin/stdout pipe:
+      Add --policy-pipe mode to viewer.c. Viewer reads actions from stdin,
+      writes observations to stdout. Python eval script loads checkpoint,
+      runs inference, pipes actions.
+      Pro: Viewer changes are ~40 lines. All existing features work unchanged
+           (camera, overlays, animations, hitsplats, pause/step, UI).
+           No training-env changes. Clean separation maintained.
+      Con: Need Python eval script that loads PufferLib checkpoint and runs
+           policy inference outside PufferLib's eval loop.
+
+  RECOMMENDATION: Option B (viewer-driven pipe).
+
+    Reason: Our viewer is a standalone application with its own main loop,
+    camera system, animation state, and 45 MB of assets. Refactoring it
+    into a callable c_render() subroutine would be a multi-day effort and
+    would couple the training build to Raylib. The pipe approach adds ~40
+    lines to viewer.c and keeps the existing architecture intact.
+
+    For checkpoint inference in the Python script, use PufferLib's own
+    Python API: create a minimal pufferl instance with total_agents=1,
+    load the checkpoint, and use its inference path. This avoids manually
+    reconstructing the MinGRU network architecture.
+
+  IMPLEMENTATION:
+
+    Step 1 — viewer.c changes (~40 lines):
+
+      A. Add --policy-pipe flag parsing (after --screenshot pattern):
+         int policy_pipe = 0;
+         for (int i = 1; i < argc; i++) {
+             if (strcmp(argv[i], "--policy-pipe") == 0) policy_pipe = 1;
+         }
+
+      B. Add read_policy_actions() function:
+         Reads one line from stdin: "a0 a1 a2 a3 a4\n" (5 space-separated ints)
+         Fills v->actions[0..4], sets actions[5]=actions[6]=0.
+         Returns 1 on success, 0 on EOF/error.
+         Uses text format for debuggability (tick rate is 2 TPS — no perf concern).
+         stdin must be set to line-buffered or unbuffered.
+
+      C. Add write_obs_to_pipe() function:
+         After fc_step(), computes obs + mask via:
+           float obs[FC_POLICY_OBS_SIZE];  // 135 floats
+           float mask[36];                 // 5-head mask
+           fc_write_obs(&v.state, obs_buf);   // fills 151 floats (135 policy + 16 reward)
+           fc_write_mask(&v.state, mask_buf); // fills 166 floats (full 7-head)
+         Writes to stdout: 171 floats as space-separated text + newline.
+           First 135 = policy obs, next 36 = 5-head action mask.
+         Calls fflush(stdout) after each line.
+
+      D. Integrate into tick loop at line 1738-1748:
+         if (test_mode) build_test_actions()
+         else if (policy_pipe) read_policy_actions()   // NEW
+         else if (auto_mode) random_actions()
+         else build_human_actions()
+
+         After fc_step() (line 1766):
+         if (policy_pipe) write_obs_to_pipe()           // NEW
+
+      E. When policy_pipe is active:
+         - Skip process_human_clicks() and process_human_keys() for gameplay
+           (camera and debug overlay keys still work)
+         - On terminal state, write obs (so Python sees terminal) and wait
+           for Python to send a "reset" signal or just pipe actions for the
+           new episode after fc_reset()
+         - Initial obs written once at startup (before first action read)
+
+      F. Disable printf/fprintf that would pollute stdout.
+         Any existing debug prints to stdout must go to stderr instead
+         when policy_pipe is active.
+
+    Step 2 — eval_viewer.py (~100-120 lines):
+
+      A. Checkpoint loading via PufferLib:
+         Use PufferLib's Python API to reconstruct the policy network and
+         load checkpoint weights. This avoids manually reimplementing the
+         MinGRU architecture.
+
+         Approach: import pufferlib, create a minimal eval instance with
+         total_agents=1, load weights. Extract the policy forward pass
+         function for standalone use.
+
+         Fallback: If PufferLib's API doesn't support standalone inference
+         easily, reconstruct the network in PyTorch:
+           - Encoder: Linear(171 → 256) + ReLU
+           - MinGRU: 2 layers, hidden_size=256
+           - Actor heads: 5 × Linear(256 → dim)
+           - Load raw .bin weights in order
+         This requires matching PufferLib's exact weight layout.
+
+      B. Subprocess management:
+         Launch: subprocess.Popen(
+           ['./build/demo-env/fc_viewer', '--policy-pipe'],
+           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None
+         )
+         stderr=None lets viewer debug output pass through to terminal.
+
+      C. Main loop:
+         1. Read initial obs from viewer stdout (171 floats, text line)
+         2. Parse obs into policy_obs[135] and action_mask[36]
+         3. Run policy forward pass → get logits for 5 heads
+         4. Apply action mask: set logits to -inf where mask == 0
+         5. Sample actions (argmax for deterministic, or categorical)
+         6. Write actions to viewer stdin: "a0 a1 a2 a3 a4\n"
+         7. Read next obs from viewer stdout
+         8. Repeat until viewer exits or user interrupts
+
+      D. MinGRU hidden state:
+         The policy has recurrent state (MinGRU). Must maintain hidden state
+         across ticks. Reset hidden state on episode boundaries (when terminal
+         is detected in obs, or when wave resets to 1).
+
+      E. Usage:
+         python eval_viewer.py --checkpoint checkpoints/fight_caves/.../model.bin
+         Optional: --deterministic (argmax instead of sampling)
+         Optional: --start-wave N (curriculum start wave)
+
+    Step 3 — Testing:
+
+      A. Verify pipe protocol:
+         Run viewer with --policy-pipe, manually type "0 0 0 0 0\n" on stdin.
+         Confirm obs appears on stdout. Confirm viewer renders idle agent.
+
+      B. Verify with random policy:
+         Write a trivial Python script that reads obs, sends random valid
+         actions (respecting mask). Confirm viewer plays normally.
+
+      C. Verify with trained checkpoint:
+         Load v6.1 checkpoint, observe agent behavior at wave 30.
+         This is the whole point — see what the agent is actually doing.
+
+  FILES TO CREATE:
+    eval_viewer.py                    — Python eval script (in runescape-rl/)
+
+  FILES TO MODIFY:
+    demo-env/src/viewer.c             — Add --policy-pipe mode (~40 lines)
+
+  FILES NOT MODIFIED:
+    All fc_*.c/h backend files        — no changes
+    training-env/fight_caves.h        — no changes
+    training-env/binding.c            — no changes
+
+  PROTOCOL SUMMARY:
+
+    Viewer → Python (stdout): 171 space-separated floats per line
+      [0..134]   policy observation (135 floats, normalized 0-1)
+      [135..170] action mask for 5 heads (36 floats, 0.0 or 1.0)
+      Emitted: once at startup, then once after each fc_step()
+
+    Python → Viewer (stdin): 5 space-separated ints per line
+      [0] MOVE (0-16)
+      [1] ATTACK (0-8)
+      [2] PRAYER (0-4)
+      [3] EAT (0-2)
+      [4] DRINK (0-1)
+      Consumed: once per game tick
+
+    Text format chosen for debuggability. At 2 TPS, bandwidth is ~1 KB/sec.
+    Each line is newline-terminated. fflush() after each write.
+
+--- FUTURE WORK: VISUAL POLISH ---
+
+  NPC MODELS:
+    Replace colored placeholder cubes with actual NPC meshes from b237 cache.
+    1. Look up b237 NPC definition IDs for each FC NPC type
+    2. Export NPC models via export_models.py with recoloring
+    3. Load as MDL2 binary meshes in viewer
+    4. Render at entity positions with correct size/rotation
+    5. Stretch goal: idle/attack/death animation playback
+
+  FLOOR TEXTURE:
+    Replace black floor with lava crack texture.
+    Options: extract from older OSRS revision, procedural shader,
+    hand-crafted asset, or accept current vertex-color height shading.
 
 ================================================================================
 WHAT NOT TO BUILD
