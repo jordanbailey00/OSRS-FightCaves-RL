@@ -85,6 +85,8 @@ typedef struct FightCaves {
     float w_prayer_pot_used;
     float w_correct_jad_prayer;
     float w_wrong_jad_prayer;
+    float w_correct_danger_prayer;   /* correct prayer vs non-Jad NPCs */
+    float w_wrong_danger_prayer;     /* wrong/no prayer vs dangerous NPCs */
     float w_invalid_action;
     float w_movement;
     float w_idle;
@@ -161,6 +163,38 @@ static float fc_puffer_compute_reward(FightCaves* env) {
     reward += rwd[FC_RWD_MOVEMENT]         * env->w_movement;
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
     reward += rwd[FC_RWD_TICK_PENALTY]     * env->w_tick_penalty;
+
+    /* General prayer protection reward (non-Jad NPCs).
+     * Check each active NPC that is attacking the player — if it uses
+     * ranged or magic, reward correct prayer / penalize wrong prayer.
+     * This teaches prayer switching from wave 1 onwards, not just at Jad. */
+    {
+        const FcPlayer* p = &env->state.player;
+        for (int i = 0; i < FC_MAX_NPCS; i++) {
+            const FcNpc* n = &env->state.npcs[i];
+            if (!n->active || n->is_dead) continue;
+            if (n->npc_type == NPC_TZTOK_JAD) continue;  /* Jad has its own reward */
+
+            /* Only care about NPCs that attacked this tick (attack_timer just reset) */
+            if (n->attack_timer != n->attack_speed) continue;
+
+            /* Check if NPC uses a prayer-blockable style */
+            int npc_style = n->attack_style;
+            if (npc_style == ATTACK_MELEE) continue;  /* melee is avoidable by positioning */
+
+            /* What prayer should be active? */
+            int correct_prayer = (npc_style == ATTACK_MAGIC) ? PRAYER_PROTECT_MAGIC :
+                                 (npc_style == ATTACK_RANGED) ? PRAYER_PROTECT_RANGE : 0;
+
+            if (correct_prayer > 0) {
+                if (p->prayer == correct_prayer) {
+                    reward += env->w_correct_danger_prayer;
+                } else {
+                    reward += env->w_wrong_danger_prayer;
+                }
+            }
+        }
+    }
 
     return reward;
 }
