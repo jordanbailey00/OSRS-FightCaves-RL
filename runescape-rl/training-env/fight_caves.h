@@ -157,62 +157,16 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         float waste_frac = (float)overrestore / (float)pot_restore;
         reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_frac * 9.0f);
     }
-    reward += rwd[FC_RWD_CORRECT_JAD_PRAY] * env->w_correct_jad_prayer;
-    reward += rwd[FC_RWD_WRONG_JAD_PRAY]   * env->w_wrong_jad_prayer;
+    /* Prayer rewards disabled in v5. Agent should discover prayer's value
+     * organically through the damage_taken penalty — correct prayer = 0
+     * damage = no penalty. Wrong/no prayer = full damage = penalty.
+     * The reward signal is already implicit in w_damage_taken. */
+    /* reward += rwd[FC_RWD_CORRECT_JAD_PRAY] * env->w_correct_jad_prayer; */
+    /* reward += rwd[FC_RWD_WRONG_JAD_PRAY]   * env->w_wrong_jad_prayer;   */
     reward += rwd[FC_RWD_INVALID_ACTION]   * env->w_invalid_action;
     reward += rwd[FC_RWD_MOVEMENT]         * env->w_movement;
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
     reward += rwd[FC_RWD_TICK_PENALTY]     * env->w_tick_penalty;
-
-    /* General prayer protection reward (non-Jad NPCs).
-     * Only fires when player actually TAKES DAMAGE this tick — not every
-     * tick an NPC exists. If damage was taken and the correct prayer was
-     * active, the prayer blocked it (damage would have been higher without).
-     * If wrong prayer was active and damage was taken, penalize.
-     * This avoids reward inflation from prayer-on-idle. */
-    if (env->state.player.damage_taken_this_tick > 0) {
-        /* Find the highest-threat NPC that dealt damage this tick */
-        const FcPlayer* p = &env->state.player;
-        int dominated_style = ATTACK_NONE;
-        for (int i = 0; i < FC_MAX_NPCS; i++) {
-            const FcNpc* n = &env->state.npcs[i];
-            if (!n->active || n->is_dead) continue;
-            if (n->npc_type == NPC_TZTOK_JAD) continue;
-            /* NPC likely attacked if its attack_timer just reset */
-            if (n->attack_timer == n->attack_speed - 1) {
-                if (n->attack_style == ATTACK_MAGIC) dominated_style = ATTACK_MAGIC;
-                else if (n->attack_style == ATTACK_RANGED && dominated_style != ATTACK_MAGIC)
-                    dominated_style = ATTACK_RANGED;
-            }
-        }
-        if (dominated_style == ATTACK_MAGIC) {
-            if (p->prayer == PRAYER_PROTECT_MAGIC) reward += env->w_correct_danger_prayer;
-            else reward += env->w_wrong_danger_prayer;
-        } else if (dominated_style == ATTACK_RANGED) {
-            if (p->prayer == PRAYER_PROTECT_RANGE) reward += env->w_correct_danger_prayer;
-            else reward += env->w_wrong_danger_prayer;
-        }
-    }
-    /* Also reward correct prayer when damage is BLOCKED (took 0 damage
-     * but NPC attacked — prayer saved us). Check pending hits resolved. */
-    else if (env->state.player.damage_taken_this_tick == 0) {
-        const FcPlayer* p = &env->state.player;
-        for (int i = 0; i < FC_MAX_NPCS; i++) {
-            const FcNpc* n = &env->state.npcs[i];
-            if (!n->active || n->is_dead) continue;
-            if (n->npc_type == NPC_TZTOK_JAD) continue;
-            if (n->attack_timer == n->attack_speed - 1) {
-                int npc_style = n->attack_style;
-                if (npc_style == ATTACK_MAGIC && p->prayer == PRAYER_PROTECT_MAGIC) {
-                    reward += env->w_correct_danger_prayer;
-                    break;  /* one reward per tick max */
-                } else if (npc_style == ATTACK_RANGED && p->prayer == PRAYER_PROTECT_RANGE) {
-                    reward += env->w_correct_danger_prayer;
-                    break;
-                }
-            }
-        }
-    }
 
     return reward;
 }

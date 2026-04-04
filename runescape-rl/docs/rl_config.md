@@ -5,7 +5,68 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v4 (2026-04-03)
+## CURRENT: v5 (2026-04-03)
+
+Changes from v4:
+- Removed ALL explicit prayer rewards and penalties (Jad and non-Jad).
+  All prayer weights set to 0. Prayer reward logic commented out.
+- Reasoning: the agent should discover prayer's value organically.
+  Correct prayer → blocks 100% damage → w_damage_taken never fires.
+  Wrong/no prayer → full damage → w_damage_taken penalty (-0.75).
+  The damage signal already encodes whether prayer was correct.
+  Explicit prayer rewards caused reward inflation (v3) and added
+  complexity without improving wave reached (v4 untested due to v3 crash).
+- Cleaner reward function: only 11 active weights, no prayer-specific
+  code running per tick. Should restore v1/v2 SPS levels (~2.2M).
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.75
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.01
+w_prayer_pot_used = -0.01
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 5_000_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+---
+
+## v4 (2026-04-03) — not trained, superseded by v5
 
 Changes from v3:
 - CRITICAL FIX: Prayer reward was firing every tick an NPC existed, not
