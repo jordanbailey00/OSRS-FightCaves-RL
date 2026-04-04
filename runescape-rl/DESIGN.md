@@ -804,6 +804,26 @@ DEATH PENALTY TOO HIGH (-20):
   dominates, even if it means never clearing waves. Need to reduce death
   penalty or add wave stall penalty.
 
+STATIC ARRAYS IN MULTITHREADED CODE:
+  bfs_walk() in fc_pathfinding.c used static arrays for BFS scratch space
+  (visited, queue, parent directions). PufferLib runs c_step() for 4096
+  envs in parallel via OpenMP. All threads wrote to the same arrays —
+  data race causing segfault. The bug was latent for months because the
+  collision file was never loaded (see below), so BFS was never called.
+  Once real collision was added, BFS ran constantly and threads clobbered
+  each other. Fix: make arrays local (stack). Rule: NEVER use static
+  mutable state in any function called from c_step/c_reset.
+
+COLLISION FILE SEARCH PATH:
+  fc_state.c searched for fightcaves.collision at relative paths like
+  "assets/fightcaves.collision" and "../demo-env/assets/...". PufferLib
+  runs from its own directory (pufferlib_4/), where none of these paths
+  exist. setup_arena() silently fell back to an open arena — all tiles
+  walkable, no walls. v1-v6.1 all trained on a flat open arena. The agent
+  walked through visual terrain because walls literally didn't exist in
+  the training simulation. Fix: copy the file to pufferlib_4/assets/ and
+  cache the data globally to avoid per-reset file I/O.
+
 --------------------------------------------------------------------------------
 2.4 References Used
 --------------------------------------------------------------------------------
@@ -910,6 +930,18 @@ CURRENT BLOCKER: reward structure incentivizes survival over progression.
   16. Prayer reward per-tick-per-NPC bug crashed training (v3). Must be per-hit.
   17. anneal_lr=1 (PufferLib default) decays LR toward 0. May stall late
       training. Consider anneal_lr=0 if agent stops improving.
+  18. BFS pathfinding used static arrays (vis, qx, qy, pdx, pdy) shared
+      across OpenMP threads. With open arena BFS rarely triggered so the
+      data race was latent. Loading real collision caused constant BFS
+      calls → segfault from concurrent writes. Fix: local stack arrays.
+  19. Collision file not found during training. PufferLib runs from
+      pufferlib_4/ directory, not the project root. Asset search paths
+      in fc_state.c didn't include pufferlib_4/assets/. setup_arena()
+      silently fell back to open arena. ALL v1-v6.1 trained without walls.
+      Fix: copy collision file to pufferlib_4/assets/, cache in global.
+  20. PufferLib config lives at pufferlib_4/config/fight_caves.ini, NOT
+      our repo's config/fight_caves.ini. Edits to the repo copy have no
+      effect unless synced to the PufferLib directory.
 
 ================================================================================
 PART 3: REPRODUCTION GUIDE

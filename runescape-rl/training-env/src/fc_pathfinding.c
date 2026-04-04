@@ -198,11 +198,11 @@ static int greedy_walk(int sx, int sy, int dx, int dy,
 static int bfs_walk(int sx, int sy, int dx, int dy,
                     const uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT],
                     int out_x[], int out_y[], int max_steps) {
-    static int8_t pdx[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
-    static int8_t pdy[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
-    static uint8_t vis[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
-    static int qx[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
-    static int qy[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
+    int8_t pdx[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
+    int8_t pdy[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
+    uint8_t vis[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
+    int qx[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
+    int qy[FC_ARENA_WIDTH * FC_ARENA_HEIGHT];
     int qh = 0, qt = 0;
     static const int DD[8][2] = {{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0},{-1,1}};
 

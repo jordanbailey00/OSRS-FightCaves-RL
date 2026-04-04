@@ -26,15 +26,20 @@
  * Loaded from assets/fightcaves.collision at runtime.
  * If the file is missing, falls back to an open arena with border walls.
  */
-static void setup_arena(FcState* state) {
-    /* Try to load collision from binary file (search multiple paths) */
+/* Cached collision data — loaded once, shared by all envs.
+ * Avoids per-reset file I/O which is not thread-safe under OpenMP. */
+static uint8_t g_collision_cache[FC_ARENA_WIDTH][FC_ARENA_HEIGHT];
+static int g_collision_loaded = 0;
+
+static void load_collision_once(void) {
+    if (g_collision_loaded) return;
+
     static const char* collision_paths[] = {
         "assets/fightcaves.collision",
         "../demo-env/assets/fightcaves.collision",
         "../training-env/assets/fightcaves.collision",
         NULL
     };
-    /* Also check FC_COLLISION_PATH env var for custom location */
     FILE* f = NULL;
     const char* env_path = getenv("FC_COLLISION_PATH");
     if (env_path) f = fopen(env_path, "rb");
@@ -49,23 +54,30 @@ static void setup_arena(FcState* state) {
             /* Binary is row-major [y][x], our array is [x][y] — transpose */
             for (int y = 0; y < FC_ARENA_HEIGHT; y++) {
                 for (int x = 0; x < FC_ARENA_WIDTH; x++) {
-                    state->walkable[x][y] = buf[y * FC_ARENA_WIDTH + x];
+                    g_collision_cache[x][y] = buf[y * FC_ARENA_WIDTH + x];
                 }
             }
+            g_collision_loaded = 1;
             return;
         }
     }
 
     /* Fallback: open arena with border walls */
-    memset(state->walkable, 1, sizeof(state->walkable));
+    memset(g_collision_cache, 1, sizeof(g_collision_cache));
     for (int x = 0; x < FC_ARENA_WIDTH; x++) {
-        state->walkable[x][0] = 0;
-        state->walkable[x][FC_ARENA_HEIGHT - 1] = 0;
+        g_collision_cache[x][0] = 0;
+        g_collision_cache[x][FC_ARENA_HEIGHT - 1] = 0;
     }
     for (int y = 0; y < FC_ARENA_HEIGHT; y++) {
-        state->walkable[0][y] = 0;
-        state->walkable[FC_ARENA_WIDTH - 1][y] = 0;
+        g_collision_cache[0][y] = 0;
+        g_collision_cache[FC_ARENA_WIDTH - 1][y] = 0;
     }
+    g_collision_loaded = 1;
+}
+
+static void setup_arena(FcState* state) {
+    load_collision_once();
+    memcpy(state->walkable, g_collision_cache, sizeof(state->walkable));
 }
 
 /* ======================================================================== */

@@ -1493,21 +1493,29 @@ GPU transfer, PPO training, and evaluation automatically.
     4. Eats sharks on 1 HP damage
     5. Constantly running around (acceptable, skip for now)
 
-  FIX 1 — COLLISION MAP (game logic bug):
+  FIX 1 — COLLISION MAP NOT LOADED + BFS THREAD SAFETY (COMPLETE):
 
-    The fightcaves.collision binary has tiles marked walkable that are inside
-    cave wall geometry. The agent walks into walls because the map says it can.
+    Two bugs found:
 
-    Action:
-      - Re-export fightcaves.collision from b237 cache with correct walkability
-      - Cross-reference against the terrain/objects mesh to verify wall tiles
-        are marked blocked
-      - OR: manually audit the 64x64 collision map using the debug viewer's
-        collision overlay (C key) and fix mismarked tiles
-      - Both demo-env/assets/ and training-env/assets/ collision files must
-        be updated
+    A. Collision file not found during training. PufferLib runs from
+       pufferlib_4/ where none of the search paths in fc_state.c resolved.
+       setup_arena() fell back to open arena (all tiles walkable). ALL
+       v1-v6.1 runs trained without cave walls.
+       Fix: copied fightcaves.collision to pufferlib_4/assets/.
+       Also cached collision data in static global to avoid per-reset I/O.
 
-    Files: fightcaves.collision (both copies)
+    B. BFS pathfinding used static arrays shared across OpenMP threads.
+       bfs_walk() had 5 static arrays (vis, qx, qy, pdx, pdy) that all
+       4096 parallel envs wrote to simultaneously — data race causing
+       segfault. With the open arena this never triggered (BFS rarely
+       called without obstacles). With real collision loaded, BFS runs
+       constantly for NPC pathfinding, triggering the race.
+       Fix: changed static → local (stack) arrays. ~40KB per call on stack.
+       No functional change, just thread-safe now.
+
+    Files changed:
+      fc_pathfinding.c — static → local arrays in bfs_walk()
+      fc_state.c — cached collision loading in global, memcpy per reset
 
   FIX 2 — CONSUMABLE WASTE PENALTY (reward shaping):
 
@@ -1543,10 +1551,16 @@ GPU transfer, PPO training, and evaluation automatically.
     The hit_style observation (slot 19) tells the agent WHAT hit it, but
     without a reward signal, it can't learn to react.
 
-    Fix: Re-enable prayer correctness rewards (per-hit, not per-tick):
-      - w_correct_danger_prayer = 1.0 (reward for correct prayer when hit)
+    Fix: Added prayer correctness tracking and rewards (per-hit):
+      - w_correct_danger_prayer = 2.0 (reward for correct prayer when hit)
       - w_wrong_danger_prayer = -2.0 (punish wrong/no prayer when hit by
-        ranged or magic — melee is less critical since agent can kite)
+        ranged or magic — symmetrical signal)
+      - New FcState fields: correct_danger_prayer, wrong_danger_prayer
+      - New reward features: FC_RWD_CORRECT_DANGER_PRAY (16),
+        FC_RWD_WRONG_DANGER_PRAY (17). FC_REWARD_FEATURES: 16 → 18
+      - Prayer correctness also computed inline in fc_puffer_compute_reward
+        from hit_style_this_tick + player.prayer (redundant with features,
+        ensures signal fires)
 
     The per-hit firing was fixed in v4 (the v3 per-tick-per-NPC bug is gone).
     The reward fires when a pending hit resolves and the player's active
@@ -1563,31 +1577,22 @@ GPU transfer, PPO training, and evaluation automatically.
     Files: config/fight_caves.ini (reward weights)
            fight_caves.h (uncomment prayer reward lines in fc_puffer_compute_reward)
 
-  FIX 4 — REDUCE QUADRATIC DAMAGE SCALING:
+  FIX 4 — DAMAGE SCALING (KEPT):
 
-    Problem: w_damage_taken = -0.75 with quadratic scaling makes even 1 HP
-    damage punishing enough to trigger over-consuming. The agent is terrified
-    of any damage.
+    w_damage_taken kept at -0.75. Damage taken is NOT the same as health
+    missing. The quadratic penalty must remain strong to teach the agent
+    that taking big hits from Ket-Zek/Jad is catastrophic. The consumable
+    waste penalties (Fix 2) and food timing reward address the over-eating.
 
-    Fix: Reduce to w_damage_taken = -0.3. This keeps the quadratic shape
-    (big hits still punished much more than small ones) but reduces the
-    absolute magnitude so small melee pokes don't trigger panic eating.
+  FIX 5 — FOOD TIMING REWARD (NEW):
 
-    Damage penalty at -0.3:
-      1 HP:  -0.3 × 0.014² × 70 = -0.00006 (ignorable)
-      10 HP: -0.3 × 0.143² × 70 = -0.43 (noticeable)
-      20 HP: -0.3 × 0.286² × 70 = -1.72 (should pray)
-      50 HP: -0.3 × 0.714² × 70 = -10.7 (catastrophic)
+    w_food_used_well = 1.0 (hardcoded in fight_caves.h). Positive reward
+    when eating with 20+ HP (200 tenths) missing. Net reward for well-timed
+    eat = +1.0 - 0.5 = +0.5. Agent learns to eat when actually hurt.
 
-    Files: config/fight_caves.ini
+    Files: fight_caves.h (reward computation)
 
-  IMPLEMENTATION ORDER:
-    1. Fix collision map (Fix 1) — game logic bug, must fix first
-    2. Add consumable masks (Fix 2) — fc_state.c mask change
-    3. Uncomment prayer rewards (Fix 3) — fight_caves.h + config
-    4. Reduce damage scaling (Fix 4) — config only
-    5. Train v7 with all fixes
-    6. Observe with policy replay, iterate
+  ALL FIXES IMPLEMENTED AND TRAINING (v7).
 
 --- FUTURE WORK: VISUAL POLISH ---
 

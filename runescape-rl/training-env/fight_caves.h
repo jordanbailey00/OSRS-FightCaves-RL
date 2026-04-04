@@ -88,7 +88,7 @@ typedef struct FightCaves {
     float w_player_death;
     float w_cave_complete;
     float w_food_used;
-    float w_food_used_well;       /* positive reward for eating with 20+ HP missing */
+    float w_food_used_well;
     float w_prayer_pot_used;
     float w_correct_jad_prayer;
     float w_wrong_jad_prayer;
@@ -171,7 +171,7 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_frac * 9.0f);
         /* Reward eating at the right time (20+ HP = 200+ tenths missing) */
         if (hp_missing >= 200) {
-            reward += env->w_food_used_well;
+            reward += 1.0f;  /* w_food_used_well hardcoded to avoid struct size change */
         }
     }
     if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
@@ -181,11 +181,21 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         float waste_frac = (float)overrestore / (float)pot_restore;
         reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_frac * 9.0f);
     }
-    /* Prayer correctness — fires per-hit when ranged/magic damage resolves.
-     * Rewards correct prayer, punishes wrong/no prayer vs dangerous styles.
-     * Re-enabled in v7 (was disabled in v5, per-tick bug fixed in v4). */
-    reward += rwd[FC_RWD_CORRECT_DANGER_PRAY] * env->w_correct_danger_prayer;
-    reward += rwd[FC_RWD_WRONG_DANGER_PRAY]   * env->w_wrong_danger_prayer;
+    /* Prayer correctness — computed from existing per-tick state.
+     * If player was hit by ranged/magic this tick, check if prayer matched.
+     * hit_style_this_tick: 0=none, ATTACK_RANGED=2, ATTACK_MAGIC=3.
+     * player.prayer: PRAYER_PROTECT_RANGE=2, PRAYER_PROTECT_MAGIC=3. */
+    {
+        int style = env->state.player.hit_style_this_tick;
+        int prayer = env->state.player.prayer;
+        if (style == ATTACK_RANGED || style == ATTACK_MAGIC) {
+            int correct = fc_prayer_blocks_style(prayer, style);
+            if (correct)
+                reward += env->w_correct_danger_prayer;
+            else
+                reward += env->w_wrong_danger_prayer;
+        }
+    }
     reward += rwd[FC_RWD_INVALID_ACTION]   * env->w_invalid_action;
     reward += rwd[FC_RWD_MOVEMENT]         * env->w_movement;
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
