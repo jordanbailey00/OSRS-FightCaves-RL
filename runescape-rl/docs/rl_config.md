@@ -13,9 +13,16 @@ Changes from v1:
 - ent_coef: 0.01 → 0.05 (entropy dropped from 8.3→5.8 in v1, keep exploration alive)
 - w_correct_jad_prayer: 5.0 → 10.0 (stronger signal for correct prayer switching)
 - w_wrong_jad_prayer: -10.0 → -20.0 (harsher penalty for wrong prayer)
-- Food/pot waste penalty: now scales with HP/prayer %. Eating at high HP
-  gets 4x normal penalty. Eating at <50% HP gets zero penalty. Prevents
-  agent from wasting sharks on 1-2 HP of damage. Same for prayer pots.
+- Food/pot waste penalty: scales by actual overheal, not HP percentage.
+  Shark heals 20 HP — penalty = base × (wasted HP / 20 heal).
+  Prayer pot restores 17 pts — penalty = base × (wasted pts / 17 restore).
+  Examples:
+    Eat at 50/70 HP: heals full 20, 0 waste → base penalty (-0.05)
+    Eat at 60/70 HP: heals 10, wastes 10 → -0.05 × 5.5 = -0.275
+    Eat at 68/70 HP: heals 2, wastes 18 → -0.05 × 9.1 = -0.455
+    Drink at 30/43 pray: restores 13, 0 waste → base penalty (-0.05)
+    Drink at 40/43 pray: restores 3, wastes 14 → heavy penalty
+  Prevents agent from wasting resources on minor damage/drain.
 
 ```ini
 [base]
