@@ -33,6 +33,7 @@ static void setup_arena(FcState* state) {
         "../training-env/assets/fightcaves.collision",
         NULL
     };
+    /* Also check FC_COLLISION_PATH env var for custom location */
     FILE* f = NULL;
     const char* env_path = getenv("FC_COLLISION_PATH");
     if (env_path) f = fopen(env_path, "rb");
@@ -235,7 +236,7 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_DEF_LVL]   = (float)p->defence_level / 99.0f;
     player[FC_OBS_PLAYER_RNG_LVL]   = (float)p->ranged_level / 99.0f;
     player[FC_OBS_PLAYER_DMG_TICK]  = (p->max_hp > 0) ? (float)p->damage_taken_this_tick / (float)p->max_hp : 0.0f;
-    player[FC_OBS_PLAYER_STUNNED]   = 0.0f;  /* reserved */
+    player[FC_OBS_PLAYER_STUNNED]   = (float)p->hit_style_this_tick / 3.0f;  /* 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
 
     /* NPC slot selection: gather active NPCs, sort, take first 8 */
     int active_indices[FC_MAX_NPCS];

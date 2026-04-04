@@ -225,6 +225,7 @@ void fc_resolve_player_pending_hits(FcState* state) {
             if (p->current_hp < 0) p->current_hp = 0;
 
             p->damage_taken_this_tick += final_damage;
+            p->hit_style_this_tick = h->attack_style;
             state->damage_taken_this_tick += final_damage;
             p->total_damage_taken += final_damage;
             p->hit_landed_this_tick = 1;

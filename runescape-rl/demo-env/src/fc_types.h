@@ -229,6 +229,7 @@ typedef struct {
 
     /* Per-tick event flags (cleared each tick, used for obs/reward/hitsplats) */
     int damage_taken_this_tick;
+    int hit_style_this_tick;    /* FcAttackStyle of the last hit that resolved this tick */
     int hit_landed_this_tick;
     int food_eaten_this_tick;
     int potion_used_this_tick;

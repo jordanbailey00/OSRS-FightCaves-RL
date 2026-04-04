@@ -5,7 +5,84 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v5 (2026-04-03)
+## CURRENT: v6 (2026-04-04)
+
+Changes from v5:
+- Added hit_style_this_tick to player observation (slot 19, was reserved).
+  Agent now sees WHAT attack style hit it each tick (0=none, 0.33=melee,
+  0.67=ranged, 1.0=magic). Previously it only knew damage amount, not type.
+  This lets it correlate: "I got hit by magic → I should pray magic."
+- All prayer rewards remain at 0 (organic learning via damage_taken).
+- No config changes — only observation improvement.
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.75
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.01
+w_prayer_pot_used = -0.01
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 5_000_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+---
+
+## v5 (2026-04-03)
+
+Results (5B steps, ~37min):
+- SPS: 2.3M (restored from v3's 1.5M)
+- Wave reached: 30.0 avg (up from v2's 28.2)
+- Episode length: 5056 ticks (up from v2's 3101 — surviving 63% longer)
+- Episode return: 636.5
+- Score: 0 (no cave completions)
+- Episodes completed: 10,006
+- Entropy: 6.57
+- Clipfrac: 0.000005 (basically zero — still barely updating)
+- Value loss: 0.014 (very stable)
+- Policy loss: 0.002
+- KL: 0.0001
+
+Diagnosis: Removing explicit prayer rewards improved wave 28→30.
+Agent learned to use prayer organically through damage_taken signal.
+Episode length nearly doubled — agent surviving much longer. But still
+stuck at wave 30. Clipfrac ~0 means policy converged to local optimum.
+Agent doesn't know WHAT style hit it (only that damage occurred), making
+prayer switching harder to learn. Added hit_style observation in v6.
 
 Changes from v4:
 - Removed ALL explicit prayer rewards and penalties (Jad and non-Jad).

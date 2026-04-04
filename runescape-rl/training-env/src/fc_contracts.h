@@ -51,7 +51,7 @@
 #define FC_OBS_PLAYER_DEF_LVL   16  /* defence_level / 99 */
 #define FC_OBS_PLAYER_RNG_LVL   17  /* ranged_level / 99 */
 #define FC_OBS_PLAYER_DMG_TICK  18  /* damage_taken_this_tick / max_hp */
-#define FC_OBS_PLAYER_STUNNED   19  /* 0 (reserved, no stun in FC currently) */
+#define FC_OBS_PLAYER_STUNNED   19  /* hit_style_this_tick/3: 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
 #define FC_OBS_PLAYER_SIZE      20
 
 /* --- Per-NPC features (12 floats × 8 visible NPCs = 96 floats) --- */
