@@ -5,7 +5,68 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v6 (2026-04-04)
+## CURRENT: v7 (2026-04-04)
+
+Changes from v6:
+- Added current attack target to player observation (new slot 20).
+  Agent now sees which NPC slot it's currently targeting (0=none, 0.125-1.0=slot 0-7).
+  FC_OBS_PLAYER_SIZE: 20 → 21. FC_POLICY_OBS_SIZE: 134 → 135. OBS_SIZE: 170 → 171.
+- Renamed FC_OBS_PLAYER_STUNNED → FC_OBS_PLAYER_HIT_STYLE for clarity.
+- Added curriculum learning: 50% of episodes start at wave 28 with full HP/prayer.
+  Gives the agent more practice on the hard waves (Ket-Zek+) instead of
+  spending 90% of training time on easy waves 1-20.
+  New config: curriculum_wave=28, curriculum_pct=0.5.
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.75
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.01
+w_prayer_pot_used = -0.01
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 5_000_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+---
+
+## v6 (2026-04-04) — not trained, superseded by v7
 
 Changes from v5:
 - Added hit_style_this_tick to player observation (slot 19, was reserved).

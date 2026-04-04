@@ -59,6 +59,12 @@ void my_init(Env* env, Dict* kwargs) {
     item = dict_get_unsafe(kwargs, "w_tick_penalty");
     env->w_tick_penalty = item ? (float)item->value : -0.005f;
 
+    /* Curriculum */
+    item = dict_get_unsafe(kwargs, "curriculum_wave");
+    env->curriculum_wave = item ? (int)item->value : 0;
+    item = dict_get_unsafe(kwargs, "curriculum_pct");
+    env->curriculum_pct = item ? (float)item->value : 0.0f;
+
     /* Initialize game state */
     env->seed_counter = 0;
     fc_init(&env->state);

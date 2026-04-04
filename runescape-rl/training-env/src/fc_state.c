@@ -237,7 +237,8 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_DEF_LVL]   = (float)p->defence_level / 99.0f;
     player[FC_OBS_PLAYER_RNG_LVL]   = (float)p->ranged_level / 99.0f;
     player[FC_OBS_PLAYER_DMG_TICK]  = (p->max_hp > 0) ? (float)p->damage_taken_this_tick / (float)p->max_hp : 0.0f;
-    player[FC_OBS_PLAYER_STUNNED]   = (float)p->hit_style_this_tick / 3.0f;  /* 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
+    player[FC_OBS_PLAYER_HIT_STYLE] = (float)p->hit_style_this_tick / 3.0f;  /* 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
+    player[FC_OBS_PLAYER_TARGET]    = 0.0f;  /* filled after NPC slot computation below */
 
     /* NPC slot selection: gather active NPCs, sort, take first 8 */
     int active_indices[FC_MAX_NPCS];
@@ -270,6 +271,16 @@ void fc_write_obs(const FcState* state, float* out) {
             p->x, p->y, n->x + n->size/2, n->y + n->size/2, state->walkable);
     }
     /* Remaining NPC slots already zeroed by memset */
+
+    /* Player target: which visible NPC slot is the current attack target */
+    if (p->attack_target_idx >= 0) {
+        for (int s = 0; s < visible; s++) {
+            if (active_indices[s] == p->attack_target_idx) {
+                player[FC_OBS_PLAYER_TARGET] = (float)(s + 1) / 8.0f;
+                break;
+            }
+        }
+    }
 
     /* Wave/meta features */
     float* meta = out + FC_OBS_META_START;

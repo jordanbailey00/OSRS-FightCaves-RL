@@ -51,8 +51,9 @@
 #define FC_OBS_PLAYER_DEF_LVL   16  /* defence_level / 99 */
 #define FC_OBS_PLAYER_RNG_LVL   17  /* ranged_level / 99 */
 #define FC_OBS_PLAYER_DMG_TICK  18  /* damage_taken_this_tick / max_hp */
-#define FC_OBS_PLAYER_STUNNED   19  /* hit_style_this_tick/3: 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
-#define FC_OBS_PLAYER_SIZE      20
+#define FC_OBS_PLAYER_HIT_STYLE 19  /* hit_style_this_tick/3: 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
+#define FC_OBS_PLAYER_TARGET    20  /* attack_target NPC slot index / 8 (0=no target, 0.125-1.0=slot 0-7) */
+#define FC_OBS_PLAYER_SIZE      21
 
 /* --- Per-NPC features (12 floats × 8 visible NPCs = 96 floats) --- */
 /*
@@ -109,7 +110,7 @@
 #define FC_OBS_META_SIZE        10
 
 /* --- Policy observation total --- */
-#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 134 */
+#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 135 */
 
 /* --- Reward features (16 floats) --- */
 /*
@@ -118,7 +119,7 @@
  * The policy DOES NOT consume these by default.
  * Python applies configurable shaping weights to produce the scalar reward.
  */
-#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 134 */
+#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 135 */
 #define FC_RWD_DAMAGE_DEALT     0   /* NPC HP reduced this tick (normalized) */
 #define FC_RWD_DAMAGE_TAKEN     1   /* player HP reduced this tick */
 #define FC_RWD_NPC_KILL         2   /* NPC death count this tick */
@@ -289,13 +290,13 @@ static const int FC_ACTION_DIMS[FC_NUM_ACTION_HEADS] = FC_ACT_SIZES;
 
 /*
  * Total floats per environment:
- *   FC_POLICY_OBS_SIZE (134) + FC_REWARD_FEATURES (16) + FC_ACTION_MASK_SIZE (166) = 316
+ *   FC_POLICY_OBS_SIZE (135) + FC_REWARD_FEATURES (16) + FC_ACTION_MASK_SIZE (166) = 317
  *
  * PufferLib sees OBS_SIZE = 178.
  * Python trainer slices:
- *   policy_obs   = obs[:134]
- *   reward_feat  = obs[134:150]
- *   action_mask  = obs[150:316]
+ *   policy_obs   = obs[:135]
+ *   reward_feat  = obs[135:151]
+ *   action_mask  = obs[151:317]
  */
 #define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 178 */
 
