@@ -30,7 +30,7 @@
  * part of the default policy input.
  */
 
-/* --- Player features (20 floats) --- */
+/* --- Player features (22 floats) --- */
 #define FC_OBS_PLAYER_START     0
 #define FC_OBS_PLAYER_HP        0   /* current_hp / max_hp */
 #define FC_OBS_PLAYER_PRAYER    1   /* current_prayer / max_prayer */
@@ -47,15 +47,16 @@
 #define FC_OBS_PLAYER_PRAY_MAG  12  /* prayer == PROTECT_MAGIC (0 or 1) */
 #define FC_OBS_PLAYER_SHARKS    13  /* sharks_remaining / MAX_SHARKS */
 #define FC_OBS_PLAYER_DOSES     14  /* prayer_doses / MAX_DOSES */
-#define FC_OBS_PLAYER_AMMO      15  /* ammo_count / 1000 */
-#define FC_OBS_PLAYER_DEF_LVL   16  /* defence_level / 99 */
-#define FC_OBS_PLAYER_RNG_LVL   17  /* ranged_level / 99 */
-#define FC_OBS_PLAYER_DMG_TICK  18  /* damage_taken_this_tick / max_hp */
-#define FC_OBS_PLAYER_HIT_STYLE 19  /* hit_style_this_tick/3: 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
-#define FC_OBS_PLAYER_TARGET    20  /* attack_target NPC slot index / 8 (0=no target, 0.125-1.0=slot 0-7) */
-#define FC_OBS_PLAYER_SIZE      21
+#define FC_OBS_PLAYER_IN_MEL_1T 15  /* normalized count of melee hits landing in 1 tick */
+#define FC_OBS_PLAYER_IN_RNG_1T 16  /* normalized count of ranged hits landing in 1 tick */
+#define FC_OBS_PLAYER_IN_MAG_1T 17  /* normalized count of magic hits landing in 1 tick */
+#define FC_OBS_PLAYER_IN_MEL_2T 18  /* normalized count of melee hits landing in 2 ticks */
+#define FC_OBS_PLAYER_IN_RNG_2T 19  /* normalized count of ranged hits landing in 2 ticks */
+#define FC_OBS_PLAYER_IN_MAG_2T 20  /* normalized count of magic hits landing in 2 ticks */
+#define FC_OBS_PLAYER_TARGET    21  /* attack_target NPC slot index / 8 (0=no target, 0.125-1.0=slot 0-7) */
+#define FC_OBS_PLAYER_SIZE      22
 
-/* --- Per-NPC features (12 floats × 8 visible NPCs = 96 floats) --- */
+/* --- Per-NPC features (15 floats × 8 visible NPCs = 120 floats) --- */
 /*
  * NPC slot ordering — deterministic rules for the 8 visible NPC slots:
  *
@@ -74,8 +75,8 @@
  * The spawn_index tiebreaker ensures deterministic ordering when distances are
  * equal, which is critical for replay consistency and debug reproducibility.
  */
-#define FC_OBS_NPC_START        FC_OBS_PLAYER_SIZE  /* 20 */
-#define FC_OBS_NPC_STRIDE       13
+#define FC_OBS_NPC_START        FC_OBS_PLAYER_SIZE  /* 22 */
+#define FC_OBS_NPC_STRIDE       15
 #define FC_OBS_NPC_SLOTS        8   /* FC_VISIBLE_NPCS */
 
 /* Per-NPC feature offsets within stride */
@@ -85,25 +86,27 @@
 #define FC_NPC_Y                3   /* y / ARENA_HEIGHT */
 #define FC_NPC_HP               4   /* current_hp / max_hp */
 #define FC_NPC_DISTANCE         5   /* chebyshev distance / ARENA_WIDTH */
-#define FC_NPC_ATK_STYLE        6   /* attack_style / 3 (melee=0.33, range=0.67, magic=1.0) */
+#define FC_NPC_EFFECTIVE_STYLE  6   /* style this NPC would use now at current distance/LOS */
 #define FC_NPC_ATK_TIMER        7   /* attack_timer / attack_speed */
 #define FC_NPC_SIZE             8   /* npc tile size / 4 */
 #define FC_NPC_IS_HEALER        9   /* is_healer (0 or 1) */
 #define FC_NPC_JAD_TELEGRAPH    10  /* jad_telegraph / 2 (idle=0, magic=0.5, ranged=1.0) */
 #define FC_NPC_AGGRO            11  /* 1 if targeting player, 0 otherwise */
 #define FC_NPC_LOS              12  /* 1 if player has line of sight, 0 if blocked */
+#define FC_NPC_PENDING_STYLE    13  /* incoming attack style (0=none, 0.33/0.67/1.0) */
+#define FC_NPC_PENDING_TICKS    14  /* ticks until incoming attack resolves (normalized) */
 
-#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 104 */
+#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 120 */
 
 /* --- Wave/meta features (10 floats) --- */
-#define FC_OBS_META_START       (FC_OBS_NPC_START + FC_OBS_NPC_TOTAL)  /* 124 */
+#define FC_OBS_META_START       (FC_OBS_NPC_START + FC_OBS_NPC_TOTAL)  /* 142 */
 #define FC_OBS_META_WAVE        0   /* current_wave / NUM_WAVES */
 #define FC_OBS_META_ROTATION    1   /* rotation_id / NUM_ROTATIONS */
 #define FC_OBS_META_REMAINING   2   /* npcs_remaining / MAX_NPCS */
-#define FC_OBS_META_TICK        3   /* tick / MAX_EPISODE_TICKS */
-#define FC_OBS_META_TOT_DMG_D   4   /* total_damage_dealt / 10000 (arbitrary scale) */
-#define FC_OBS_META_TOT_DMG_T   5   /* total_damage_taken / max_hp */
-#define FC_OBS_META_DMG_D_TICK  6   /* damage_dealt_this_tick / 1000 */
+#define FC_OBS_META_PRAY_DRAIN  3   /* prayer_drain_counter / drain_resistance */
+#define FC_OBS_META_IN_MEL_3T   4   /* normalized count of melee hits landing in 3 ticks */
+#define FC_OBS_META_IN_RNG_3T   5   /* normalized count of ranged hits landing in 3 ticks */
+#define FC_OBS_META_IN_MAG_3T   6   /* normalized count of magic hits landing in 3 ticks */
 #define FC_OBS_META_DMG_T_TICK  7   /* damage_taken_this_tick / max_hp */
 #define FC_OBS_META_KILLS_TICK  8   /* npcs_killed_this_tick / MAX_NPCS */
 #define FC_OBS_META_WAVE_CLR    9   /* wave_just_cleared (0 or 1) */
@@ -112,7 +115,7 @@
 /* --- Policy observation total --- */
 #define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 135 */
 
-/* --- Reward features (16 floats) --- */
+/* --- Reward features (18 floats) --- */
 /*
  * These are packed AFTER policy observations in the same buffer.
  * The trainer reads them for reward shaping and logging.
@@ -291,16 +294,19 @@ static const int FC_ACTION_DIMS[FC_NUM_ACTION_HEADS] = FC_ACT_SIZES;
 /* ======================================================================== */
 
 /*
- * Total floats per environment:
- *   FC_POLICY_OBS_SIZE (135) + FC_REWARD_FEATURES (16) + FC_ACTION_MASK_SIZE (166) = 317
+ * Total floats in the full FC backend buffer:
+ *   FC_POLICY_OBS_SIZE (152) + FC_REWARD_FEATURES (18) + FC_ACTION_MASK_SIZE (166) = 336
  *
- * PufferLib sees OBS_SIZE = 178.
+ * The PufferLib adapter does NOT expose this full buffer directly. It exposes:
+ *   FC_PUFFER_OBS_SIZE = FC_POLICY_OBS_SIZE + mask(heads 0-4 only)
+ *                      = 152 + 36 = 188
+ *
  * Python trainer slices:
- *   policy_obs   = obs[:135]
- *   reward_feat  = obs[135:151]
- *   action_mask  = obs[151:317]
+ *   policy_obs   = obs[:FC_POLICY_OBS_SIZE]
+ *   reward_feat  = full_obs[FC_REWARD_START:FC_REWARD_START + FC_REWARD_FEATURES]
+ *   action_mask  = full_obs[FC_TOTAL_OBS:FC_TOTAL_OBS + FC_ACTION_MASK_SIZE]
  */
-#define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 178 */
+#define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 336 */
 
 /* ======================================================================== */
 /* Normalization divisors                                                     */

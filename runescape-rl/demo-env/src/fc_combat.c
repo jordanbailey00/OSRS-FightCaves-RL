@@ -226,6 +226,7 @@ void fc_resolve_player_pending_hits(FcState* state) {
 
             p->damage_taken_this_tick += final_damage;
             p->hit_style_this_tick = h->attack_style;
+            p->hit_source_npc_type = state->npcs[h->source_npc_idx].npc_type;
             state->damage_taken_this_tick += final_damage;
             p->total_damage_taken += final_damage;
             p->hit_landed_this_tick = 1;
@@ -258,6 +259,19 @@ void fc_resolve_player_pending_hits(FcState* state) {
             if (h->attack_style == ATTACK_RANGED || h->attack_style == ATTACK_MAGIC) {
                 if (blocked) state->correct_danger_prayer = 1;
                 else state->wrong_danger_prayer = 1;
+            }
+
+            /* Episode-level hit analytics */
+            state->ep_hits_total++;
+            if (p->prayer != PRAYER_NONE) {
+                if (blocked) {
+                    state->ep_correct_blocks++;
+                    state->ep_damage_blocked += h->damage;
+                } else {
+                    state->ep_wrong_prayer_hits++;
+                }
+            } else {
+                state->ep_no_prayer_hits++;
             }
 
             h->active = 0;  /* consumed */

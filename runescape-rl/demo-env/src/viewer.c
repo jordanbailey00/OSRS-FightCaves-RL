@@ -22,6 +22,7 @@
 #include "fc_npc.h"
 #include "fc_combat.h"
 #include "fc_pathfinding.h"
+#include "fc_wave.h"
 #include "fc_terrain_loader.h"
 #include "fc_objects_loader.h"
 #include "fc_npc_models.h"
@@ -182,7 +183,8 @@ typedef struct {
     /* Prayer overhead icon textures */
     Texture2D pray_melee_tex, pray_missiles_tex, pray_magic_tex;
     /* Side panel tabs (Phase 8h) */
-    int active_tab;     /* 0=inventory, 1=combat, 2=prayer */
+    int active_tab;     /* 0=inventory, 1=combat, 2=prayer, 3=stats */
+    int active_loadout; /* index into FC_LOADOUTS[] */
     int tab_area_y;     /* screen Y where tab buttons start (set during draw) */
     int combat_style;   /* 0=accurate, 1=rapid, 2=long range */
     /* Item / tab sprites */
@@ -203,6 +205,8 @@ typedef struct {
     int godmode;        /* 1 = player can't die */
     int debug_spawn;    /* NPC type to spawn (0 = off, 1-8 = type) */
     int policy_pipe;    /* 1 = read actions from stdin, write obs to stdout */
+    int start_wave;     /* 0 = wave 1 (default), >0 = skip to this wave on reset */
+    int disable_movement; /* 1 = force idle movement */
     /* Smooth movement interpolation — stored by stable slot (player + NPC array index) */
     float prev_player_x, prev_player_y;
     float prev_npc_x[FC_MAX_NPCS];
@@ -223,6 +227,18 @@ static void text_s(const char* t, int x, int y, int sz, Color c) {
 static void reset_ep(ViewerState* v) {
     v->seed = (uint32_t)GetRandomValue(1, 999999);
     fc_reset(&v->state, v->seed);
+    /* Skip to start_wave if set */
+    if (v->start_wave > 1 && v->start_wave <= FC_NUM_WAVES) {
+        for (int i = 0; i < FC_MAX_NPCS; i++) {
+            v->state.npcs[i].active = 0;
+            v->state.npcs[i].is_dead = 0;
+        }
+        v->state.npcs_remaining = 0;
+        v->state.current_wave = v->start_wave;
+        fc_wave_spawn(&v->state, v->start_wave);
+        v->state.player.current_hp = v->state.player.max_hp;
+        v->state.player.current_prayer = v->state.player.max_prayer;
+    }
     fc_fill_render_entities(&v->state, v->entities, &v->entity_count);
     v->last_hash = fc_state_hash(&v->state);
     v->episode_count++;
@@ -1263,10 +1279,11 @@ static int process_tab_click(ViewerState* v, float mx, float my) {
     if (tab_y <= 0) return 0;  /* tabs not drawn yet */
     FcPlayer* p = &v->state.player;
 
-    /* Tab buttons: 3 equal-width buttons at tab_y */
-    int tab_w = (PANEL_WIDTH - 12) / 3;
+    /* Tab buttons: 4 equal-width buttons at tab_y */
+    int num_tabs = 4;
+    int tab_w = (PANEL_WIDTH - 12) / num_tabs;
     int tab_h = 18;
-    for (int t = 0; t < 3; t++) {
+    for (int t = 0; t < num_tabs; t++) {
         int tx = px + 4 + t * tab_w;
         if (mx >= tx && mx < tx + tab_w && my >= tab_y && my < tab_y + tab_h) {
             v->active_tab = t;
@@ -1447,11 +1464,12 @@ static void draw_panel(ViewerState* v) {
     DrawLine(px+4, by, px+PANEL_WIDTH-4, by, COL_PANEL_BORDER); by += 2;
     v->tab_area_y = by;
 
-    int tab_w = (PANEL_WIDTH - 12) / 3;
+    int num_tabs = 4;
+    int tab_w = (PANEL_WIDTH - 12) / num_tabs;
     int tab_h = 18;
-    static const char* tab_labels[] = { "Inven", "Combat", "Prayer" };
-    Texture2D tab_icons[] = { v->tex_tab_inv, v->tex_tab_combat, v->tex_tab_prayer };
-    for (int t = 0; t < 3; t++) {
+    static const char* tab_labels[] = { "Inven", "Combat", "Prayer", "Stats" };
+    Texture2D tab_icons[] = { v->tex_tab_inv, v->tex_tab_combat, v->tex_tab_prayer, (Texture2D){0} };
+    for (int t = 0; t < num_tabs; t++) {
         int tx = px + 4 + t * tab_w;
         Rectangle tr = { (float)tx, (float)by, (float)tab_w, (float)tab_h };
         int hovered = CheckCollisionPointRec(GetMousePosition(), tr);
@@ -1478,6 +1496,50 @@ static void draw_panel(ViewerState* v) {
         case 0: tab_end_y = draw_inventory_tab(v, px, x, by); break;
         case 1: tab_end_y = draw_combat_tab(v, px, x, by); break;
         case 2: tab_end_y = draw_prayer_tab(v, px, x, by); break;
+        case 3: {
+            /* Stats tab — show current loadout, skills, and equipment */
+            char b2[128];
+            int lh = 12;
+            const FcPlayer* sp = &v->state.player;
+            const FcLoadout* lo = &FC_LOADOUTS[v->active_loadout];
+
+            text_s(lo->name, x, by, 10, COL_TEXT_YELLOW); by += lh + 2;
+
+            DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+            text_s("Skills", x, by, 9, COL_TEXT_DIM); by += lh;
+            snprintf(b2,sizeof(b2),"HP: %d/%d  Prayer: %d/%d",
+                sp->current_hp/10, sp->max_hp/10, sp->current_prayer/10, sp->max_prayer/10);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh - 1;
+            snprintf(b2,sizeof(b2),"Ranged: %d  Defence: %d", sp->ranged_level, sp->defence_level);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh - 1;
+            snprintf(b2,sizeof(b2),"Prayer: %d  Magic: %d", sp->prayer_level, sp->magic_level);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh + 2;
+
+            DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+            text_s("Offence", x, by, 9, COL_TEXT_DIM); by += lh;
+            snprintf(b2,sizeof(b2),"Rng Atk: %d  Rng Str: %d", sp->ranged_attack_bonus, sp->ranged_strength_bonus);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh + 2;
+
+            DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+            text_s("Defence", x, by, 9, COL_TEXT_DIM); by += lh;
+            snprintf(b2,sizeof(b2),"Stab: %d  Slash: %d", sp->defence_stab, sp->defence_slash);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh - 1;
+            snprintf(b2,sizeof(b2),"Crush: %d  Magic: %d", sp->defence_crush, sp->defence_magic);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh - 1;
+            snprintf(b2,sizeof(b2),"Ranged: %d  Prayer: %d", sp->defence_ranged, sp->prayer_bonus);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh + 2;
+
+            DrawLine(px+4, by-2, px+PANEL_WIDTH-4, by-2, COL_PANEL_BORDER);
+            text_s("Resources", x, by, 9, COL_TEXT_DIM); by += lh;
+            snprintf(b2,sizeof(b2),"Food: %d/%d  Pots: %d/%d",
+                sp->sharks_remaining, FC_MAX_SHARKS, sp->prayer_doses_remaining, FC_MAX_PRAYER_DOSES);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh - 1;
+            snprintf(b2,sizeof(b2),"Ammo: %d", sp->ammo_count);
+            text_s(b2, x, by, 8, COL_TEXT_WHITE); by += lh;
+
+            tab_end_y = by;
+            break;
+        }
     }
 
     /* ---- NPC health bars (always visible, below tab content) ---- */
@@ -1489,6 +1551,160 @@ static void draw_panel(ViewerState* v) {
         dbg_draw_panel_tabs(&v->state, px, x, npc_end_y, PANEL_WIDTH, v->dbg_tab);
     } else {
         v->dbg_tab_y = 0;
+    }
+
+    /* ---- Loadout dropdown (below movement toggle) ---- */
+    {
+        int ly = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 108;
+        static int loadout_open = 0;
+        char lbuf[48];
+        snprintf(lbuf, sizeof(lbuf), "Loadout: %s", FC_LOADOUTS[v->active_loadout].name);
+        Rectangle lbtn = { (float)(px + 8), (float)ly, (float)(PANEL_WIDTH - 16), 20.0f };
+        int lhover = CheckCollisionPointRec(GetMousePosition(), lbtn);
+        DrawRectangleRec(lbtn, lhover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleLinesEx(lbtn, 1, COL_PANEL_BORDER);
+        DrawText(lbuf, px + 14, ly + 4, 9, COL_TEXT_YELLOW);
+        DrawText("v", px + PANEL_WIDTH - 22, ly + 4, 10, COL_TEXT_DIM);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && lhover)
+            loadout_open = !loadout_open;
+        if (loadout_open) {
+            int item_h = 18;
+            int list_y = ly + 22;  /* open downward below the button */
+            DrawRectangle(px + 8, list_y, PANEL_WIDTH - 16, FC_NUM_LOADOUTS * item_h,
+                          CLITERAL(Color){20, 18, 14, 240});
+            DrawRectangleLinesEx(
+                (Rectangle){(float)(px+8), (float)list_y, (float)(PANEL_WIDTH-16),
+                            (float)(FC_NUM_LOADOUTS * item_h)}, 1, COL_PANEL_BORDER);
+            for (int li = 0; li < FC_NUM_LOADOUTS; li++) {
+                int iy = list_y + li * item_h;
+                Rectangle ir = { (float)(px + 9), (float)iy, (float)(PANEL_WIDTH - 18), (float)item_h };
+                int ih = CheckCollisionPointRec(GetMousePosition(), ir);
+                int cur = (li == v->active_loadout);
+                if (cur) DrawRectangleRec(ir, CLITERAL(Color){60, 80, 40, 255});
+                else if (ih) DrawRectangleRec(ir, COL_TAB_HOVER);
+                DrawText(FC_LOADOUTS[li].name, px + 14, iy + 3, 9,
+                         cur ? COL_TEXT_YELLOW : COL_TEXT_WHITE);
+                if (ih && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    v->active_loadout = li;
+                    const FcLoadout* lo = &FC_LOADOUTS[li];
+                    FcPlayer* p = &v->state.player;
+                    p->max_hp = lo->max_hp; p->current_hp = lo->max_hp;
+                    p->max_prayer = lo->max_prayer; p->current_prayer = lo->max_prayer;
+                    p->attack_level = lo->attack_lvl; p->strength_level = lo->strength_lvl;
+                    p->defence_level = lo->defence_lvl; p->ranged_level = lo->ranged_lvl;
+                    p->prayer_level = lo->prayer_lvl; p->magic_level = lo->magic_lvl;
+                    p->ranged_attack_bonus = lo->ranged_atk; p->ranged_strength_bonus = lo->ranged_str;
+                    p->defence_stab = lo->def_stab; p->defence_slash = lo->def_slash;
+                    p->defence_crush = lo->def_crush; p->defence_magic = lo->def_magic;
+                    p->defence_ranged = lo->def_ranged; p->prayer_bonus = lo->prayer_bonus;
+                    p->ammo_count = lo->ammo;
+                    p->sharks_remaining = FC_MAX_SHARKS;
+                    p->prayer_doses_remaining = FC_MAX_PRAYER_DOSES;
+                    loadout_open = 0;
+                }
+            }
+        }
+    }
+
+    /* ---- Disable movement toggle (below loadout) ---- */
+    {
+        int toggle_y = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 84;
+        Rectangle tog_r = { (float)(px + 8), (float)toggle_y, (float)(PANEL_WIDTH - 16), 18.0f };
+        int tog_hover = CheckCollisionPointRec(GetMousePosition(), tog_r);
+        DrawRectangleRec(tog_r, tog_hover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleLinesEx(tog_r, 1, COL_PANEL_BORDER);
+        const char* tog_label = v->disable_movement ? "Movement: OFF" : "Movement: ON";
+        Color tog_col = v->disable_movement ? CLITERAL(Color){255,80,80,255} : COL_TEXT_GREEN;
+        DrawText(tog_label, px + 14, toggle_y + 4, 10, tog_col);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && tog_hover)
+            v->disable_movement = !v->disable_movement;
+    }
+
+    /* ---- Wave jump dropdown (below NPC bars / debug) ---- */
+    {
+        int wy = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 34;
+        static int dropdown_open = 0;
+
+        /* Button: "Jump to Wave: N  v" */
+        char wbuf[32];
+        snprintf(wbuf, sizeof(wbuf), "Jump to Wave: %d", v->state.current_wave);
+        Rectangle btn_r = { (float)(px + 8), (float)wy, (float)(PANEL_WIDTH - 16), 20.0f };
+        int btn_hover = CheckCollisionPointRec(GetMousePosition(), btn_r);
+        DrawRectangleRec(btn_r, btn_hover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleLinesEx(btn_r, 1, COL_PANEL_BORDER);
+        DrawText(wbuf, px + 14, wy + 4, 10, COL_TEXT_YELLOW);
+        DrawText("v", px + PANEL_WIDTH - 22, wy + 4, 10, COL_TEXT_DIM);
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && btn_hover)
+            dropdown_open = !dropdown_open;
+
+        /* Dropdown list */
+        if (dropdown_open) {
+            int item_h = 16;
+            int list_h = FC_NUM_WAVES * item_h;
+            int list_y = wy - list_h;  /* open upward so it doesn't go off screen */
+            if (list_y < HEADER_HEIGHT) list_y = HEADER_HEIGHT;
+            int visible = (wy - list_y) / item_h;
+
+            /* Scroll offset based on current wave (center it) */
+            static int scroll = 0;
+            int max_visible = visible;
+            if (max_visible > FC_NUM_WAVES) max_visible = FC_NUM_WAVES;
+
+            /* Mouse wheel scrolls the list */
+            float wheel = GetMouseWheelMove();
+            if (wheel != 0 && CheckCollisionPointRec(GetMousePosition(),
+                    (Rectangle){(float)(px+8), (float)list_y, (float)(PANEL_WIDTH-16), (float)(wy-list_y)})) {
+                scroll -= (int)wheel * 3;
+                if (scroll < 0) scroll = 0;
+                if (scroll > FC_NUM_WAVES - max_visible) scroll = FC_NUM_WAVES - max_visible;
+            }
+
+            /* Background */
+            DrawRectangle(px + 8, list_y, PANEL_WIDTH - 16, wy - list_y,
+                          CLITERAL(Color){20, 18, 14, 240});
+            DrawRectangleLinesEx(
+                (Rectangle){(float)(px+8), (float)list_y, (float)(PANEL_WIDTH-16), (float)(wy-list_y)},
+                1, COL_PANEL_BORDER);
+
+            /* Wave items */
+            for (int w = scroll; w < FC_NUM_WAVES && (w - scroll) < max_visible; w++) {
+                int iy = list_y + (w - scroll) * item_h;
+                Rectangle item_r = { (float)(px + 9), (float)iy, (float)(PANEL_WIDTH - 18), (float)item_h };
+                int hover = CheckCollisionPointRec(GetMousePosition(), item_r);
+                int current = (w + 1 == v->state.current_wave);
+
+                if (current) DrawRectangleRec(item_r, CLITERAL(Color){60, 80, 40, 255});
+                else if (hover) DrawRectangleRec(item_r, COL_TAB_HOVER);
+
+                char label[16];
+                snprintf(label, sizeof(label), "Wave %d", w + 1);
+                DrawText(label, px + 14, iy + 2, 10,
+                         current ? COL_TEXT_YELLOW : COL_TEXT_WHITE);
+
+                /* Click to jump */
+                if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    int jump = w + 1;
+                    for (int i = 0; i < FC_MAX_NPCS; i++) {
+                        v->state.npcs[i].active = 0;
+                        v->state.npcs[i].is_dead = 0;
+                    }
+                    v->state.npcs_remaining = 0;
+                    v->state.current_wave = jump;
+                    fc_wave_spawn(&v->state, jump);
+                    v->state.player.current_hp = v->state.player.max_hp;
+                    v->state.player.current_prayer = v->state.player.max_prayer;
+                    v->state.terminal = TERMINAL_NONE;
+                    v->state.jad_healers_spawned = 0;
+                    fc_fill_render_entities(&v->state, v->entities, &v->entity_count);
+                    memset(v->hitsplats, 0, sizeof(v->hitsplats));
+                    memset(v->projectiles, 0, sizeof(v->projectiles));
+                    v->attack_target = -1;
+                    dbg_log_clear();
+                    dropdown_open = 0;
+                }
+            }
+        }
     }
 }
 
@@ -1523,12 +1739,15 @@ int main(int argc, char** argv) {
     int screenshot_mode = 0;
     const char* screenshot_path = NULL;
     int policy_pipe_flag = 0;
+    int start_wave_flag = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--screenshot") == 0 && i+1 < argc) {
             screenshot_mode = 1;
             screenshot_path = argv[++i];
         } else if (strcmp(argv[i], "--policy-pipe") == 0) {
             policy_pipe_flag = 1;
+        } else if (strcmp(argv[i], "--start-wave") == 0 && i+1 < argc) {
+            start_wave_flag = atoi(argv[++i]);
         }
     }
     fprintf(stderr,"=== Fight Caves Viewer (Phase 8 — Playable) ===\n");
@@ -1689,6 +1908,7 @@ int main(int argc, char** argv) {
 
     v.combat_style = 1;  /* Rapid default */
     v.policy_pipe = policy_pipe_flag;
+    v.start_wave = start_wave_flag;
 
     reset_ep(&v);
 
@@ -1822,6 +2042,7 @@ int main(int argc, char** argv) {
                 prev_npc_hits[ni] = v.state.npcs[ni].num_pending_hits;
 
             /* Step simulation */
+            if (v.disable_movement) v.actions[0] = 0;
             fc_step(&v.state, v.actions);
             v.tick_frac = 0.0f;
 

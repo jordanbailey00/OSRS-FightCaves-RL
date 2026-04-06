@@ -1,0 +1,113 @@
+# Changelog
+
+## 2026-04-06
+
+- Updated [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) with:
+  - a full `v16.2a` entry for the `codex3` bridge run `ge5sma5y`
+  - a new `v17` entry at the top documenting the planned warm-start config, checkpoint source, and rationale
+  - matched-step comparison notes against the old `rqvxfqmq` v16.2 run
+- Switched the live [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) back from the `v16.2a` bridge config to the staged `v17` config:
+  - total_timesteps = `5_000_000_000`
+  - learning_rate = `0.00025`
+  - clip_coef = `0.12`
+  - ent_coef = `0.03`
+  - restored the mixed `30/31/32` curriculum and threat-aware shaping values
+  - preserved the `v16.2a` bridge values inline as comments
+  - documented the exact `LOAD_MODEL_PATH` checkpoint to use for the warm-start launch
+- Synced the live v17 config into [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini).
+- Updated [pufferlib_4/pufferlib/pufferl.py](/home/joe/projects/runescape-rl/codex3/pufferlib_4/pufferlib/pufferl.py) to render the terminal dashboard with direct `sys.stdout.write(...)` updates instead of `print(...)` plus a raw cursor-home escape:
+  - reuses a single Rich console instance
+  - clears the screen properly on the first frame and clears to end-of-screen on subsequent frames
+  - avoids the extra trailing newline from `print(...)` that could cause the dashboard to scroll and stack repeated frames in a normal terminal
+  - falls back to plain captured writes for non-interactive outputs
+- Updated [runescape-rl/train.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train.sh) to auto-build the local PufferLib backend when `pufferlib/_C*.so` is missing:
+  - detects the active Python extension suffix inside the repo venv
+  - runs `pufferlib_4/build.sh fight_caves` before launch if the backend has not been built yet
+  - fixes the clean-checkout failure mode where training started correctly but `python -m pufferlib.pufferl` could not import `_C`
+- Updated [pufferlib_4/build.sh](/home/joe/projects/runescape-rl/codex3/pufferlib_4/build.sh) to support GCC cleanly on Linux:
+  - chooses compiler-specific warning flags instead of always assuming clang
+  - uses `-lgomp` when building with GCC-family compilers
+  - keeps the old clang path intact when clang is explicitly requested
+  - falls back to plain `nvcc` when `ccache` is not installed instead of hard-failing during CUDA compilation
+  - discovers `nvcc` from `CUDA_HOME`, `CUDA_PATH`, `PATH`, `/usr/local/cuda`, or `/usr/local/cuda-*` instead of collapsing to `./bin/nvcc` when `nvcc` is not already on `PATH`
+- Updated [runescape-rl/train.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train.sh) to default the one-time backend build path to `CC=gcc` and `CXX=g++` unless you override them explicitly, matching the local machine's working OpenMP toolchain.
+- Switched the live [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) from the staged v17 config to a `v16.2-style` 1.5B bridge-run config on the current `codex3` codebase:
+  - keeps the PPO settings aligned with documented v16.2 except `total_timesteps = 1.5B` for the shorter validation run
+  - disables curriculum again for the bridge run
+  - restores the old dense reward weights (`w_damage_dealt = 1.0`, `w_npc_kill = 2.0`, `w_correct_danger_prayer = 1.0`)
+  - sets the new config-backed `shape_*` controls to emulate documented v16.1/v16.2 behavior instead of the staged v17 shaping
+  - preserves the current v17-only values inline as comments in the same `.ini` so the later warm-start config can be restored without consulting another file
+- Synced the bridge-run config into [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini) so `train.sh` and direct Puffer launches see the same baseline.
+- Added a running changelog for `codex3` so all code and behavior changes from this point forward are documented in one place.
+- Updated [runescape-rl/docs/today_plan.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/today_plan.md) with the revised v17 observation recommendation:
+  - replace misleading per-NPC primary attack style with effective-style-now
+  - keep explicit timing via per-NPC attack timers and pending-hit countdowns
+  - add player-level incoming-hit timeline summaries by style instead of absolute episode tick clocks
+  - record the hard SPS constraint: preserve roughly 1.8M-2.3M steps/sec and avoid observation/reward changes that are likely to reduce throughput
+- Refactored the live training observation contract in [runescape-rl/training-env/src/fc_contracts.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_contracts.h):
+  - replaced the per-NPC primary attack-style feature with `effective_style_now`
+  - repurposed existing policy-observation slots to carry incoming-hit timeline summaries for 1/2/3 ticks by style
+  - kept the overall policy observation size stable to avoid model-shape churn during future warm-start experiments
+- Updated [runescape-rl/training-env/src/fc_state.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_state.c) to implement the new threat observation logic:
+  - compute `effective_style_now` from current distance, LOS, and dual-mode melee fallback
+  - summarize pending incoming hits into compact per-style countdown buckets
+  - reuse existing visible-NPC and pending-hit loops to keep the new logic lightweight for SPS
+- Left prayer actions unmasked in [runescape-rl/training-env/src/fc_state.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_state.c) after reviewing the masking philosophy:
+  - legal but redundant prayer toggles remain visible to the policy
+  - only clearly impossible consumable actions remain masked
+  - this keeps prayer learning aligned with the "mask illegal, not merely suboptimal" rule
+- Expanded terminal analytics in [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) and [runescape-rl/training-env/binding.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/binding.c):
+  - log average wrong-prayer hits, no-prayer hits, prayer switches, and blocked damage
+  - reuse existing episode counters instead of adding new per-tick bookkeeping
+- Optimized [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) reward computation to read reward features directly via `fc_write_reward_features(...)` instead of rebuilding the full observation buffer inside `fc_puffer_compute_reward(...)`.
+  - fixed-step benchmark before change: `2.42M-2.44M SPS` across three 5M-step runs
+  - fixed-step benchmark after change: `2.85M-2.86M SPS` across three 5M-step runs
+  - approximate gain on the benchmark harness: `+17.5%`
+  - validated equivalence separately with a 200k-step temp check that compared `fc_write_reward_features(...)` against the reward slice of `fc_write_obs(...)` and found no mismatches
+- Added `prayer_drain_counter` to the live policy observation by repurposing the old absolute meta tick slot, keeping the observation size stable while exposing the timing signal that prayer flicking would need later.
+- Disabled the prayer flick reward in [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) so v17 focuses on correct prayer and resource usage rather than flick optimization.
+- Moved the main hardcoded shaping knobs in [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) into config-backed fields parsed by [runescape-rl/training-env/binding.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/binding.c):
+  - food/pot waste penalties and high-resource/no-threat thresholds
+  - wrong-prayer penalty
+  - NPC-specific prayer bonus
+  - melee-range penalty
+  - wasted-attack penalty
+  - stall start/base/ramp/cap
+  - not-attacking penalty and grace ticks
+  - kiting reward and distance band
+  - unnecessary-prayer penalty
+- Made resource waste penalties more threat-aware:
+  - food overuse now gets an extra penalty when HP is still high and there is no imminent threat
+  - prayer pot overuse now gets an extra penalty when prayer is still high and there is no meaningful threat
+- Upgraded curriculum from one late-wave bucket to three config-backed buckets so `codex3` can run the mixed 30/31/32 scaffolding plan.
+- Expanded episode analytics and logged outputs:
+  - per-style prayer uptime
+  - average prayer before pot use
+  - average HP before food use
+  - Tok-Xil and Ket-Zek melee-distance ticks
+  - reached wave 30 / cleared wave 30 / reached wave 31 rates
+- Updated [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) for the v17 starting point:
+  - mixed 30/31/32 curriculum
+  - lower-LR, tighter-clipping, higher-entropy PPO settings
+  - checkpoint interval set to 100
+  - new shaping knobs moved out of code into config
+- Updated [runescape-rl/train.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train.sh) to accept `LOAD_MODEL_PATH`, so warm-starting from a v16.2 checkpoint is now supported directly by the launcher.
+- Synced the updated v17 config into [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini).
+- Re-benchmarked after the broader v17-prep patch:
+  - `2.91M-2.93M SPS` across three 5M-step runs on the same fixed-step harness
+  - the added v17 prep logic did not regress throughput relative to the optimized reward path
+- Updated stale adapter comments in [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) so the documented Puffer-facing observation shape matches the live contract again.
+- Validated the modified training-env surface with:
+  - `cc -std=c11 -fsyntax-only -I.../training-env -I.../training-env/src runescape-rl/training-env/fight_caves.c`
+  - `cc -std=c11 -D_POSIX_C_SOURCE=199309L -fsyntax-only -I.../training-env -I.../training-env/src -I.../pufferlib_4/src runescape-rl/training-env/binding.c`
+- Analyzed completed `v17` warm-start run `mv0snohb` and updated [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) with:
+  - final metrics and analytics
+  - comparison against `v16.2a`, `v16.2`, `v16.1`, `v16`, `v15.3`, and `v15.1`
+  - diagnosis that `v17` improved stability and discipline but failed to preserve the wave-29 frontier
+  - recommendation for `v17.1`: no curriculum, no warm-start, `1.5B` steps as the clean control run
+- Switched the live training config to the `v17.1` control run in both [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) and [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini):
+  - no curriculum
+  - no warm-start
+  - `1.5B` total timesteps
+  - otherwise keep the current `v17` obs/reward/PPO package unchanged
+- Added a new top `v17.1` entry to [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) documenting the exact control-run purpose, config, and success criteria.

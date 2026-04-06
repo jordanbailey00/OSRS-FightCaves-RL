@@ -156,3 +156,236 @@ Run training with the fixed reward structure. After ~500M steps:
 
 Goal: agent that actively fights, progresses through waves, and learns
 prayer switching on Jad.
+
+--------------------------------------------------------------------------------
+6. V17 Run Recommendation — 2026-04-06
+--------------------------------------------------------------------------------
+
+Reviewed for this recommendation:
+  - runescape-rl/docs/rl_config.md (full run history through v16.2)
+  - runescape-rl/config/fight_caves.ini (live config)
+  - runescape-rl/training-env/* and src/* (live reward/obs/mask/combat code)
+  - pufferlib_4/ocean reference envs, especially g2048 scaffolding curriculum
+
+Performance constraint for all v17 implementation work:
+
+  Current throughput is roughly 1.8M-2.3M SPS. Do not trade that away for
+  denser observation logic or more expensive shaping. Prefer constant-time or
+  re-used per-tick calculations, avoid extra full-NPC scans when existing loops
+  can be extended, and flag any change that looks likely to reduce SPS before
+  merging it into the training path.
+
+  Current perf watchlist:
+    - reward computation still calls fc_write_obs() again inside
+      fight_caves.h::fc_puffer_compute_reward(), and c_step() then calls
+      fc_puffer_write_obs() afterward. That likely means duplicate obs-writing
+      work on every step. Do not change this casually, but revisit it as a
+      possible SPS win once v17 behavior changes are stable.
+
+Core conclusion:
+
+  The main blocker is probably NOT "we need even more prayer reward."
+  The bigger blockers look like:
+
+  1. The policy still gets a misleading threat representation for dual-mode NPCs.
+     Tok-Xil and Ket-Zek expose their PRIMARY style in obs
+     (FC_NPC_ATK_STYLE in fc_state.c), but in live combat they switch to
+     melee at distance 1 (npc_generic_attack in fc_npc.c). This means the
+     agent must infer a hidden "style changes at melee range" rule from
+     distance + NPC type + delayed consequences. That is learnable, but much
+     harder than it needs to be.
+
+  2. v16.1 reward design was basically clean and productive. v16.2 showed the
+     agent CAN reach wave ~29 with those signals, but the optimizer kept
+     updating too aggressively after the breakthrough and destroyed the policy.
+
+  3. Resource overconsumption is probably downstream of weak threat
+     classification. If the agent cannot cleanly predict which prayer is needed
+     and when, it will over-pray, over-drink, and panic-eat.
+
+  4. The current env still hides several important shaping knobs in hardcoded
+     logic inside fight_caves.h, which slows tuning and makes reward iteration
+     noisy.
+
+V17 recommendation, in priority order:
+
+  A. Highest-priority code changes before the run
+
+    1. Replace the current per-NPC primary attack-style observation with an
+       "effective style now" signal.
+       Recommendation:
+         - remove the misleading primary-style cue for dual-mode NPCs
+         - expose the style the NPC would use RIGHT NOW at current distance/LOS
+         - keep distance in obs so the policy can still learn the range rule
+       For Tok-Xil and Ket-Zek this should flip to melee at dist<=1.
+       This is cleaner than exposing a static primary style that is often wrong
+       at the moment the threat actually matters.
+
+    2. Keep attack timing explicit.
+       Each visible NPC should expose:
+         - effective_style_now
+         - attack_timer
+         - pending_style
+         - pending_ticks
+       This gives the policy both "what this NPC wants to do next" and
+       "what projectile/hit is already committed and landing soon."
+
+    3. Add player-level incoming-hit timeline summaries instead of absolute
+       episode tick numbers.
+       Recommendation: add compact counters/flags for incoming hits by style
+       over the next few ticks, e.g.:
+         - incoming_melee_in_1t / 2t / 3t
+         - incoming_ranged_in_1t / 2t / 3t
+         - incoming_magic_in_1t / 2t / 3t
+         - optional same_tick_style_conflict flag
+       Do NOT expose absolute "lands on tick 436" episode clocks. Relative
+       countdowns generalize better and are exactly what the policy needs for
+       proactive prayer.
+
+    4. Move the hardcoded shaping constants in fight_caves.h into config.
+       Especially:
+         - kiting reward
+         - unnecessary prayer penalty
+         - NPC melee-range penalty
+         - NPC-specific prayer bonus
+         - wasted attack penalty
+         - wave stall penalty start/base/ramp/cap
+         - prayer flick reward
+         - full-waste food/pot penalties
+       For v17, tuning these from ini is much more valuable than adding more
+       one-off hardcoded logic.
+
+    5. Mask redundant prayer no-ops.
+       Right now all prayer actions are always valid. I would mask:
+         - prayer off when already off
+         - selecting the already-active prayer
+       This shrinks the prayer action space and removes useless exploration.
+
+    6. Improve analytics before the run.
+       Add explicit logs for:
+         - correct_blocks_total
+         - wrong_prayer_hits
+         - no_prayer_hits
+         - melee/ranged/magic prayer uptime
+         - average prayer level when pot is used
+         - average HP when food is used
+         - Tok-Xil/Ket-Zek time spent at melee distance
+         - reached_wave_30 / cleared_wave_30 / reached_wave_31
+       The current logs are helpful, but not enough to isolate the prayer and
+       resource problem quickly.
+
+  B. Reward changes I would make for v17
+
+    1. Keep the v16.1 core shaping philosophy.
+       That is the first clean setup that showed a late real breakthrough.
+       Do NOT go back to large dense prayer rewards or large food/pot bonuses.
+
+    2. Remove or disable the prayer flick reward for v17 unless we also expose
+       prayer_drain_counter in observation.
+       Right now the env rewards a timing-sensitive mechanic the policy does not
+       directly observe. For "get a fire cape," correct prayer timing matters
+       more than advanced flick optimization.
+
+    3. Keep kiting reward and unnecessary-prayer penalty.
+       v15.3 is still one of the strongest signals in the history. It is the
+       first run where the agent clearly experienced non-melee threat patterns.
+
+    4. Cap the escalating wave stall penalty.
+       v16.2 analysis strongly suggests the uncapped stall penalty amplified the
+       collapse once the policy regressed. I would keep stall punishment, but
+       cap it. Example:
+         - start after 500 ticks
+         - base -0.75/tick
+         - ramp every 50 ticks
+         - hard cap total stall penalty at -3.0 or -4.0 per tick
+       The penalty should force engagement, not create unrecoverable gradients.
+
+    5. Make resource waste more threat-aware, not more positive.
+       I would NOT reintroduce big bonuses for eating/drinking.
+       I WOULD add extra penalties when:
+         - food is used with no pending hit and HP is still high
+         - prayer pot is used with no meaningful threat and prayer is still high
+       Small negative shaping is safer than positive "good timing" bonuses.
+
+    6. Optional: add a small hard-wave resource-efficiency bonus.
+       If we want one new conservation incentive, make it sparse and only on
+       wave clear for harder waves, e.g. wave >= 30. That avoids early-wave
+       farming. Keep it small.
+
+  C. Curriculum recommendation
+
+    Do NOT use 100% wave-30 starts again.
+    v15.2 showed that leads to camping melee prayer and surviving until
+    supplies run out.
+
+    Preferred v17 curriculum is a mixed scaffolding curriculum, modeled after
+    the g2048 scaffolding pattern in pufferlib_4/ocean/g2048/g2048.h:
+
+      - 60% normal episodes from wave 1
+      - 25% episodes starting at wave 30
+      - 10% episodes starting at wave 31
+      - 5% episodes starting at wave 32 or Jad-adjacent content later
+
+    Why:
+      - wave 1 starts preserve full-run kiting/resource behavior
+      - wave 30 starts repeatedly expose Tok-Xil + Yt-MejKot
+      - wave 31 starts expose Ket-Zek magic
+      - mixed starts avoid overfitting to one late-wave snapshot
+
+    The current env only supports one curriculum_wave/curriculum_pct pair.
+    I would upgrade that to multi-bucket scaffolding before v17 if possible.
+
+  D. Hyperparameter recommendation
+
+    Preferred path: warm-start from the best v16.2 checkpoint around 4.7B.
+    PufferLib already supports loading a pretrained checkpoint via
+    --load-model-path. That is a better starting point than another 20B
+    from-scratch run because the best policy already exists.
+
+    Warm-start v17 proposal:
+      - load_model_path = best checkpoint near 4.7B
+      - total_timesteps = 1.5B to 2.5B additional steps
+      - learning_rate = 0.0002 to 0.0003
+      - anneal_lr = 1
+      - ent_coef = 0.03
+      - clip_coef = 0.10 to 0.15
+      - keep gamma = 0.999, gae_lambda = 0.95, horizon = 256
+      - keep total_agents = 4096 unless memory becomes a bottleneck
+      - add checkpoint_interval = 50 or 100
+
+    Why:
+      - v16.2 collapse was optimizer stability, not lack of ability
+      - lower LR + tighter clipping should protect the good policy
+      - slightly higher entropy should help avoid deterministic collapse
+      - shorter run + more checkpoints gives safer early stopping
+
+    If warm-start is not used, fallback from-scratch v17:
+      - keep v16.1-style rewards
+      - lower learning_rate to 0.0005
+      - keep anneal_lr = 1
+      - ent_coef = 0.03
+      - use mixed scaffolding curriculum
+      - run 2.5B to 5B, not 20B
+
+  E. Things I would NOT change for v17
+
+    - Do not disable movement. History says that makes the task easier to
+      learn short-term but hurts the real objective. Kiting is core.
+    - Do not add large dense correct/wrong prayer rewards again.
+      That repeatedly caused reward domination or instability.
+    - Do not increase network size yet. Current failures look like signal and
+      optimizer issues, not model-capacity issues.
+    - Do not run another ultra-long 20B job at lr=0.001.
+      That already found a good policy and then destroyed it.
+
+  F. My strongest v17 recommendation
+
+    If we only do three things before the next run, I would do these:
+
+      1. Add effective-threat observation features for dual-mode NPCs.
+      2. Run a mixed scaffolding curriculum instead of 0% or 100% late starts.
+      3. Warm-start from the best v16.2 checkpoint with much lower LR and more
+         frequent checkpoints.
+
+    That is the highest-probability path to getting past the wave-30/31 wall
+    without reintroducing reward hacks.

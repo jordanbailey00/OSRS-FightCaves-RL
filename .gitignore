@@ -6,6 +6,7 @@ __pycache__/
 venv/
 node_modules/
 *.egg-info/
+pufferlib_4/
 runescape-rl/build/
 
 # Large binaries (>100MB, exceed GitHub file limit)
