@@ -57,18 +57,6 @@ typedef enum {
     PRAYER_PROTECT_MAGIC = 3
 } FcPrayer;
 
-/*
- * Jad telegraph state — visible wind-up before attack lands.
- * PR 2 note: Jad raises legs (ranged) or rears back (magic) for ~3 ticks
- * before the hit is queued. The agent must read this telegraph and switch
- * prayer before the hit resolves.
- */
-typedef enum {
-    JAD_TELEGRAPH_IDLE          = 0,
-    JAD_TELEGRAPH_MAGIC_WINDUP  = 1,
-    JAD_TELEGRAPH_RANGED_WINDUP = 2
-} FcJadTelegraph;
-
 /* Terminal state codes */
 typedef enum {
     TERMINAL_NONE          = 0,
@@ -230,7 +218,6 @@ typedef struct {
     int prayer_changed_this_tick;
 
     /* Cumulative stats (for reward/logging) */
-    int total_damage_dealt;
     int total_damage_taken;
     int total_food_eaten;
     int total_potions_used;
@@ -263,19 +250,13 @@ typedef struct {
     int max_hit;            /* max damage this NPC can roll */
 
     /* AI */
-    int aggro_target;       /* -1 = no target, 0 = player (always 0 in FC) */
     int movement_speed;     /* 1 = walk, 2 = run */
-
-    /* Jad-specific */
-    int jad_telegraph;      /* FcJadTelegraph: current wind-up state */
-    int jad_next_style;     /* FcAttackStyle: the queued attack style */
 
     /* Yt-MejKot healing */
     int heal_timer;         /* ticks until next heal attempt */
     int heal_amount;        /* HP healed per proc */
 
     /* Yt-HurKot (Jad healer) */
-    int is_healer;
     int healer_distracted;  /* 1 if player has attacked this healer */
     int heal_target_idx;    /* NPC index of the entity being healed (Jad) */
 
@@ -316,9 +297,7 @@ typedef struct {
     int current_hp, max_hp;
     int attack_style;   /* FcAttackStyle: current/last attack style */
     int prayer;         /* FcPrayer: active prayer (player only) */
-    int jad_telegraph;  /* FcJadTelegraph (NPCs only) */
     int is_dead;
-    int aggro_target;   /* entity index of aggro target (-1 = none) */
 
     /* Per-tick events for hitsplat/animation rendering */
     int damage_taken_this_tick;

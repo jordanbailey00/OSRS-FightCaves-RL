@@ -300,7 +300,6 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
 
             npc->damage_taken_this_tick += h->damage;
             state->damage_dealt_this_tick += h->damage;
-            state->player.total_damage_dealt += h->damage;
 
             /* Track Jad-specific damage */
             if (npc->npc_type == NPC_TZTOK_JAD) {

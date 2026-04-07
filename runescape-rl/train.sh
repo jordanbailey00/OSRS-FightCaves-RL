@@ -8,15 +8,21 @@
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SRC_DIR/.." && pwd)"
 PUFFER_DIR="${PUFFER_DIR:-$ROOT_DIR/pufferlib_4}"
+CONFIG_PATH="${CONFIG_PATH:-$SRC_DIR/config/fight_caves.ini}"
 
 if [ ! -d "$PUFFER_DIR" ]; then
     echo "Error: PufferLib not found at $PUFFER_DIR"
     exit 1
 fi
 
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "Error: config not found at $CONFIG_PATH"
+    exit 1
+fi
+
 # Sync config to where PufferLib reads it
-cp "$SRC_DIR/config/fight_caves.ini" "$PUFFER_DIR/config/fight_caves.ini"
-echo "[train.sh] Synced config to $PUFFER_DIR/config/fight_caves.ini"
+cp "$CONFIG_PATH" "$PUFFER_DIR/config/fight_caves.ini"
+echo "[train.sh] Synced config from $CONFIG_PATH to $PUFFER_DIR/config/fight_caves.ini"
 
 mkdir -p \
     "$PUFFER_DIR/checkpoints/fight_caves" \

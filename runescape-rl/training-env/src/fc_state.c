@@ -202,6 +202,82 @@ static void sort_npc_indices(int* indices, int count, const FcState* state) {
     }
 }
 
+static int move_action_valid(const FcState* state, int action) {
+    const FcPlayer* p = &state->player;
+    int dest_x;
+    int dest_y;
+
+    if (action < 0 || action >= FC_MOVE_DIM) return 0;
+    if (action == FC_MOVE_IDLE) return 1;
+
+    dest_x = p->x + FC_MOVE_DX[action];
+    dest_y = p->y + FC_MOVE_DY[action];
+    if (dest_x < 0 || dest_x >= FC_ARENA_WIDTH ||
+        dest_y < 0 || dest_y >= FC_ARENA_HEIGHT ||
+        !state->walkable[dest_x][dest_y]) {
+        return 0;
+    }
+    if (action >= FC_MOVE_RUN_N && p->run_energy <= 0) {
+        return 0;
+    }
+    return 1;
+}
+
+static int attack_action_valid(const FcState* state, int action) {
+    int active_indices[FC_MAX_NPCS];
+    int active_count = 0;
+    int visible;
+    int slot;
+
+    if (action < 0 || action >= FC_ATTACK_DIM) return 0;
+    if (action == FC_ATTACK_NONE) return 1;
+
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        if (state->npcs[i].active && !state->npcs[i].is_dead) {
+            active_indices[active_count++] = i;
+        }
+    }
+    sort_npc_indices(active_indices, active_count, state);
+    visible = (active_count < FC_VISIBLE_NPCS) ? active_count : FC_VISIBLE_NPCS;
+    slot = action - 1;
+    return slot >= 0 && slot < visible;
+}
+
+static int prayer_action_valid(int action) {
+    return action >= 0 && action < FC_PRAYER_DIM;
+}
+
+static int eat_action_valid(const FcState* state, int action) {
+    const FcPlayer* p = &state->player;
+
+    if (action < 0 || action >= FC_EAT_DIM) return 0;
+    if (action == FC_EAT_NONE) return 1;
+    if (action == FC_EAT_SHARK) {
+        return p->sharks_remaining > 0 &&
+               p->food_timer <= 0 &&
+               p->current_hp < p->max_hp;
+    }
+    if (action == FC_EAT_COMBO) {
+        return p->sharks_remaining > 0 &&
+               p->combo_timer <= 0 &&
+               p->current_hp < p->max_hp;
+    }
+    return 0;
+}
+
+static int drink_action_valid(const FcState* state, int action) {
+    const FcPlayer* p = &state->player;
+
+    if (action < 0 || action >= FC_DRINK_DIM) return 0;
+    if (action == FC_DRINK_NONE) return 1;
+    if (action == FC_DRINK_PRAYER_POT) {
+        return p->prayer_doses_remaining > 0 &&
+               p->potion_timer <= 0 &&
+               p->current_prayer < p->max_prayer;
+    }
+    return 0;
+}
+
 static int attack_style_summary_idx(int style) {
     switch (style) {
         case ATTACK_MELEE:  return 0;
@@ -230,13 +306,10 @@ static int npc_effective_style_now(const FcState* state, const FcNpc* npc, float
     const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
     int dist = npc_distance(&state->player, npc);
 
-    /* Jad exposes its telegraphed style directly. When idle, there is no
-     * committed next style yet, so report ATTACK_NONE and let telegraph/pending
-     * obs carry the timing signal. */
+    /* Jad no longer exposes a wind-up or pre-fire style hint.
+     * The policy has to react to the queued pending hit instead. */
     if (npc->npc_type == NPC_TZTOK_JAD) {
-        if (npc->jad_telegraph == JAD_TELEGRAPH_MAGIC_WINDUP) return ATTACK_MAGIC;
-        if (npc->jad_telegraph == JAD_TELEGRAPH_RANGED_WINDUP) return ATTACK_RANGED;
-        return ATTACK_NONE;
+        return (dist <= 1 && stats->melee_max_hit > 0) ? ATTACK_MELEE : ATTACK_NONE;
     }
 
     /* Dual-mode NPCs switch to melee at distance 1. Expose the style that
@@ -284,11 +357,6 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_X]         = (float)p->x / (float)FC_ARENA_WIDTH;
     player[FC_OBS_PLAYER_Y]         = (float)p->y / (float)FC_ARENA_HEIGHT;
     player[FC_OBS_PLAYER_ATK_TIMER] = (float)p->attack_timer / 5.0f;  /* typical max attack speed */
-    player[FC_OBS_PLAYER_FOOD_TMR]  = (float)p->food_timer / (float)FC_FOOD_COOLDOWN_TICKS;
-    player[FC_OBS_PLAYER_POT_TMR]   = (float)p->potion_timer / (float)FC_POTION_COOLDOWN_TICKS;
-    player[FC_OBS_PLAYER_COMBO_TMR] = (float)p->combo_timer / (float)FC_COMBO_EAT_TICKS;
-    player[FC_OBS_PLAYER_RUN_NRG]   = (float)p->run_energy / 10000.0f;
-    player[FC_OBS_PLAYER_IS_RUN]    = (float)p->is_running;
     player[FC_OBS_PLAYER_PRAY_MEL]  = (p->prayer == PRAYER_PROTECT_MELEE) ? 1.0f : 0.0f;
     player[FC_OBS_PLAYER_PRAY_RNG]  = (p->prayer == PRAYER_PROTECT_RANGE) ? 1.0f : 0.0f;
     player[FC_OBS_PLAYER_PRAY_MAG]  = (p->prayer == PRAYER_PROTECT_MAGIC) ? 1.0f : 0.0f;
@@ -318,20 +386,15 @@ void fc_write_obs(const FcState* state, float* out) {
         float* npc_out = out + FC_OBS_NPC_START + slot * FC_OBS_NPC_STRIDE;
 
         npc_out[FC_NPC_VALID]         = 1.0f;
-        npc_out[FC_NPC_TYPE]          = (float)n->npc_type / (float)NPC_TYPE_COUNT;
         npc_out[FC_NPC_X]             = (float)n->x / (float)FC_ARENA_WIDTH;
         npc_out[FC_NPC_Y]             = (float)n->y / (float)FC_ARENA_HEIGHT;
         npc_out[FC_NPC_HP]            = (n->max_hp > 0) ? (float)n->current_hp / (float)n->max_hp : 0.0f;
         npc_out[FC_NPC_DISTANCE]      = (float)npc_distance(p, n) / (float)FC_ARENA_WIDTH;
-        npc_out[FC_NPC_ATK_TIMER]     = (n->attack_speed > 0) ? (float)n->attack_timer / (float)n->attack_speed : 0.0f;
-        npc_out[FC_NPC_SIZE]          = (float)n->size / 5.0f;  /* max NPC size is 5 (Ket-Zek, Jad) */
-        npc_out[FC_NPC_IS_HEALER]     = (float)n->is_healer;
-        npc_out[FC_NPC_JAD_TELEGRAPH] = (float)n->jad_telegraph / 2.0f;
-        npc_out[FC_NPC_AGGRO]         = (n->aggro_target >= 0) ? 1.0f : 0.0f;
         float has_los = (float)fc_has_line_of_sight(
             p->x, p->y, n->x + n->size/2, n->y + n->size/2, state->walkable);
-        npc_out[FC_NPC_LOS]           = has_los;
         npc_out[FC_NPC_EFFECTIVE_STYLE] = (float)npc_effective_style_now(state, n, has_los) / 3.0f;
+        npc_out[FC_NPC_ATK_TIMER]     = (n->attack_speed > 0) ? (float)n->attack_timer / (float)n->attack_speed : 0.0f;
+        npc_out[FC_NPC_LOS]           = has_los;
 
         /* Pending attack from this NPC — scan player's pending hits */
         npc_out[FC_NPC_PENDING_STYLE] = 0.0f;
@@ -367,7 +430,6 @@ void fc_write_obs(const FcState* state, float* out) {
     meta[FC_OBS_META_IN_RNG_3T]  = normalize_incoming_count(incoming_counts[2][1]);
     meta[FC_OBS_META_IN_MAG_3T]  = normalize_incoming_count(incoming_counts[2][2]);
     meta[FC_OBS_META_DMG_T_TICK] = (p->max_hp > 0) ? (float)state->damage_taken_this_tick / (float)p->max_hp : 0.0f;
-    meta[FC_OBS_META_KILLS_TICK] = (float)state->npcs_killed_this_tick / (float)FC_MAX_NPCS;
     meta[FC_OBS_META_WAVE_CLR]   = (float)state->wave_just_cleared;
 
     /* Reward features (at offset FC_REWARD_START) — written by fc_write_reward_features */
@@ -398,43 +460,35 @@ void fc_write_reward_features(const FcState* state, float* out) {
     out[FC_RWD_WRONG_DANGER_PRAY]   = (float)state->wrong_danger_prayer;
 }
 
+int fc_action_attempt_is_invalid(const FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
+    /* Keep this aligned with the RL-facing mask surface (heads 0-4 only).
+     * Path-target X/Y are intentionally excluded here because those heads are
+     * not exposed in the policy mask today and would dominate this signal. */
+    return !move_action_valid(state, actions[0]) ||
+           !attack_action_valid(state, actions[1]) ||
+           !prayer_action_valid(actions[2]) ||
+           !eat_action_valid(state, actions[3]) ||
+           !drink_action_valid(state, actions[4]);
+}
+
 void fc_write_mask(const FcState* state, float* out) {
     /* Set all to valid, then mask invalid */
     for (int i = 0; i < FC_ACTION_MASK_SIZE; i++) {
         out[i] = 1.0f;
     }
 
-    const FcPlayer* p = &state->player;
-
     /* MOVE: idle always valid. Walk/run directions masked if destination not walkable */
     for (int m = 1; m < FC_MOVE_DIM; m++) {
-        int dest_x = p->x + FC_MOVE_DX[m];
-        int dest_y = p->y + FC_MOVE_DY[m];
-        /* For run (m >= 9), check both intermediate and final tile */
-        if (dest_x < 0 || dest_x >= FC_ARENA_WIDTH ||
-            dest_y < 0 || dest_y >= FC_ARENA_HEIGHT ||
-            !state->walkable[dest_x][dest_y]) {
-            out[FC_MASK_MOVE_START + m] = 0.0f;
-        }
-        /* Run requires energy */
-        if (m >= 9 && p->run_energy <= 0) {
+        if (!move_action_valid(state, m)) {
             out[FC_MASK_MOVE_START + m] = 0.0f;
         }
     }
 
     /* ATTACK: slot 0 (none) always valid. Slots 1-8 masked if no NPC in that slot */
-    /* NPC slot availability determined by same ordering as observation */
-    int active_indices[FC_MAX_NPCS];
-    int active_count = 0;
-    for (int i = 0; i < FC_MAX_NPCS; i++) {
-        if (state->npcs[i].active && !state->npcs[i].is_dead) {
-            active_indices[active_count++] = i;
+    for (int attack = FC_ATTACK_NONE + 1; attack < FC_ATTACK_DIM; attack++) {
+        if (!attack_action_valid(state, attack)) {
+            out[FC_MASK_ATTACK_START + attack] = 0.0f;
         }
-    }
-    sort_npc_indices(active_indices, active_count, state);
-    int visible = (active_count < FC_VISIBLE_NPCS) ? active_count : FC_VISIBLE_NPCS;
-    for (int slot = visible; slot < FC_VISIBLE_NPCS; slot++) {
-        out[FC_MASK_ATTACK_START + 1 + slot] = 0.0f;  /* no NPC in this slot */
     }
 
     /* PRAYER: leave fully unmasked.
@@ -443,16 +497,15 @@ void fc_write_mask(const FcState* state, float* out) {
      * having them hidden by the mask. */
 
     /* EAT */
-    if (p->sharks_remaining <= 0 || p->food_timer > 0 || p->current_hp >= p->max_hp) {
+    if (!eat_action_valid(state, FC_EAT_SHARK)) {
         out[FC_MASK_EAT_START + FC_EAT_SHARK] = 0.0f;
     }
-    if (p->sharks_remaining <= 0 || p->combo_timer > 0 || p->current_hp >= p->max_hp) {
+    if (!eat_action_valid(state, FC_EAT_COMBO)) {
         out[FC_MASK_EAT_START + FC_EAT_COMBO] = 0.0f;
     }
 
     /* DRINK */
-    if (p->prayer_doses_remaining <= 0 || p->potion_timer > 0 ||
-        p->current_prayer >= p->max_prayer) {
+    if (!drink_action_valid(state, FC_DRINK_PRAYER_POT)) {
         out[FC_MASK_DRINK_START + FC_DRINK_PRAYER_POT] = 0.0f;
     }
 }
@@ -500,9 +553,7 @@ void fc_fill_render_entities(const FcState* state, FcRenderEntity* entities, int
         ne->current_hp = n->current_hp;
         ne->max_hp = n->max_hp;
         ne->attack_style = n->attack_style;
-        ne->jad_telegraph = n->jad_telegraph;
         ne->is_dead = n->is_dead;
-        ne->aggro_target = n->aggro_target;
         ne->damage_taken_this_tick = n->damage_taken_this_tick;
         ne->died_this_tick = n->died_this_tick;
         ne->npc_slot = i;

@@ -16,6 +16,7 @@ Start the new session in:
 Current local working tree state:
 - modified: `changelog.md`
 - modified: `runescape-rl/docs/rl_config.md`
+- modified: `runescape-rl/config/fight_caves.ini`
 - untracked: `handoff.md`
 
 Meaning:
@@ -54,7 +55,7 @@ cd /home/joe/projects/runescape-rl/codex3/runescape-rl && bash train.sh
 ```
 
 Important:
-- Do not set `LOAD_MODEL_PATH` for `v17.1`
+- Do not set `LOAD_MODEL_PATH` for `v18`
 - `train.sh` handles:
   - syncing `runescape-rl/config/fight_caves.ini` into `pufferlib_4/config/fight_caves.ini`
   - local output directories
@@ -71,19 +72,27 @@ Current latest completed log file:
 
 ## Current Live Config
 
-The live config is `v17.1`, not the older `v17` warm-start run.
+The live config is now **`v18` prepared / not yet started**.
 
-`v17.1` definition:
+`v18` definition:
 - no curriculum
 - no warm-start
 - `1.5B` steps
-- keep the current `v17` obs/reward/PPO package otherwise
+- keep the current pruned obs/backend
+- revert PPO + dense reward recipe closer to `ge5sma5y`
 
 Core live values:
 - `total_timesteps = 1_500_000_000`
-- `learning_rate = 0.00025`
-- `clip_coef = 0.12`
-- `ent_coef = 0.03`
+- `learning_rate = 0.001`
+- `clip_coef = 0.2`
+- `ent_coef = 0.02`
+- `w_damage_dealt = 1.0`
+- `w_npc_kill = 2.0`
+- `w_correct_danger_prayer = 1.0`
+- `shape_food_safe_hp_threshold = 1.0`
+- `shape_food_no_threat_penalty = 0.0`
+- `shape_pot_safe_prayer_threshold = 1.0`
+- `shape_pot_no_threat_penalty = 0.0`
 - `curriculum_wave = 0`
 - `curriculum_pct = 0.0`
 - `curriculum_wave_2 = 0`
@@ -91,9 +100,12 @@ Core live values:
 - `curriculum_wave_3 = 0`
 - `curriculum_pct_3 = 0.0`
 
-This config is already mirrored into:
+This config is already updated in:
 - [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini)
+
+It will be mirrored into:
 - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini`
+- automatically by `bash train.sh` at launch time
 
 ## What Changed In Codex3
 
@@ -107,7 +119,7 @@ High-level changes already implemented in `codex3`:
 - `prayer_drain_counter` added to obs
 - Prayer flick reward disabled
 - Reward shaping moved into config-backed `shape_*` knobs
-- Threat-aware food/pot shaping added
+- Threat-aware food/pot shaping added (disabled in the `v18` recovery recipe)
 - Mixed curriculum support added
 - Extra analytics added:
   - per-style prayer uptime
@@ -190,7 +202,7 @@ The current hypothesis is:
 - the next run should preserve the new observation contract but move the
   optimization and dense reward recipe back toward `ge5sma5y`
 
-Recommended next run: `v17.2`
+Recommended next run: `v18`
 - keep current obs improvements
 - keep prayer flick reward disabled
 - keep capped stall penalty
@@ -210,7 +222,7 @@ Recommended next run: `v17.2`
 
 1. Treat `q3ald8bc` as completed and analyzed
 2. Use [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) as the source of truth for the `v17.1` postmortem
-3. Prepare the next run as `v17.2` using the recommendation above
+3. Prepare and launch the next run as `v18` using the recommendation above
 4. Only revisit curriculum or warm-start after the scratch recipe works again
 
 Useful command after completion:

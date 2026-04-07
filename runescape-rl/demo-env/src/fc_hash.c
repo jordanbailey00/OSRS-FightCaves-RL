@@ -80,7 +80,6 @@ static uint32_t hash_player(uint32_t h, const FcPlayer* p) {
     h = hash_pending_hits(h, p->pending_hits, FC_MAX_PENDING_HITS);
     h = fnv_feed_int(h, p->damage_taken_this_tick);
     h = fnv_feed_int(h, p->hit_landed_this_tick);
-    h = fnv_feed_int(h, p->total_damage_dealt);
     h = fnv_feed_int(h, p->total_damage_taken);
     return h;
 }
@@ -100,12 +99,8 @@ static uint32_t hash_npc(uint32_t h, const FcNpc* n) {
     h = fnv_feed_int(h, n->attack_speed);
     h = fnv_feed_int(h, n->attack_range);
     h = fnv_feed_int(h, n->max_hit);
-    h = fnv_feed_int(h, n->aggro_target);
     h = fnv_feed_int(h, n->movement_speed);
-    h = fnv_feed_int(h, n->jad_telegraph);
-    h = fnv_feed_int(h, n->jad_next_style);
     h = fnv_feed_int(h, n->heal_timer);
-    h = fnv_feed_int(h, n->is_healer);
     h = fnv_feed_int(h, n->healer_distracted);
     h = fnv_feed_int(h, n->heal_target_idx);
     h = fnv_feed_int(h, n->damage_taken_this_tick);

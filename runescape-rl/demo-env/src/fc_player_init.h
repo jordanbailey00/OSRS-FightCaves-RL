@@ -90,7 +90,7 @@ static const FcLoadout FC_LOADOUTS[FC_NUM_LOADOUTS] = {
         .def_magic    = 91,    /* 4+0+50+28+8+1 */
         .def_ranged   = 90,    /* 4+0+55+31+0+0 */
         .prayer_bonus = 0,
-        .ammo         = 1000,
+        .ammo         = 50000,
     },
     /* [1] Loadout B: End-game — Masori (f) + Twisted Bow */
     {
@@ -111,7 +111,7 @@ static const FcLoadout FC_LOADOUTS[FC_NUM_LOADOUTS] = {
         .def_magic    = 148,   /* 12+0+0+0+74+46+11+5+0+0 */
         .def_ranged   = 111,   /* 9+0+0+0+60+37+0+5+0+0 */
         .prayer_bonus = 9,     /* 1+0+2+4+1+1+0+0+0+0 */
-        .ammo         = 1000,
+        .ammo         = 50000,
     },
 };
 

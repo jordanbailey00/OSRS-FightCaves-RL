@@ -74,7 +74,6 @@ static void dbg_log_tick(const FcState* state) {
     const FcPlayer* p = &state->player;
     static const char* npc_names[] = {"?","Tz-Kih","Tz-Kek","Kek-Sm","Tok-Xil",
         "MejKot","Ket-Zek","Jad","HurKot"};
-    static const char* style_str[] = {"none","melee","ranged","magic"};
 
     /* Player took damage */
     if (p->damage_taken_this_tick > 0) {
@@ -128,24 +127,6 @@ static void dbg_log_tick(const FcState* state) {
                           "%s[%d] KILLED", nm, i);
         }
 
-        /* Jad telegraph — only log on state change */
-        if (n->npc_type == NPC_TZTOK_JAD && n->active && !n->is_dead) {
-            static int prev_jad_telegraph = JAD_TELEGRAPH_IDLE;
-            if (n->jad_telegraph != prev_jad_telegraph) {
-                if (n->jad_telegraph == JAD_TELEGRAPH_MAGIC_WINDUP) {
-                    int correct = (p->prayer == PRAYER_PROTECT_MAGIC);
-                    dbg_log_event(t, correct ? CLITERAL(Color){100,255,100,255} : CLITERAL(Color){255,50,50,255},
-                                  "Jad: MAGIC telegraph — prayer %s",
-                                  correct ? "CORRECT" : "WRONG!");
-                } else if (n->jad_telegraph == JAD_TELEGRAPH_RANGED_WINDUP) {
-                    int correct = (p->prayer == PRAYER_PROTECT_RANGE);
-                    dbg_log_event(t, correct ? CLITERAL(Color){100,255,100,255} : CLITERAL(Color){255,50,50,255},
-                                  "Jad: RANGED telegraph — prayer %s",
-                                  correct ? "CORRECT" : "WRONG!");
-                }
-                prev_jad_telegraph = n->jad_telegraph;
-            }
-        }
     }
 
     /* Movement — log new route destination (walk-to-tile or click-to-move) */
@@ -369,9 +350,12 @@ static void dbg_draw_entity_info(const FcState* state, Camera3D camera) {
              p->food_eaten_this_tick, p->potion_used_this_tick, p->prayer_changed_this_tick);
     DrawText(buf, panel_x + 4, y, 10, DBG_COL_DIM); y += lh;
 
-    snprintf(buf, sizeof(buf), "Totals: dmg_dealt=%d dmg_taken=%d food=%d pots=%d",
-             p->total_damage_dealt, p->total_damage_taken,
-             p->total_food_eaten, p->total_potions_used);
+    snprintf(buf, sizeof(buf), "Totals: dmg_taken=%d food=%d pots=%d switches=%d",
+             p->total_damage_taken,
+             p->total_food_eaten, p->total_potions_used, state->ep_prayer_switches);
+    DrawText(buf, panel_x + 4, y, 10, DBG_COL_DIM); y += lh;
+    snprintf(buf, sizeof(buf), "Wave30:%d Clear30:%d Wave31:%d",
+             state->ep_reached_wave_30, state->ep_cleared_wave_30, state->ep_reached_wave_31);
     DrawText(buf, panel_x + 4, y, 10, DBG_COL_DIM); y += lh;
 
     /* NPC info panels (compact, for each active NPC) */
@@ -400,17 +384,12 @@ static void dbg_draw_entity_info(const FcState* state, Camera3D camera) {
                  style_str[n->attack_style]);
         DrawText(buf, panel_x + 4, ny, 10, DBG_COL_LABEL); ny += lh;
 
-        snprintf(buf, sizeof(buf), "AtkTmr:%d/%d  Range:%d  MaxHit:%d  Aggro:%d",
+        snprintf(buf, sizeof(buf), "AtkTmr:%d/%d  Range:%d  MaxHit:%d",
                  n->attack_timer, n->attack_speed, n->attack_range,
-                 n->max_hit/10, n->aggro_target);
+                 n->max_hit/10);
         DrawText(buf, panel_x + 4, ny, 10, DBG_COL_LABEL); ny += lh;
 
-        if (n->npc_type == NPC_TZTOK_JAD) {
-            static const char* tele_str[] = {"idle","MAGIC","RANGED"};
-            snprintf(buf, sizeof(buf), "Jad: telegraph=%s next=%s",
-                     tele_str[n->jad_telegraph], style_str[n->jad_next_style]);
-            DrawText(buf, panel_x + 4, ny, 10, DBG_COL_BAD);
-        } else if (n->npc_type == NPC_YT_HURKOT) {
+        if (n->npc_type == NPC_YT_HURKOT) {
             snprintf(buf, sizeof(buf), "Healer: distracted=%d heal_target=%d",
                      n->healer_distracted, n->heal_target_idx);
             DrawText(buf, panel_x + 4, ny, 10, DBG_COL_LABEL);
@@ -432,6 +411,7 @@ static void dbg_draw_entity_info(const FcState* state, Camera3D camera) {
 static void dbg_draw_obs(const FcState* state, int dbg_flags) {
     float obs[FC_OBS_SIZE];
     fc_write_obs(state, obs);
+    const FcPlayer* p = &state->player;
 
     int rx = 300;
     int ry = 160;
@@ -439,22 +419,44 @@ static void dbg_draw_obs(const FcState* state, int dbg_flags) {
     char buf[128];
 
     if (dbg_flags & DBG_OBS) {
-        int pw = 260, ph = lh * 12 + 10;
+        int pw = 320, ph = lh * 16 + 10;
         DrawRectangle(rx, ry, pw, ph, DBG_COL_PANEL);
         int y = ry + 4;
-        DrawText("OBSERVATION (policy)", rx + 4, y, 11, DBG_COL_VALUE); y += lh + 2;
+        DrawText("OBSERVATION (policy + live state)", rx + 4, y, 11, DBG_COL_VALUE); y += lh + 2;
 
         snprintf(buf, sizeof(buf), "HP:%.2f Pray:%.2f X:%.2f Y:%.2f",
                  obs[0], obs[1], obs[2], obs[3]);
         DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL); y += lh;
-        snprintf(buf, sizeof(buf), "AtkTmr:%.2f FoodTmr:%.2f PotTmr:%.2f",
-                 obs[4], obs[5], obs[6]);
+        snprintf(buf, sizeof(buf), "AtkTmr:%.2f Sharks:%.2f Doses:%.2f",
+                 obs[FC_OBS_PLAYER_ATK_TIMER],
+                 obs[FC_OBS_PLAYER_SHARKS],
+                 obs[FC_OBS_PLAYER_DOSES]);
         DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL); y += lh;
         snprintf(buf, sizeof(buf), "PrayMel:%.0f PrayRng:%.0f PrayMag:%.0f",
-                 obs[10], obs[11], obs[12]);
+                 obs[FC_OBS_PLAYER_PRAY_MEL],
+                 obs[FC_OBS_PLAYER_PRAY_RNG],
+                 obs[FC_OBS_PLAYER_PRAY_MAG]);
         DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL); y += lh;
-        snprintf(buf, sizeof(buf), "Sharks:%.2f Doses:%.2f Ammo:%.2f",
-                 obs[13], obs[14], obs[15]);
+        snprintf(buf, sizeof(buf), "FoodT:%d PotT:%d ComboT:%d",
+                 p->food_timer, p->potion_timer, p->combo_timer);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_DIM); y += lh;
+        snprintf(buf, sizeof(buf), "Run:%d Energy:%d Ammo:%d",
+                 p->is_running, p->run_energy, p->ammo_count);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_DIM); y += lh;
+        snprintf(buf, sizeof(buf), "Def:%d Rng:%d TotT:%d Sw:%d",
+                 p->defence_level, p->ranged_level,
+                 p->total_damage_taken, state->ep_prayer_switches);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_DIM); y += lh;
+        snprintf(buf, sizeof(buf), "In1: M%.2f R%.2f G%.2f",
+                 obs[FC_OBS_PLAYER_IN_MEL_1T],
+                 obs[FC_OBS_PLAYER_IN_RNG_1T],
+                 obs[FC_OBS_PLAYER_IN_MAG_1T]);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL); y += lh;
+        snprintf(buf, sizeof(buf), "In2: M%.2f R%.2f G%.2f  Tgt:%.2f",
+                 obs[FC_OBS_PLAYER_IN_MEL_2T],
+                 obs[FC_OBS_PLAYER_IN_RNG_2T],
+                 obs[FC_OBS_PLAYER_IN_MAG_2T],
+                 obs[FC_OBS_PLAYER_TARGET]);
         DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL); y += lh;
 
         /* NPC slots summary */
@@ -463,16 +465,36 @@ static void dbg_draw_obs(const FcState* state, int dbg_flags) {
         for (int s = 0; s < FC_OBS_NPC_SLOTS; s++) {
             int base = FC_OBS_NPC_START + s * FC_OBS_NPC_STRIDE;
             if (obs[base + FC_NPC_VALID] < 0.5f) continue;
-            snprintf(buf, sizeof(buf), " [%d] type:%.1f hp:%.2f dist:%.2f style:%.1f tele:%.1f",
-                     s, obs[base+1], obs[base+4], obs[base+5], obs[base+6], obs[base+10]);
+            snprintf(buf, sizeof(buf), " [%d] hp:%.2f dist:%.2f style:%.1f pend:%.1f@%.1f",
+                     s,
+                     obs[base + FC_NPC_HP],
+                     obs[base + FC_NPC_DISTANCE],
+                     obs[base + FC_NPC_EFFECTIVE_STYLE],
+                     obs[base + FC_NPC_PENDING_STYLE],
+                     obs[base + FC_NPC_PENDING_TICKS]);
             DrawText(buf, rx + 4, y, 8, DBG_COL_LABEL); y += lh - 1;
         }
 
         /* Meta */
         y += 4;
         int mbase = FC_OBS_META_START;
-        snprintf(buf, sizeof(buf), "Wave:%.2f Rot:%.2f Remain:%.2f Tick:%.4f",
-                 obs[mbase], obs[mbase+1], obs[mbase+2], obs[mbase+3]);
+        snprintf(buf, sizeof(buf), "Wave:%.2f Rot:%.2f Remain:%.2f Pray:%.2f",
+                 obs[mbase + FC_OBS_META_WAVE],
+                 obs[mbase + FC_OBS_META_ROTATION],
+                 obs[mbase + FC_OBS_META_REMAINING],
+                 obs[mbase + FC_OBS_META_PRAY_DRAIN]);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL);
+        y += lh;
+        snprintf(buf, sizeof(buf), "In3: M%.2f R%.2f G%.2f",
+                 obs[mbase + FC_OBS_META_IN_MEL_3T],
+                 obs[mbase + FC_OBS_META_IN_RNG_3T],
+                 obs[mbase + FC_OBS_META_IN_MAG_3T]);
+        DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL);
+        y += lh;
+        snprintf(buf, sizeof(buf), "DmgTaken:%.2f WaveClr:%.0f Kills:%d",
+                 obs[mbase + FC_OBS_META_DMG_T_TICK],
+                 obs[mbase + FC_OBS_META_WAVE_CLR],
+                 state->npcs_killed_this_tick);
         DrawText(buf, rx + 4, y, 9, DBG_COL_LABEL);
 
         ry += ph + 4;

@@ -11,7 +11,7 @@
  * NPC AI per tick (generic):
  *   1. If dead or inactive, skip.
  *   2. Decrement attack timer.
- *   3. Type-specific behavior (Jad telegraph, Yt-MejKot heal, Yt-HurKot heal).
+ *   3. Type-specific behavior (Jad style selection, Yt-MejKot heal, Yt-HurKot heal).
  *   4. If not in attack range, move toward player (greedy step).
  *   5. If in range and attack timer ready, roll attack and queue pending hit.
  *
@@ -22,7 +22,7 @@
  *   Tok-Xil:    Ranged with projectile delay.
  *   Yt-MejKot:  Melee + heals nearby NPCs on timer.
  *   Ket-Zek:    Magic with projectile delay.
- *   TzTok-Jad:  Magic/ranged alternating with 3-tick telegraph wind-up.
+ *   TzTok-Jad:  Random magic/ranged attack selection, melee at range 1.
  *   Yt-HurKot:  Heals Jad unless distracted by player attack.
  */
 
@@ -82,7 +82,7 @@ static const FcNpcStats NPC_STATS[NPC_TYPE_COUNT] = {
      * combat.toml: melee stab max 540 (range 1), magic max 490 (range 14) */
     { 1600, ATTACK_MAGIC, 4, 14, 490, 540, 240, 0, 240, 0, 5, 1, 0, 0, 0, 0 },
 
-    /* NPC_TZTOK_JAD: Lv 702 magic + ranged + melee. Telegraph wind-up.
+    /* NPC_TZTOK_JAD: Lv 702 magic + ranged + melee.
      * Void 634: HP 2500, Att 640, Str 960, Def 480, Mag 480, Rng 960, size 5
      * combat.toml: melee stab max 970 (range 1), magic max 950 (range 14), ranged max 970
      * attack speed 8 (double normal), range 14 */
@@ -120,13 +120,9 @@ void fc_npc_spawn(FcNpc* npc, int npc_type, int x, int y, int spawn_index) {
     npc->attack_speed = stats->attack_speed;
     npc->attack_range = stats->attack_range;
     npc->max_hit = stats->max_hit;
-    npc->aggro_target = 0;  /* always target player in Fight Caves */
     npc->movement_speed = stats->movement_speed;
-    npc->jad_telegraph = JAD_TELEGRAPH_IDLE;
-    npc->jad_next_style = ATTACK_NONE;
     npc->heal_timer = stats->heal_interval;  /* start at full cooldown */
     npc->heal_amount = stats->heal_amount;
-    npc->is_healer = (npc_type == NPC_YT_HURKOT) ? 1 : 0;
     npc->healer_distracted = 0;
     npc->heal_target_idx = -1;
     npc->damage_taken_this_tick = 0;
@@ -161,66 +157,47 @@ void fc_npc_tz_kek_split(FcState* state, int dead_x, int dead_y) {
 }
 
 /* ======================================================================== */
-/* Jad telegraph state machine                                               */
+/* Jad direct attack selection                                               */
 /* ======================================================================== */
 
-/*
- * Jad attack cycle:
- *   IDLE → (choose style via RNG) → set telegraph to MAGIC_WINDUP or RANGED_WINDUP
- *   → hold telegraph for 3 ticks (attack_speed / 2 approximately)
- *   → fire attack (queue pending hit) → reset attack timer → IDLE
- *
- * The agent must read the telegraph and switch prayer before the hit resolves.
- * Telegraph is visible in observations as FC_NPC_JAD_TELEGRAPH.
- */
-static void jad_telegraph_tick(FcState* state, FcNpc* npc, int npc_idx) {
-    const FcNpcStats* stats = fc_npc_get_stats(NPC_TZTOK_JAD);
+static void jad_attack(FcState* state, FcNpc* npc, int npc_idx) {
+    const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
     FcPlayer* p = &state->player;
     int dist = fc_distance_to_npc(p->x, p->y, npc);
 
-    if (npc->jad_telegraph == JAD_TELEGRAPH_IDLE) {
-        /* Start new attack cycle when timer is ready and has LOS */
-        if (npc->attack_timer <= 0 && dist <= npc->attack_range &&
-            fc_has_los_to_npc(p->x, p->y, npc->x, npc->y, npc->size,
-                              state->walkable)) {
-            /* Choose attack style via RNG */
-            int style = (fc_rng_int(state, 2) == 0) ? ATTACK_MAGIC : ATTACK_RANGED;
-            npc->jad_next_style = style;
-            npc->jad_telegraph = (style == ATTACK_MAGIC)
-                ? JAD_TELEGRAPH_MAGIC_WINDUP
-                : JAD_TELEGRAPH_RANGED_WINDUP;
-            /* Telegraph holds for 3 ticks before the hit fires */
-            npc->attack_timer = 3;
-        }
-    } else {
-        /* Wind-up in progress — count down, then fire */
-        if (npc->attack_timer <= 0) {
-            /* Fire the attack */
-            int att_roll = fc_npc_attack_roll(stats->att_level, stats->att_bonus);
-            int def_roll = fc_player_def_roll(p, npc->jad_next_style);
-            float chance = fc_hit_chance(att_roll, def_roll);
+    if (npc->attack_timer > 0) return;
 
-            int max_hit = (npc->jad_next_style == ATTACK_MAGIC)
-                ? stats->max_hit : stats->jad_ranged_max_hit;
+    int use_style = ATTACK_NONE;
+    int use_max_hit = 0;
+    int in_range = 0;
 
-            int hit = (fc_rng_float(state) < chance) ? 1 : 0;
-            int damage = hit ? fc_rng_int(state, max_hit + 1) : 0;
-
-            /* Jad hit delay: CLIENT_TICKS.toTicks(64) + 1 = 64/30 + 1 = 3 game ticks.
-             * This is fixed (not distance-dependent) per JadTelegraph.kt.
-             * Combined with the 3-tick telegraph wind-up, total = 6 ticks from attack start. */
-            int delay = 3;  /* JAD_HIT_CLIENT_DELAY=64, toTicks(64)=2, +1=3 */
-
-            fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
-                                 FC_MAX_PENDING_HITS,
-                                 damage, delay, npc->jad_next_style, npc_idx, 0);
-
-            /* Reset to idle, full attack cooldown */
-            npc->jad_telegraph = JAD_TELEGRAPH_IDLE;
-            npc->jad_next_style = ATTACK_NONE;
-            npc->attack_timer = npc->attack_speed;
-        }
+    if (dist <= 1 && stats->melee_max_hit > 0) {
+        use_style = ATTACK_MELEE;
+        use_max_hit = stats->melee_max_hit;
+        in_range = 1;
+    } else if (dist <= npc->attack_range &&
+               fc_has_los_to_npc(p->x, p->y, npc->x, npc->y, npc->size,
+                                 state->walkable)) {
+        use_style = (fc_rng_int(state, 2) == 0) ? ATTACK_MAGIC : ATTACK_RANGED;
+        use_max_hit = (use_style == ATTACK_MAGIC) ? stats->max_hit : stats->jad_ranged_max_hit;
+        in_range = 1;
     }
+
+    if (!in_range) return;
+
+    int att_roll = fc_npc_attack_roll(stats->att_level, stats->att_bonus);
+    int def_roll = fc_player_def_roll(p, use_style);
+    float chance = fc_hit_chance(att_roll, def_roll);
+
+    int hit = (fc_rng_float(state) < chance) ? 1 : 0;
+    int damage = hit ? fc_rng_int(state, use_max_hit + 1) : 0;
+    int delay = fc_npc_hit_delay(npc->npc_type, use_style, dist);
+
+    fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
+                         FC_MAX_PENDING_HITS,
+                         damage, delay, use_style, npc_idx, 0);
+
+    npc->attack_timer = npc->attack_speed;
 }
 
 /* ======================================================================== */
@@ -391,9 +368,8 @@ void fc_npc_tick(FcState* state, int npc_idx) {
         yt_mejkot_heal_tick(state, npc);
     }
 
-    /* Jad: telegraph state machine handles everything */
+    /* Jad: move into range, then choose its attack style when the hit is queued */
     if (npc->npc_type == NPC_TZTOK_JAD) {
-        /* Jad movement: if not in range, walk toward player (size-aware) */
         int dist = fc_distance_to_npc(p->x, p->y, npc);
         if (dist > npc->attack_range) {
             for (int step = 0; step < npc->movement_speed; step++) {
@@ -401,7 +377,7 @@ void fc_npc_tick(FcState* state, int npc_idx) {
                                          npc->size, state->walkable);
             }
         }
-        jad_telegraph_tick(state, npc, npc_idx);
+        jad_attack(state, npc, npc_idx);
         return;
     }
 

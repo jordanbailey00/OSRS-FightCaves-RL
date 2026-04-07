@@ -2,7 +2,7 @@
 FIGHT CAVES RL — DESIGN DOCUMENT
 ================================================================================
 
-Last updated: 2026-04-04. Update only on major architectural changes or
+Last updated: 2026-04-06. Update only on major architectural changes or
 significant new lessons learned.
 
 ================================================================================
@@ -23,7 +23,7 @@ TABLE OF CONTENTS
     2.2  What Worked
     2.3  What Didn't Work
     2.4  References Used
-    2.5  Training History (v1–v6.1)
+    2.5  Training History (v1–v18)
     2.6  Technical Gotchas
 
   PART 3: REPRODUCTION GUIDE
@@ -39,9 +39,10 @@ PART 1: CURRENT ARCHITECTURE
 1.1 System Overview
 --------------------------------------------------------------------------------
 
-Three components share a single C backend:
+Three components share one logical Fight Caves backend, but today it still
+exists as mirrored source copies under `training-env/src` and `demo-env/src`:
 
-  1. fc_*.c/h (backend)     — deterministic game simulation, ~4500 LOC
+  1. fc_*.c/h (backend)     — deterministic game simulation
   2. demo-env/  (viewer)    — Raylib 3D viewer for human play + debug, ~2100 LOC
   3. training-env/ (RL)     — PufferLib 4.0 headless wrapper, ~360 LOC
 
@@ -54,68 +55,66 @@ Data flow:
   [fc_step()] --state--> [fc_fill_render_entities()] --entities--> [viewer.c render]
 
 The viewer NEVER decides gameplay outcomes. It sends actions, reads state,
-draws state. All gameplay authority lives in fc_*.c.
+draws state. All gameplay authority lives in the mirrored fc_*.c backend.
 
 --------------------------------------------------------------------------------
 1.2 Backend Simulation (fc_*.c/h)
 --------------------------------------------------------------------------------
 
-All files live in demo-env/src/ (authoritative) and training-env/src/ (copy).
-Training-env excludes viewer-only files (fc_debug.c, fc_hash.c).
+Gameplay files currently exist in both `demo-env/src/` and `training-env/src/`.
+The two trees are intended to stay behaviorally identical, but they are not yet
+physically shared.
 
-FILE MAP (18 files, ~4550 LOC total):
+FILE MAP (18 gameplay files mirrored between training and demo):
 
-  fc_types.h (386 LOC) — Core types and constants.
+  fc_types.h — Core types and constants.
     Structs: FcState, FcPlayer, FcNpc, FcPendingHit, FcWaveEntry,
              FcRenderEntity
     Enums:   FcNpcType (8 types), FcAttackStyle, FcPrayer, FcTerminalCode,
-             FcJadTelegraph, FcSpawnDir
+             FcSpawnDir
     Constants: FC_ARENA_WIDTH=64, FC_ARENA_HEIGHT=64, FC_MAX_NPCS=16,
                FC_VISIBLE_NPCS=8, FC_MAX_PENDING_HITS=8, FC_NUM_WAVES=63,
                FC_NUM_ROTATIONS=15, FC_MAX_SHARKS=20, FC_MAX_PRAYER_DOSES=32,
                FC_MAX_ROUTE=64, FC_MAX_EPISODE_TICKS=200000,
                FC_FOOD_COOLDOWN_TICKS=3, FC_POTION_COOLDOWN_TICKS=2
 
-  fc_contracts.h (313 LOC) — Frozen observation/action/reward buffer layouts.
-    FC_POLICY_OBS_SIZE=135, FC_REWARD_FEATURES=16, FC_ACTION_MASK_SIZE=166,
-    FC_NUM_ACTION_HEADS=7, FC_PUFFER_OBS_SIZE=162, FC_PUFFER_NUM_ATNS=5
+  fc_contracts.h — Frozen observation/action/reward buffer layouts.
+    FC_POLICY_OBS_SIZE=106, FC_REWARD_FEATURES=18, FC_ACTION_MASK_SIZE=166,
+    FC_NUM_ACTION_HEADS=7, FC_PUFFER_OBS_SIZE=142, FC_PUFFER_NUM_ATNS=5
     Per-feature index constants (FC_OBS_PLAYER_HP, FC_RWD_DAMAGE_DEALT, etc.)
     Per-head dimensions and direction lookup tables (FC_MOVE_DX[], FC_MOVE_DY[])
 
-  fc_api.h (116 LOC) — Public API.
+  fc_api.h — Public API.
     fc_init(), fc_reset(seed), fc_step(actions[7]), fc_destroy()
-    fc_write_obs(out[151]), fc_write_mask(out[166]),
-    fc_write_reward_features(out[16])
+    fc_write_obs(out[124]), fc_write_mask(out[166]),
+    fc_write_reward_features(out[18])
     fc_is_terminal(), fc_terminal_code()
     fc_fill_render_entities(entities[], count)
     fc_rng_seed(), fc_rng_next(), fc_rng_int(max), fc_rng_float()
     fc_state_hash() [demo-env only]
 
-  fc_state.c (433 LOC) — State lifecycle, observation/mask/reward writers.
+  fc_state.c — State lifecycle, observation/mask/reward writers.
     setup_arena(): loads fightcaves.collision (4096 bytes, 64x64 walkability)
     init_player(): fixed loadout — Def 70, Rng 70, Prayer 43, Rune Crossbow,
-      Black D'hide, Adamant Bolts. ranged_attack_bonus=153,
+      Black D'hide, 50,000 Adamant Bolts. ranged_attack_bonus=153,
       ranged_strength_bonus=100, prayer_bonus=0.
     fc_reset(): memset(0), seed RNG, random rotation 0-14, setup arena,
       init player, spawn wave 1.
-    fc_write_obs(): player features (21) + 8 NPC slots sorted by distance (104)
-      + meta (10) + reward features (16) = 151 floats.
+    fc_write_obs(): player features (17) + 8 NPC slots sorted by distance (80)
+      + meta (9) + reward features (18) = 124 floats.
     fc_write_mask(): 166 floats, 1.0=valid, masks invalid movement directions,
       unavailable NPC slots, food/potion cooldowns, HP/prayer caps.
 
-  fc_tick.c (465 LOC) — Main tick loop, 11-phase processing order.
+  fc_tick.c — Main tick loop, 8-phase processing order.
     Phase ordering (matches RSPS GameTick.kt):
       1. Clear per-tick flags
       2. Process player actions (prayer, eat/drink, movement, attack)
       3. Decrement player timers
       4. Prayer drain tick
-      5. HP regen (1 HP per 10 ticks)
-      6. NPC AI tick (all 16 slots)
-      7. Resolve pending hits (NPC→player, player→NPC)
-      8. Death timers (3-tick corpse visibility)
-      9. Check terminal (death, wave clear, cave complete, tick cap)
-      10. Jad healer spawn check
-      11. Increment tick
+      5. NPC AI tick (all 16 slots)
+      6. Resolve pending hits (NPC→player, player→NPC)
+      7. Check terminal (death, wave clear, cave complete, tick cap)
+      8. Increment tick
 
     process_player_actions(): ~195 LOC. Handles all 7 action heads
       simultaneously. Prayer is instant. Eat/drink check separate cooldown
@@ -128,7 +127,7 @@ FILE MAP (18 files, ~4550 LOC total):
     check_jad_healers(): spawns 4 Yt-HurKot at cardinal offsets from Jad
       when Jad HP drops below 50%. Resets flag if Jad healed above 50%.
 
-  fc_combat.c (327 LOC) — OSRS combat formulas.
+  fc_combat.c — OSRS combat formulas.
     fc_hit_chance(att_roll, def_roll):
       if att > def: 1 - (def+2) / (2*(att+1))
       else: att / (2*(def+1))
@@ -158,7 +157,7 @@ FILE MAP (18 files, ~4550 LOC total):
     fc_resolve_npc_pending_hits(): handles death, Tz-Kek split, Jad kill,
       healer distraction.
 
-  fc_npc.c (422 LOC) — NPC stat table, AI, spawning.
+  fc_npc.c — NPC stat table, AI, spawning.
     NPC_STATS[9] table: per-type max_hp, attack_style, attack_speed,
       attack_range, max_hit, size, movement_speed, prayer_drain, etc.
     Type sizes: Tz-Kih=1, Tz-Kek=2, Tz-Kek-sm=1, Tok-Xil=3,
@@ -168,11 +167,10 @@ FILE MAP (18 files, ~4550 LOC total):
     fc_npc_tz_kek_split(): spawns 2 small Tz-Kek at death location.
       Does NOT increment npcs_remaining (pre-counted).
 
-    Jad telegraph state machine (jad_telegraph_tick):
-      IDLE → choose style via RNG → MAGIC_WINDUP or RANGED_WINDUP
-      (attack_timer=3) → fire (queue pending hit with 3-tick delay)
-      → IDLE (attack_timer=8). Total: 6 ticks from telegraph to hit resolve.
-      Agent sees telegraph in observation and has 3+ ticks to switch prayer.
+    Jad no longer has a telegraph state machine in backend or policy obs.
+      Jad chooses magic vs ranged when the attack is actually queued.
+      The agent sees that committed attack only through the same pending-hit
+      channels used for every other NPC (`pending_style` / `pending_ticks`).
 
     Yt-MejKot: heals nearby NPCs (≤8 tiles, HP < 50% max) 100 HP every
       4 ticks.
@@ -183,7 +181,7 @@ FILE MAP (18 files, ~4550 LOC total):
       (Tok-Xil, Ket-Zek) switch between melee and ranged/magic based on
       distance to player.
 
-  fc_pathfinding.c (265 LOC) — Collision, LOS, BFS.
+  fc_pathfinding.c — Collision, LOS, BFS.
     fc_tile_walkable(), fc_footprint_walkable() — tile and multi-tile queries.
     fc_move_toward(): move size-1 entity with diagonal-first fallback.
     fc_npc_step_toward_sized(): move sized NPC one tile toward target,
@@ -191,9 +189,9 @@ FILE MAP (18 files, ~4550 LOC total):
     fc_has_line_of_sight(): Bresenham line, checks intermediate tiles.
     fc_has_los_to_npc(): LOS to closest tile of NPC footprint.
     fc_pathfind_bfs(): greedy walk first (try diagonal, then axes), fall
-      back to full 8-directional BFS. Static allocations for queue/visited.
+      back to full 8-directional BFS. Scratch arrays are stack-local.
 
-  fc_prayer.c (72 LOC) — Prayer drain and restoration.
+  fc_prayer.c — Prayer drain and restoration.
     fc_prayer_drain_tick(): counter-based OSRS system:
       drain_counter += 12 per tick (all protect prayers)
       resistance = 60 + 2 * prayer_bonus (prayer_bonus=0 in FC loadout)
@@ -202,7 +200,7 @@ FILE MAP (18 files, ~4550 LOC total):
     fc_prayer_potion_restore(prayer_level): (level/4 + 7) * 10 tenths.
       At prayer 43: 170 tenths = 17 points.
 
-  fc_wave.c (1289 LOC) — 63 waves, 15 rotations, wave spawning.
+  fc_wave.c — 63 waves, 15 rotations, wave spawning.
     WAVE_TABLE[63]: NPC types and count per wave.
     WAVE_ROTATIONS[63][15][6]: spawn directions per rotation.
     5 spawn positions: SOUTH(37,17), SOUTH_WEST(14,17), NORTH_WEST(13,49),
@@ -213,14 +211,14 @@ FILE MAP (18 files, ~4550 LOC total):
     fc_wave_check_advance(): if npcs_remaining == 0, advance wave or
       set TERMINAL_CAVE_COMPLETE after wave 63.
 
-  fc_rng.c (31 LOC) — XORshift32 deterministic RNG.
+  fc_rng.c — XORshift32 deterministic RNG.
     fc_rng_seed(): guards against zero state.
     fc_rng_next(): x ^= x<<13; x ^= x>>17; x ^= x<<5.
     fc_rng_int(max): next() % max.
     fc_rng_float(): [0.0, 1.0) via 24-bit mantissa.
 
-  fc_capi.c (181 LOC) — Python ctypes FFI bridge.
-    FcEnvCtx: FcState + obs[317] + actions[7] + reward + episode tracking.
+  fc_capi.c — Python ctypes FFI bridge.
+    FcEnvCtx: FcState + obs[290] + actions[7] + reward + episode tracking.
     fc_capi_create/destroy/reset/step(): single-env lifecycle.
     fc_capi_batch_create/destroy/reset/step_flat(): vectorized N-env
       interface. Contiguous memory, single step call for all envs.
@@ -249,9 +247,8 @@ KEY STATE STRUCTS:
     Position: x, y, size (1-5)
     Vitals: current_hp, max_hp, is_dead, death_timer
     Combat: attack_style, attack_timer, attack_speed, attack_range, max_hit
-    AI: aggro_target, movement_speed
-    Jad: jad_telegraph, jad_next_style
-    Healing: heal_timer, heal_amount, is_healer, healer_distracted
+    AI: movement_speed
+    Healing: heal_timer, heal_amount, healer_distracted, heal_target_idx
     Pending hits: pending_hits[8], num_pending_hits
 
   FcState:
@@ -263,6 +260,7 @@ KEY STATE STRUCTS:
     Collision: walkable[64][64]
     Jad: jad_healers_spawned
     Per-tick aggregated flags for reward features
+    Episode-level analytics for training logging
 
 DETERMINISM:
   Episode = (seed, action_sequence). Fully reproducible.
@@ -274,7 +272,7 @@ DETERMINISM:
 1.3 Frontend — Raylib Debug Viewer (demo-env/)
 --------------------------------------------------------------------------------
 
-viewer.c (~2110 LOC) is the main viewer. Header-only loaders handle assets.
+viewer.c is the main viewer. Header-only loaders handle assets.
 
 MAIN LOOP:
   1. Init: create 1280x800 window, load terrain/objects/NPC models/animations/
@@ -386,7 +384,7 @@ COORDINATE SYSTEM:
 1.4 Training Environment — PufferLib 4.0 (training-env/)
 --------------------------------------------------------------------------------
 
-fight_caves.h (275 LOC) — PufferLib adapter.
+fight_caves.h — PufferLib adapter.
 
   FightCaves struct:
     Log log (PufferLib required)
@@ -403,13 +401,15 @@ fight_caves.h (275 LOC) — PufferLib adapter.
   c_render(): no-op (viewer is separate process).
   c_close(): fc_destroy().
 
-  fc_puffer_write_obs(): writes 162 floats = 126 policy obs + 36 action mask.
-    Policy obs uses FC_POLICY_OBS_SIZE=135 minus the walk-to-tile features
-    (heads 5-6 excluded from v1). Action mask is 36 for 5-head v1.
+  fc_puffer_write_obs(): writes 142 floats = 106 policy obs + 36 action mask.
+    Policy obs uses FC_POLICY_OBS_SIZE=106. Action mask is the first 36 mask
+    floats for the 5 policy heads (move/attack/prayer/eat/drink).
 
-  fc_puffer_compute_reward(): weighted sum of 16 reward features.
+  fc_puffer_compute_reward(): weighted sum of 18 reward features plus
+    configurable shaping terms.
     Damage taken uses QUADRATIC scaling: dmg_frac^2 * 70 * weight.
-    Food waste penalty scales by overheal fraction.
+    Food/pot waste, stall pressure, kiting, unnecessary prayer, and related
+    shaping terms are configurable from the ini.
 
 binding.c (78 LOC) — PufferLib macros.
   OBS_SIZE = 162, OBS_TYPE = FLOAT
@@ -426,17 +426,21 @@ build.sh — PufferLib build integration.
   Output: pufferlib/_C.cpython-312-x86_64-linux-gnu.so (Python extension)
   or fight_caves (standalone binary).
 
-config/fight_caves.ini — Current v6 training config:
-  Reward weights: w_damage_dealt=0.5, w_damage_taken=-0.75 (quadratic),
-    w_npc_kill=3.0, w_wave_clear=10.0, w_player_death=-20.0,
-    w_cave_complete=100.0, w_tick_penalty=-0.001.
-  Curriculum: wave 28, 50% of episodes.
-  Training: 4096 agents, lr=0.001, gamma=0.999, horizon=256, ent_coef=0.02.
-  Policy: hidden_size=256, num_layers=2 (MinGRU, PufferLib default).
+config/fight_caves.ini — Current v18 baseline config:
+  Reward weights: w_damage_dealt=1.0, w_damage_taken=-0.75 (quadratic),
+    w_npc_kill=2.0, w_wave_clear=10.0, w_jad_damage=2.0,
+    w_player_death=-20.0, w_cave_complete=100.0, w_tick_penalty=-0.001,
+    w_correct_danger_prayer=1.0.
+  Shaping: capped stall penalty, configurable food/pot waste penalties,
+    kiting reward, unnecessary-prayer penalty, NPC melee pressure penalty.
+  Curriculum: all buckets disabled in the clean `v18` scratch baseline.
+  Training: 4096 agents, 1.5B steps, lr=0.001, gamma=0.999, horizon=256,
+    clip_coef=0.2, ent_coef=0.02.
+  Policy: hidden_size=256, num_layers=2.
 
 PERFORMANCE:
-  Training SPS: 2.3M (4096 agents, CUDA).
-  Per-env throughput: ~560 steps/sec.
+  Training SPS: ~2.0M (v18 finished at ~2.02M SPS).
+  Per-env throughput: ~500 steps/sec.
   FcState size: ~2KB. 4096 envs = ~8MB working set.
 
 --------------------------------------------------------------------------------
@@ -496,10 +500,10 @@ CMake 3.20+, C11 standard, Release by default.
 
 Root CMakeLists.txt adds two subdirectories:
   demo-env/ → fc_viewer (Raylib executable) + test_headless
-  training-env/ → libfc_capi.so (shared lib) + libfc_core.a (static)
+  training-env/ → libfc_capi.so (shared lib)
 
 DEMO-ENV BUILD:
-  Sources: all fc_*.c + viewer.c + fc_debug.c + fc_hash.c
+  Sources: mirrored gameplay `fc_*.c` files + viewer.c + fc_debug.c + fc_hash.c
   Links: libraylib.a (local at demo-env/raylib/), X11, OpenGL, pthread, math
   Skipped if Raylib not found.
 
@@ -510,8 +514,9 @@ TRAINING-ENV BUILD:
   Links: math only. No Raylib dependency.
 
 PUFFERLIB BUILD (training-env/build.sh):
-  Compiles fight_caves.h + binding.c + backend sources against PufferLib
-  headers (vecenv.h). Produces _C.so Python extension.
+  Compiles fight_caves.h + binding.c against PufferLib headers (vecenv.h).
+  fight_caves.h still directly includes the backend `.c` files.
+  Produces _C.so Python extension.
   Flags: -fPIC -fopenmp -O3 -DPLATFORM_DESKTOP
 
 BUILD COMMANDS:
@@ -529,74 +534,67 @@ DEPENDENCIES:
 1.7 Observation / Action / Reward Contracts
 --------------------------------------------------------------------------------
 
-These are frozen in fc_contracts.h. Both training-env and demo-env use
-identical contracts.
+These are frozen in fc_contracts.h. Both training-env and demo-env are
+expected to use identical contracts.
 
-OBSERVATION (151 policy floats + 36 action mask = 187 total):
+OBSERVATION (106 policy floats + 36 RL action mask = 142 total for PufferLib;
+             full backend buffer = 106 policy + 18 reward + 166 mask = 290):
 
   All values normalized to [0, 1]. Flat float array, no names — the agent
   learns what each position means through training.
 
-  Player (21 floats, positions 0-20):
+  Player (17 floats, positions 0-16):
     [0]  player_hp_fraction         current_hp / max_hp
     [1]  player_prayer_fraction     current_prayer / max_prayer
-    [2]  player_x                   x / 63
-    [3]  player_y                   y / 63
+    [2]  player_x                   x / 64
+    [3]  player_y                   y / 64
     [4]  player_attack_timer        attack_timer / 5.0
-    [5]  player_food_timer          food_timer / 3
-    [6]  player_potion_timer        potion_timer / 2
-    [7]  player_combo_timer         combo_timer / 1
-    [8]  player_run_energy          run_energy / 10000
-    [9]  player_is_running          0 or 1
-    [10] player_pray_melee_active   0 or 1
-    [11] player_pray_range_active   0 or 1
-    [12] player_pray_magic_active   0 or 1
-    [13] player_sharks_remaining    count / 20
-    [14] player_prayer_doses        count / 32
-    [15] player_ammo_remaining      count / 1000
-    [16] player_defence_level       level / 99
-    [17] player_ranged_level        level / 99
-    [18] player_damage_this_tick    damage / max_hp
-    [19] player_hit_style_this_tick 0=none, 0.33=melee, 0.67=ranged, 1.0=magic
-    [20] player_attack_target       target_slot / 8 (0=none)
+    [5]  player_pray_melee_active   0 or 1
+    [6]  player_pray_range_active   0 or 1
+    [7]  player_pray_magic_active   0 or 1
+    [8]  player_sharks_remaining    count / 20
+    [9]  player_prayer_doses        count / 32
+    [10] player_incoming_melee_1t   pending melee hits landing in 1 tick / 4
+    [11] player_incoming_range_1t   pending ranged hits landing in 1 tick / 4
+    [12] player_incoming_magic_1t   pending magic hits landing in 1 tick / 4
+    [13] player_incoming_melee_2t   pending melee hits landing in 2 ticks / 4
+    [14] player_incoming_range_2t   pending ranged hits landing in 2 ticks / 4
+    [15] player_incoming_magic_2t   pending magic hits landing in 2 ticks / 4
+    [16] player_attack_target       visible target slot / 8 (0=none)
 
-  NPCs (8 slots × 15 floats = 120, positions 21-140):
+  NPCs (8 slots × 10 floats = 80, positions 17-96):
     Sorted by Chebyshev distance (closest first), tiebreak by spawn_index.
     Slot 0 = closest NPC, slot 7 = 8th closest. Empty slots = all zeros.
 
-    Per slot (15 floats):
+    Per slot (10 floats):
     [0]  npcN_valid                 1=NPC in slot, 0=empty
-    [1]  npcN_type                  npc_type / 8
-                                      0.125=Tz-Kih, 0.25=Tz-Kek, 0.375=Tz-Kek(sm),
-                                      0.5=Tok-Xil, 0.625=Yt-MejKot, 0.75=Ket-Zek,
-                                      0.875=TzTok-Jad, 1.0=Yt-HurKot
-    [2]  npcN_x                    x / 64
-    [3]  npcN_y                    y / 64
-    [4]  npcN_hp_fraction          current_hp / max_hp
-    [5]  npcN_distance             chebyshev_distance / 64
-    [6]  npcN_attack_style         last attack style (0.33=melee, 0.67=ranged, 1.0=magic)
-    [7]  npcN_attack_timer         ticks_until_next_attack / attack_speed (0=about to fire)
-    [8]  npcN_size                 tile_size / 5
-    [9]  npcN_is_healer            0 or 1 (Yt-HurKot)
-    [10] npcN_jad_telegraph        0=idle, 0.5=magic_windup, 1.0=ranged_windup
-    [11] npcN_aggro                1=targeting player
-    [12] npcN_line_of_sight        1=clear LOS from player
-    [13] npcN_pending_attack_style 0=none in flight, 0.33/0.67/1.0=attack in flight
-    [14] npcN_pending_attack_ticks ticks_until_hit_resolves / 10 (0=none)
+    [1]  npcN_x                    x / 64
+    [2]  npcN_y                    y / 64
+    [3]  npcN_hp_fraction          current_hp / max_hp
+    [4]  npcN_distance             chebyshev_distance / 64
+    [5]  npcN_effective_style_now  style this NPC would use now at current distance / 3
+    [6]  npcN_attack_timer         ticks_until_next_attack / attack_speed
+    [7]  npcN_line_of_sight        1=clear LOS from player
+    [8]  npcN_pending_attack_style 0=none in flight, 0.33/0.67/1.0=attack in flight
+    [9]  npcN_pending_attack_ticks ticks_until_hit_resolves / 10 (0=none)
 
-  Meta (10 floats, positions 141-150):
+  Meta (9 floats, positions 97-105):
     [0]  current_wave               wave / 63
     [1]  rotation_id                rotation / 15
     [2]  npcs_remaining             count / 16
-    [3]  tick                       tick / 200000
-    [4]  total_damage_dealt         total / 10000
-    [5]  total_damage_taken         total / max_hp
-    [6]  damage_dealt_this_tick     damage / 1000
+    [3]  prayer_drain_counter       counter / current drain resistance
+    [4]  incoming_melee_3t          pending melee hits landing in 3 ticks / 4
+    [5]  incoming_range_3t          pending ranged hits landing in 3 ticks / 4
+    [6]  incoming_magic_3t          pending magic hits landing in 3 ticks / 4
     [7]  damage_taken_this_tick     damage / max_hp
-    [8]  npcs_killed_this_tick      count / 16
-    [9]  wave_just_cleared          0 or 1
+    [8]  wave_just_cleared          0 or 1
 
-REWARD FEATURES (16 floats, emitted by C, shaped by Python):
+  Disabled from the live policy contract:
+    player food/potion/combo timers, run energy, is_running, ammo, defence,
+    ranged level; NPC type, size, healer flag, Jad telegraph, aggro; meta
+    total damage dealt, total damage taken, and kills_this_tick.
+
+REWARD FEATURES (18 floats, emitted by C, shaped by Python):
     [0]  Damage dealt: damage / 1000
     [1]  Damage taken: damage / max_hp
     [2]  NPC kill: count
@@ -613,6 +611,8 @@ REWARD FEATURES (16 floats, emitted by C, shaped by Python):
     [13] Movement: binary
     [14] Idle: binary
     [15] Tick penalty: always 1.0
+    [16] Correct danger prayer: binary
+    [17] Wrong danger prayer: binary
 
 ACTION SPACE (7 heads, 5 used in PufferLib v1):
 
@@ -630,7 +630,7 @@ ACTION SPACE (7 heads, 5 used in PufferLib v1):
     Instant. Exclusive (only one protect active).
 
   Head 3 — EAT (3 values):
-    0=none, 1=shark (20 HP, 3-tick cooldown), 2=karambwan (18 HP, 1-tick).
+    0=none, 1=shark (20 HP, 3-tick cooldown), 2=combo eat (18 HP, 1-tick).
     Masked when: no food, timer active, HP full.
 
   Head 4 — DRINK (2 values):
@@ -646,12 +646,12 @@ ACTION SPACE (7 heads, 5 used in PufferLib v1):
 
 ACTION MASK (36 floats for v1, 166 for full 7-head):
   1.0 = valid, 0.0 = masked. Included in observation buffer for policy.
-  PufferLib v1: OBS = 126 policy + 36 mask = 162 total.
+  PufferLib v1: OBS = 106 policy + 36 mask = 142 total.
 
 REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
 
   All weights applied in fc_puffer_compute_reward() in fight_caves.h.
-  Reward each tick = weighted sum of reward features + hardcoded bonuses.
+  Reward each tick = weighted sum of reward features + configurable shaping.
 
   COMBAT:
     w_damage_dealt      Per-tick damage dealt to NPCs (normalized /1000).
@@ -669,13 +669,9 @@ REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
     w_player_death      Terminal penalty when player HP reaches 0.
 
   CONSUMABLES:
-    w_food_used         Base penalty for eating. Scaled by waste fraction
-                        (overheal / shark_heal × 9). Wasteful eating costs
-                        up to 10x the base. Teaches eat-when-hurt.
-    food_used_well      Hardcoded +1.0 when eating with 20+ HP missing.
-                        Net reward for well-timed eat = +0.5.
-    w_prayer_pot_used   Base penalty for drinking prayer potion. Same waste
-                        scaling as food. Wasteful drinking costs up to 10x.
+    Food and potion timing/waste are now driven by the configurable
+    `shape_food_*` and `shape_pot_*` terms. The live `v18` baseline disables
+    the extra threat-aware penalties and keeps the direct waste penalties.
 
   PRAYER:
     w_correct_danger_prayer  Reward for correct prayer blocking a ranged/magic
@@ -691,10 +687,17 @@ REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
     w_idle              Reward/penalty for choosing idle movement. Usually 0.
     w_tick_penalty      Fires every tick. Small time pressure to progress.
 
-  HARDCODED (in fight_caves.h, not configurable):
-    Prayer drain cost   -0.01/tick when any prayer is active. Incentivizes
-                        prayer conservation and flicking.
-    Prayer pot timing   +1.0 for drinking when prayer below 20%.
+  CONFIGURABLE SHAPING (in fight_caves.h, parsed from ini):
+    food/pot waste      shape_food_* / shape_pot_* terms
+    wrong prayer        shape_wrong_prayer_penalty
+    NPC-specific block  shape_npc_specific_prayer_bonus
+    melee pressure      shape_npc_melee_penalty
+    wasted attack       shape_wasted_attack_penalty
+    wave stall          shape_wave_stall_*
+    no-damage stall     shape_not_attacking_*
+    kiting              shape_kiting_reward + distance band
+    unnecessary prayer  shape_unnecessary_prayer_penalty
+    Prayer flick reward remains intentionally disabled in the live code.
 
   TRAINING HYPERPARAMETERS:
     learning_rate       PPO learning rate. 0.001 default.
@@ -726,13 +729,15 @@ C-FIRST PIVOT (2026-03-24):
   Decision: rewrite FC simulation in C, use Python for RL, Raylib for viewer.
   Kotlin history preserved in archive/kotlin-final branch.
 
-SINGLE MECHANICS OWNER:
-  All gameplay lives in fc_*.c. Both viewer and training-env are thin shells.
-  Prevents logic divergence between training and visual debugging.
+SINGLE MECHANICS CONTRACT:
+  All gameplay rules are intended to live in the mirrored `fc_*.c` files.
+  Viewer and training wrap that contract differently, but the backend itself
+  should behave the same in both places. The current weakness is that the code
+  is still duplicated rather than physically shared.
 
 HYBRID OFFLINE-EXPORT + RUNTIME-SIM:
   Cache decoding is complex — Python wins (flexible, libraries available).
-  Runtime sim must be fast — C wins (2.3M SPS).
+  Runtime sim must be fast — C wins (~2.0M SPS on the current stack).
   Rendering needs GPU — Raylib/OpenGL wins.
   The Void RSPS is an oracle for correctness, not a codebase to fork.
 
@@ -752,16 +757,16 @@ COUNTER-BASED PRAYER DRAIN:
 
 PRAYER CHECK AT RESOLVE TIME:
   Pending hits check the player's active prayer when the hit resolves (lands),
-  not when the attack fires. This is critical for Jad — player has 3+ ticks
-  after seeing the telegraph to switch prayer before the hit resolves at
-  tick 6. Verified against Void RSPS FC demo.
+  not when the attack fires. This remains critical for Jad, but the agent now
+  reacts through the same queued pending-hit signals used elsewhere rather than
+  through a special Jad telegraph observation.
 
 --------------------------------------------------------------------------------
 2.2 What Worked
 --------------------------------------------------------------------------------
 
-C SINGLE-BACKEND:
-  2.3M training SPS with 4096 agents. FcState at ~2KB each means the entire
+C GAME BACKEND:
+  ~2.0M training SPS with 4096 agents. FcState at ~2KB each means the entire
   working set fits in L2 cache. memset(0) reset is near-instant.
 
 RAYLIB FOR VIEWER:
@@ -808,9 +813,9 @@ VERTEX-GROUP ANIMATION:
   handles translate, rotate (Euler Z-X-Y), scale per vertex group.
 
 CURRICULUM LEARNING:
-  Starting 50% of episodes at wave 28 dramatically improved learning speed
-  for later waves. Agent gets more practice on hard content instead of
-  spending 90% of training time on easy waves 1-20.
+  Light targeted curriculum remains useful for late-wave fine-tuning, but the
+  later run history showed that heavy scratch curriculum can trap the policy.
+  It should be used sparingly and only after a healthy scratch recipe exists.
 
 QUADRATIC DAMAGE PENALTY:
   Linear damage penalty treated a 1 HP poke the same as a 50 HP Jad hit.
@@ -894,8 +899,9 @@ COLLISION FILE SEARCH PATH:
   exist. setup_arena() silently fell back to an open arena — all tiles
   walkable, no walls. v1-v6.1 all trained on a flat open arena. The agent
   walked through visual terrain because walls literally didn't exist in
-  the training simulation. Fix: copy the file to pufferlib_4/assets/ and
-  cache the data globally to avoid per-reset file I/O.
+  the training simulation. Current code caches the collision globally and
+  probes multiple repo-relative paths plus FC_COLLISION_PATH, but this
+  should still be simplified during the shared-core refactor.
 
 --------------------------------------------------------------------------------
 2.4 References Used
@@ -905,7 +911,7 @@ VOID RSPS (rev 634, Kotlin):
   Location: runescape-rl/reference/legacy-rsps/
   Used for: FC encounter scripting (TzhaarFightCave.kt), wave definitions
     (tzhaar_fight_cave_waves.toml), NPC stats (tzhaar_fight_cave.npcs.toml),
-    attack patterns (tzhaar_fight_cave.combat.toml), Jad telegraph logic,
+    attack patterns (tzhaar_fight_cave.combat.toml), Jad timing/style logic,
     healer behavior, prayer drain (PrayerDrain.kt), combat formulas
     (CombatApi.kt), pathfinding (PathFinder.kt), inventory/equipment.
   Authoritative for FC-specific mechanics.
@@ -944,7 +950,7 @@ RUNELITE (rev 237):
   model IDs for b237 format.
 
 --------------------------------------------------------------------------------
-2.5 Training History (v1–v6.1)
+2.5 Training History (v1–v18)
 --------------------------------------------------------------------------------
 
 All configs and detailed results in docs/rl_config.md.
@@ -977,8 +983,28 @@ All configs and detailed results in docs/rl_config.md.
     at -0.001/tick dominates dying at -20. Episode return negative (-135).
     Value loss near 0 — agent perfectly predicts its expected return.
 
-PROGRESSION: 27 → 28 → 15 (crash) → 30 → 30 → 30 (stalling).
-CURRENT BLOCKER: reward structure incentivizes survival over progression.
+  v15.2: Heavy late-wave scratch curriculum trapped the policy and hurt
+    general learning.
+
+  v16.2a (`ge5sma5y`): First strong clean frontier baseline on this code line.
+    Reached wave 28.8 avg, max wave 31, with real prayer switching and damage
+    blocking competence.
+
+  v17 (`mv0snohb`): Warm-start run on the new backend package. Held onto some
+    inherited competence but underperformed the best scratch baseline.
+
+  v17.1 (`q3ald8bc`): Scratch control for the `v17` recipe. Flatlined badly
+    around wave 17 and proved the regression was in the training recipe.
+
+  v18 (`lxttb7uo`): Clean scratch recovery run on the current pruned backend /
+    pruned observation contract. Reached wave 29.2 avg, max wave 31, and
+    established the current `codex3` baseline.
+
+PROGRESSION: early 27-30 wave runs → reward bug crash → stall-detection era →
+  strong wave-29 frontier on current codebase.
+CURRENT BLOCKER: the project is no longer stuck on survival-vs-progress.
+  The current blocker is breaking through the late-wave plateau around the
+  wave 29-31 region without destabilizing the recovered baseline.
 
 --------------------------------------------------------------------------------
 2.6 Technical Gotchas
@@ -997,7 +1023,9 @@ CURRENT BLOCKER: reward structure incentivizes survival over progression.
   10. VoidPS cache uses non-standard floor opcodes that standard decoders miss.
   11. b237 model opcodes 6/7 read int32 (not uint16 as older revisions).
   12. NPCs walk through each other (no NPC-NPC collision in FC).
-  13. Jad prayer checked at RESOLVE time (tick 6), not fire time.
+  13. Jad prayer is still checked at RESOLVE time, but Jad telegraph state
+      and telegraph observations have been removed. The policy now learns from
+      queued pending-hit timing/style instead of a Jad-only wind-up channel.
   14. Tz-Kek counts as 2 in wave remaining counter (for split spawns).
   15. Healer respawn requires Jad healed back above 50% first.
   16. Prayer reward per-tick-per-NPC bug crashed training (v3). Must be per-hit.
@@ -1007,11 +1035,11 @@ CURRENT BLOCKER: reward structure incentivizes survival over progression.
       across OpenMP threads. With open arena BFS rarely triggered so the
       data race was latent. Loading real collision caused constant BFS
       calls → segfault from concurrent writes. Fix: local stack arrays.
-  19. Collision file not found during training. PufferLib runs from
-      pufferlib_4/ directory, not the project root. Asset search paths
-      in fc_state.c didn't include pufferlib_4/assets/. setup_arena()
-      silently fell back to open arena. ALL v1-v6.1 trained without walls.
-      Fix: copy collision file to pufferlib_4/assets/, cache in global.
+  19. Collision file search path was a real failure mode. Earlier training
+      silently fell back to an open arena when the asset could not be found.
+      Current code caches collision globally and probes several repo-relative
+      locations plus `FC_COLLISION_PATH`, but the shared-core refactor should
+      still collapse this to one unambiguous asset location.
   20. PufferLib config lives at pufferlib_4/config/fight_caves.ini, NOT
       our repo's config/fight_caves.ini. Edits to the repo copy have no
       effect unless synced to the PufferLib directory.

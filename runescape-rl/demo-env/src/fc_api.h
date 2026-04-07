@@ -52,6 +52,10 @@ void fc_write_obs(const FcState* state, float* out);
  * 1.0 = valid action, 0.0 = invalid. */
 void fc_write_mask(const FcState* state, float* out);
 
+/* Returns 1 if any RL-facing masked action head (move/attack/prayer/eat/drink)
+ * contains an invalid attempted action for the current state. */
+int fc_action_attempt_is_invalid(const FcState* state, const int actions[FC_NUM_ACTION_HEADS]);
+
 /* Compute and write reward features for the current tick.
  * out must have room for FC_REWARD_FEATURES floats.
  * These are raw feature values (not weighted). Python applies shaping weights. */

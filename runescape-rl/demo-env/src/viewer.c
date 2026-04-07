@@ -9,9 +9,11 @@
  *   F           — eat shark                  Up/Down  — tick speed
  *   P           — drink prayer potion        R        — reset episode
  *   Tab         — cycle attack target        A        — toggle auto/manual
- *   D           — toggle debug overlay       G        — grid  C — collision
+ *   O or D*     — toggle debug overlay       G        — grid  C — collision
  *   4/5         — camera presets             Q/Esc    — quit
  *   Scroll      — zoom                       Right-drag — orbit camera
+ *
+ *   * D only toggles the overlay when not being used for east movement.
  */
 
 #include "raylib.h"
@@ -695,7 +697,7 @@ static int read_policy_actions(ViewerState* v) {
 }
 
 static void write_obs_to_pipe(ViewerState* v) {
-    /* Write policy obs (135) + 5-head action mask (36) = 171 floats */
+    /* Write policy obs + 5-head action mask = FC_POLICY_OBS_SIZE + 36 floats */
     float obs_buf[FC_OBS_SIZE];
     fc_write_obs(&v->state, obs_buf);
     float mask_buf[FC_ACTION_MASK_SIZE];
@@ -1857,6 +1859,7 @@ int main(int argc, char** argv) {
     /* Load prayer overhead icon textures */
     {
         const char* pray_dirs[] = {"demo-env/assets/", "../demo-env/assets/", "assets/", NULL};
+        int loaded = 0;
         for (int i = 0; pray_dirs[i]; i++) {
             char path[256];
             snprintf(path, sizeof(path), "%spray_melee.png", pray_dirs[i]);
@@ -1867,14 +1870,18 @@ int main(int argc, char** argv) {
                 snprintf(path, sizeof(path), "%spray_magic.png", pray_dirs[i]);
                 v.pray_magic_tex = LoadTexture(path);
                 fprintf(stderr, "Prayer icons loaded from %s\n", pray_dirs[i]);
+                loaded = 1;
                 break;
             }
         }
+        if (!loaded)
+            fprintf(stderr, "warning: prayer icons not found in demo-env/assets or assets\n");
     }
 
     /* Load tab/inventory sprites (Phase 8h) */
     {
         const char* spr_dirs[] = {"demo-env/assets/sprites/", "../demo-env/assets/sprites/", "assets/sprites/", NULL};
+        int loaded = 0;
         for (int i = 0; spr_dirs[i]; i++) {
             char path[256];
             snprintf(path, sizeof(path), "%sprayer_potion.png", spr_dirs[i]);
@@ -1901,9 +1908,12 @@ int main(int argc, char** argv) {
                 snprintf(path, sizeof(path), "%stab_prayer.png", spr_dirs[i]);
                 v.tex_tab_prayer = LoadTexture(path);
                 fprintf(stderr, "Tab sprites loaded from %s\n", spr_dirs[i]);
+                loaded = 1;
                 break;
             }
         }
+        if (!loaded)
+            fprintf(stderr, "warning: tab/inventory sprites not found in demo-env/assets/sprites or assets/sprites\n");
     }
 
     v.combat_style = 1;  /* Rapid default */
@@ -1962,9 +1972,9 @@ int main(int argc, char** argv) {
                 v.dbg_flags = v.dbg_flags ? 0 : DBG_ALL;
             }
         }
-        /* D: only toggle debug when not pressing WASD */
+        /* D: match the on-screen controls without interfering with east movement */
         if (IsKeyPressed(KEY_D) && !IsKeyDown(KEY_W) && !IsKeyDown(KEY_A) && !IsKeyDown(KEY_S)) {
-            /* D is also used for East movement — only toggle debug if no movement keys held */
+            v.dbg_flags = v.dbg_flags ? 0 : DBG_ALL;
         }
         if (IsKeyPressed(KEY_GRAVE)) v.show_debug = !v.show_debug;
 

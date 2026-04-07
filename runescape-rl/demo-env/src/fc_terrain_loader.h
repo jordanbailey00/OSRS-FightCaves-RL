@@ -15,6 +15,7 @@
 #define OSRS_PVP_TERRAIN_H
 
 #include "raylib.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

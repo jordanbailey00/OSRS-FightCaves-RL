@@ -115,6 +115,8 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
     int act_target_x = actions[5];
     int act_target_y = actions[6];
 
+    state->invalid_action_this_tick = fc_action_attempt_is_invalid(state, actions);
+
     /* ---- Prayer (instant, processed first) ---- */
     if (act_prayer > 0) {
         int old_prayer = p->prayer;
