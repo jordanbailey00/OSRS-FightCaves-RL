@@ -77,6 +77,8 @@ Primary objective:
 - remove duplicated Fight Caves backend files between `training-env` and `demo-env`
 - make parity structural instead of procedural
 - do this as a file/layout refactor first, not a behavior change
+- also remove obvious copy/sync operational drift points that are already
+  causing local maintenance problems
 
 Execution document:
 - [component_symlink.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/component_symlink.md)
@@ -86,7 +88,35 @@ Rules:
 - do not change the obs contract intentionally
 - do not move trainer-only logic into shared core
 - do not move viewer-only logic into shared core
+- do not leave copy-synced config files in place once a safe single source
+  of truth exists
+- do not leave duplicated launch/bootstrap shell logic in multiple scripts if
+  it can be sourced from one shared helper
 - validate after each phase, not only at the end
+
+Explicit non-code drift items to fold into the same work:
+- unify the active training config path:
+  - `runescape-rl/config/fight_caves.ini`
+  - `pufferlib_4/config/fight_caves.ini`
+  - goal: one source of truth, not copy/sync before launch
+- after config unification, remove the `cp ... fight_caves.ini` sync step from:
+  - `train.sh`
+  - `sweep_v18_3.sh`
+  - any other train/sweep helper that still copies config into `pufferlib_4`
+- centralize duplicated shell runtime setup shared by train/sweep launchers:
+  - `.venv` activation
+  - `PUFFER_DIR`
+  - `FC_COLLISION_PATH`
+  - W&B dirs
+  - cuDNN/lib path exports
+  - backend existence/build check
+  - goal: one shared shell helper, not repeated blocks across multiple launch scripts
+- keep the collision asset single-sourced:
+  - `training-env/assets/fightcaves.collision` today
+  - or `fc-core/assets/fightcaves.collision` after refactor
+  - do not create parallel copies
+- keep detailed ownership/file mapping in `component_symlink.md`
+  and keep `today_plan.md` as the short execution pointer only
 
 Required validation:
 - `cmake --build build`

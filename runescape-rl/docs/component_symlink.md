@@ -95,6 +95,38 @@ Important existing mismatch:
 
 This means the repo already advertises an architecture it does not yet implement.
 
+### 1.6 Operational duplication already causing drift
+
+There are also non-core file duplications that are already causing local
+maintenance errors and should be folded into the same refactor pass.
+
+Current duplicated operational file:
+- `runescape-rl/config/fight_caves.ini`
+- `pufferlib_4/config/fight_caves.ini`
+
+Current behavior:
+- `runescape-rl/config/fight_caves.ini` is the file humans edit.
+- `pufferlib_4/config/fight_caves.ini` is the file PufferLib actually reads.
+- launch scripts copy the first into the second before training.
+
+Why this is a problem:
+- it creates silent config drift when one file is edited and the other is not
+- it makes repo state misleading because both copies appear canonical
+- it already caused the `v18.3` sweep config and `v18.3_control` config to
+  diverge accidentally
+
+Other operational duplication:
+- launch scripts repeat the same environment/bootstrap block in multiple files:
+  - `.venv` activation
+  - `PUFFER_DIR`
+  - `FC_COLLISION_PATH`
+  - W&B directory exports
+  - cuDNN/lib path setup
+  - backend existence/build check
+
+This is not a symlink target by itself, but it is still the same maintenance
+failure mode: one logical runtime contract duplicated in multiple places.
+
 
 ## 2. Ownership Model To Implement
 
@@ -107,6 +139,10 @@ The repo should be split into five ownership zones:
 5. Eval-only
 
 This extra "shared support" zone is necessary. Without it, non-simulation helpers like render snapshots and determinism hashing either pollute core simulation files or get stranded in viewer-only code even though multiple consumers need them.
+
+Operational rule to add:
+- one source of truth for training config
+- one shared shell helper for repeated launcher/bootstrap environment setup
 
 
 ## 3. Proposed Target Layout
@@ -154,6 +190,7 @@ runescape-rl/
     binding.c
     CMakeLists.txt
     build.sh
+    fc_launch_common.sh
     fight_caves_env.c
     fight_caves_env.h
     fc_reward_shaping.c
@@ -187,6 +224,8 @@ Notes:
 - `fc-support` contains optional shared helpers used by viewer/tests/training-render, but not by the core tick simulation itself.
 - `training-env` contains all PufferLib-specific code, reward shaping, logging, curriculum, and trainer-facing wrappers.
 - `demo-env` contains all UI, rendering, model loading, overlays, and manual/debug interaction.
+- `runescape-rl/config/fight_caves.ini` remains the single human-edited config source.
+- `pufferlib_4/config/fight_caves.ini` should become a symlink to that file or be removed from the runtime path entirely.
 
 
 ## 4. File-By-File Ownership Map
@@ -275,7 +314,17 @@ Important distinction:
 |---|---|---|
 | `eval_viewer.py` | eval-only | keep; update header paths/binary lookup after refactor |
 
-### 4.7 Assets and third-party code
+### 4.7 Shared / single-source operational files
+
+These are not simulation files, but they should still stop drifting.
+
+| Current File(s) | Target Owner | Action |
+|---|---|---|
+| `runescape-rl/config/fight_caves.ini` + `pufferlib_4/config/fight_caves.ini` | single-source shared config | keep `runescape-rl/config/fight_caves.ini` as canonical; make `pufferlib_4/config/fight_caves.ini` a symlink or remove the duplicate runtime read path |
+| repeated launcher env setup in `train.sh`, `sweep_v18_3.sh`, `train_v18_3_control.sh`, future launchers | shared training support | extract one shared shell helper such as `training-env/fc_launch_common.sh`; source it from all launchers |
+| `training-env/assets/fightcaves.collision` and `demo-env/assets/fightcaves.collision` | single-source asset | keep one asset file only; move to shared location and stop probing multiple wrapper paths |
+
+### 4.8 Assets and third-party code
 
 Shared simulation asset:
 - `training-env/assets/fightcaves.collision`
@@ -602,6 +651,7 @@ These files are safe to symlink only after the mixed-content cleanup above is co
 - `fc_tick.c`
 - `fc_contracts.h`
 - `fc_player_init.h`
+- `pufferlib_4/config/fight_caves.ini` -> `runescape-rl/config/fight_caves.ini`
 
 These files are safe to symlink only after the specific extractions listed in Section 5 are complete:
 
@@ -619,6 +669,9 @@ These files must not be symlinked as shared core:
 - `training-env/fc_render.h`
 - `training-env/build.sh`
 - `training-env/CMakeLists.txt`
+- `train.sh`
+- `sweep_v18_3.sh`
+- `train_v18_3_control.sh`
 - `demo-env/src/viewer.c`
 - `demo-env/src/fc_debug_overlay.h`
 - `demo-env/src/fc_anim_loader.h`
@@ -628,6 +681,12 @@ These files must not be symlinked as shared core:
 - `demo-env/CMakeLists.txt`
 - `demo-env/tests/test_headless.c`
 - `eval_viewer.py`
+
+Launcher note:
+- `train.sh`, `sweep_v18_3.sh`, and other run helpers should not become
+  symlinks to each other
+- they should instead source one shared shell helper for the repeated
+  runtime setup block
 
 
 ## 8. Build-System Refactor Plan
@@ -713,6 +772,8 @@ This order is designed to minimize risk.
 - create `fc-core`
 - create `fc-support`
 - add targets to CMake
+- identify the canonical config path and canonical collision asset path
+- add a shared launcher helper plan before touching shell scripts
 - do not delete old files yet
 
 ### Phase 1: move pure shared files first
@@ -739,6 +800,12 @@ This order is designed to minimize risk.
 - move collision asset to one shared location
 - remove duplicate collision copies
 - simplify collision path lookup
+
+### Phase 5.5: collapse duplicate operational files
+- make `runescape-rl/config/fight_caves.ini` the single active config source
+- replace `pufferlib_4/config/fight_caves.ini` with a symlink or remove the duplicate runtime read path
+- extract repeated launcher environment setup into one shared shell helper
+- update `train.sh` / sweep scripts to source the helper instead of repeating the block
 
 ### Phase 6: delete temporary compatibility layer
 - only after both wrappers build and tests pass

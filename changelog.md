@@ -57,18 +57,6 @@
   - removed `pufferlib_4/` from the root [.gitignore](/home/joe/projects/runescape-rl/codex3/.gitignore)
   - removed the inner `pufferlib_4/.git`
   - committed the current vendored `pufferlib_4` tree into `v2codex` together with the staged `v18.3` updates
-- Added [runescape-rl/serverless_bootstrap.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/serverless_bootstrap.sh) so the pod setup path no longer requires manual step-by-step command entry:
-  - installs system packages
-  - creates `.venv`
-  - installs the Python dependencies needed by the current training path
-  - installs editable `pufferlib_4`
-  - supports non-interactive W&B login via `WANDB_API_KEY`
-  - supports automatic warm-start checkpoint download via `WARMSTART_URL`
-  - builds the local Fight Caves backend up front
-- Simplified [runescape-rl/docs/serverless_setup.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/serverless_setup.md) so the current pod flow is now just:
-  - clone `v2codex`
-  - run `serverless_bootstrap.sh`
-  - run [runescape-rl/sweep_v18_3.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_3.sh)
 
 ## 2026-04-06
 
