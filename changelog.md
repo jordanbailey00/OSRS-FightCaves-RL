@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-04-07
+
+- Updated stale observation-size comments in [runescape-rl/training-env/src/fc_contracts.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_contracts.h) and [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) so the documented live contract matches the actual buffers again.
+- Pruned the live Fight Caves policy observation contract and matching backend state surfaces in both [runescape-rl/training-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src) and [runescape-rl/demo-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src):
+  - removed the requested player obs from the policy pipe: food timer, pot timer, combo timer, run energy, is running, ammo, defence level, ranged level
+  - removed the requested NPC/meta obs from the policy pipe: `npc_type`, `npc_size`, `npc_is_healer`, Jad telegraph, aggro, total damage dealt, total damage taken, kills tick
+  - reduced the live policy observation size to the current pruned contract and updated the contract comments accordingly
+  - increased starting ammo to `50_000`
+- Removed Jad telegraph state and logic from the actual backend in both [runescape-rl/training-env/src/fc_npc.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_npc.c) / [runescape-rl/training-env/src/fc_types.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_types.h) and the mirrored [runescape-rl/demo-env/src/fc_npc.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_npc.c) / [runescape-rl/demo-env/src/fc_types.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_types.h):
+  - Jad now commits magic vs ranged when the attack is actually queued
+  - the remaining defensive signal is the same pending-hit path the real env already exposes
+- Cleaned and re-synced the viewer/eval stack after the observation pruning:
+  - [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py) now reads contract sizes from headers instead of stale hardcoded values
+  - fixed the eval-viewer header parser so macro-based constants load correctly
+  - restored the demo debug overlay in [runescape-rl/demo-env/src/fc_debug_overlay.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_debug_overlay.h) / [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c) so the viewer still shows rich debugging information without putting those values back into the agent observation
+- Re-audited mirrored backend parity and re-synced the shared Fight Caves core between [runescape-rl/training-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src) and [runescape-rl/demo-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src), including the post-pruning combat/state/mask paths, so training, debug viewer, and eval viewer are back on the same core mechanics again.
+- Staged and documented the `v18` recovery run in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md):
+  - reverted PPO and dense reward weights toward the `v16.2a` recipe
+  - kept the pruned backend/observation contract
+  - disabled curriculum and warm-start for the clean scratch validation
+- Added the full `v18` post-run analysis for W&B run `lxttb7uo` to [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md), documenting that the pruned backend/obs stack still reaches the old frontier and that the `v17.1` collapse was recipe-driven rather than caused by the obs pruning.
+- Staged and documented the longer `v18.1` continuation in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md):
+  - `10B` step budget with the same `v18` recipe
+  - full post-run analysis for W&B run `xm6i52ta`
+  - recommendation to move away from repeated long scratch reruns and toward checkpoint continuation
+- Expanded [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) documentation around the current training surface:
+  - restored the full field-by-field live observation descriptions for the current contract
+  - added a `Disabled Observations` section so removed obs stay documented instead of disappearing from the spec
+  - added an `Analytics Data Points` section under hyperparameters describing what each metric measures and why it is logged
+- Added and refined the shared-core refactor planning docs without changing runtime structure:
+  - created [runescape-rl/docs/component_symlink.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/component_symlink.md) with the detailed shared-core / training-only / demo-only split plan
+  - updated [runescape-rl/docs/today_plan.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/today_plan.md) with the next-step refactor and replay-speed priorities
+  - removed the obsolete [runescape-rl/docs/plan.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/plan.md)
+  - refreshed stale facts in [runescape-rl/DESIGN.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/DESIGN.md) without changing its overall layout
+- Staged the first checkpoint-continuation sweep as `v18.2`:
+  - updated [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) and [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini)
+  - added [runescape-rl/sweep_v18_2.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_2.sh)
+  - documented the `v18.2` config and rationale in [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md)
+- Analyzed the failed `v18.2` sweep and documented the result in [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md):
+  - confirmed the first sweep did not actually sweep because `sweep_only` collapsed to zero dimensions
+  - documented the GP crash path and the fact that the repeated `v18.2` trials were effectively the same run
+- Fixed the actual PufferLib sweep bug in [pufferlib_4/pufferlib/sweep.py](/home/joe/projects/runescape-rl/codex3/pufferlib_4/pufferlib/sweep.py):
+  - corrected nested-key matching for `sweep_only`
+  - added a fail-fast guard for zero-dimensional sweep spaces
+  - staged the corrected continuation sweep as `v18.3` in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), [runescape-rl/sweep_v18_3.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_3.sh), and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md)
+- Added a non-sweep continuation sanity path for the corrected continuation recipe:
+  - [runescape-rl/config/fight_caves_v18_3_control.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves_v18_3_control.ini)
+  - [runescape-rl/train_v18_3_control.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train_v18_3_control.sh)
+  - extended [runescape-rl/train.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train.sh) to accept `CONFIG_PATH` so alternate configs can run without overwriting the live sweep setup
+- Fixed the dead invalid-action reward path instead of leaving `w_invalid_action` as a no-op:
+  - added shared action-validity helpers in [runescape-rl/training-env/src/fc_state.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_state.c) and mirrored [runescape-rl/demo-env/src/fc_state.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_state.c)
+  - exposed the helper in [runescape-rl/training-env/src/fc_api.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_api.h) and mirrored [runescape-rl/demo-env/src/fc_api.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_api.h)
+  - now set `invalid_action_this_tick` during player action processing in [runescape-rl/training-env/src/fc_tick.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_tick.c) and mirrored [runescape-rl/demo-env/src/fc_tick.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_tick.c)
+- Converted `pufferlib_4` from an ignored nested repo into a normal directory inside the top-level repo:
+  - removed `pufferlib_4/` from the root [.gitignore](/home/joe/projects/runescape-rl/codex3/.gitignore)
+  - removed the inner `pufferlib_4/.git`
+  - committed the current vendored `pufferlib_4` tree into `v2codex` together with the staged `v18.3` updates
+- Added [runescape-rl/serverless_bootstrap.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/serverless_bootstrap.sh) so the pod setup path no longer requires manual step-by-step command entry:
+  - installs system packages
+  - creates `.venv`
+  - installs the Python dependencies needed by the current training path
+  - installs editable `pufferlib_4`
+  - supports non-interactive W&B login via `WANDB_API_KEY`
+  - supports automatic warm-start checkpoint download via `WARMSTART_URL`
+  - builds the local Fight Caves backend up front
+- Simplified [runescape-rl/docs/serverless_setup.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/serverless_setup.md) so the current pod flow is now just:
+  - clone `v2codex`
+  - run `serverless_bootstrap.sh`
+  - run [runescape-rl/sweep_v18_3.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_3.sh)
+
 ## 2026-04-06
 
 - Updated [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) with:
