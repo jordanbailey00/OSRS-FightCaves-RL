@@ -532,58 +532,69 @@ DEPENDENCIES:
 These are frozen in fc_contracts.h. Both training-env and demo-env use
 identical contracts.
 
-OBSERVATION (135 policy floats):
+OBSERVATION (151 policy floats + 36 action mask = 187 total):
 
-  Player (21 floats):
-    [0]  HP: current_hp / max_hp
-    [1]  Prayer: current_prayer / max_prayer
-    [2]  X: x / 63
-    [3]  Y: y / 63
-    [4]  Attack timer: attack_timer / 5.0
-    [5]  Food timer: food_timer / 3
-    [6]  Potion timer: potion_timer / 2
-    [7]  Combo timer: combo_timer / 1
-    [8]  Run energy: run_energy / 10000
-    [9]  Is running: binary
-    [10] Protect melee active: binary
-    [11] Protect range active: binary
-    [12] Protect magic active: binary
-    [13] Sharks: sharks / 20
-    [14] Prayer doses: doses / 32
-    [15] Ammo: ammo / 1000
-    [16] Defence level: defence / 99
-    [17] Ranged level: ranged / 99
-    [18] Damage this tick: damage / max_hp
-    [19] Hit style this tick: 0/0.33/0.67/1.0 (none/melee/ranged/magic)
-    [20] Attack target: target_slot / 8 (0=none)
+  All values normalized to [0, 1]. Flat float array, no names — the agent
+  learns what each position means through training.
 
-  NPCs (8 slots x 13 floats = 104):
-    Sorted by (Chebyshev distance, spawn_index). Per slot:
-    [0]  Valid: binary
-    [1]  Type: npc_type / 8
-    [2]  X: x / 63
-    [3]  Y: y / 63
-    [4]  HP: current_hp / max_hp
-    [5]  Distance: dist / 64
-    [6]  Attack style: 0/0.33/0.67/1.0
-    [7]  Attack timer: timer / speed
-    [8]  Size: size / 5
-    [9]  Is healer: binary (Yt-HurKot)
-    [10] Jad telegraph: 0/0.5/1.0 (idle/magic/ranged)
-    [11] Aggro: binary (targeting player)
-    [12] Line of sight: binary (clear LOS from player)
+  Player (21 floats, positions 0-20):
+    [0]  player_hp_fraction         current_hp / max_hp
+    [1]  player_prayer_fraction     current_prayer / max_prayer
+    [2]  player_x                   x / 63
+    [3]  player_y                   y / 63
+    [4]  player_attack_timer        attack_timer / 5.0
+    [5]  player_food_timer          food_timer / 3
+    [6]  player_potion_timer        potion_timer / 2
+    [7]  player_combo_timer         combo_timer / 1
+    [8]  player_run_energy          run_energy / 10000
+    [9]  player_is_running          0 or 1
+    [10] player_pray_melee_active   0 or 1
+    [11] player_pray_range_active   0 or 1
+    [12] player_pray_magic_active   0 or 1
+    [13] player_sharks_remaining    count / 20
+    [14] player_prayer_doses        count / 32
+    [15] player_ammo_remaining      count / 1000
+    [16] player_defence_level       level / 99
+    [17] player_ranged_level        level / 99
+    [18] player_damage_this_tick    damage / max_hp
+    [19] player_hit_style_this_tick 0=none, 0.33=melee, 0.67=ranged, 1.0=magic
+    [20] player_attack_target       target_slot / 8 (0=none)
 
-  Meta (10 floats):
-    [0]  Wave: wave / 63
-    [1]  Rotation: rotation / 15
-    [2]  NPCs remaining: remaining / 16
-    [3]  Tick: tick / 200000
-    [4]  Total damage dealt: total / 10000
-    [5]  Total damage taken: total / max_hp
-    [6]  Damage dealt this tick: damage / 1000
-    [7]  Damage taken this tick: damage / max_hp
-    [8]  NPCs killed this tick: count / 16
-    [9]  Wave just cleared: binary
+  NPCs (8 slots × 15 floats = 120, positions 21-140):
+    Sorted by Chebyshev distance (closest first), tiebreak by spawn_index.
+    Slot 0 = closest NPC, slot 7 = 8th closest. Empty slots = all zeros.
+
+    Per slot (15 floats):
+    [0]  npcN_valid                 1=NPC in slot, 0=empty
+    [1]  npcN_type                  npc_type / 8
+                                      0.125=Tz-Kih, 0.25=Tz-Kek, 0.375=Tz-Kek(sm),
+                                      0.5=Tok-Xil, 0.625=Yt-MejKot, 0.75=Ket-Zek,
+                                      0.875=TzTok-Jad, 1.0=Yt-HurKot
+    [2]  npcN_x                    x / 64
+    [3]  npcN_y                    y / 64
+    [4]  npcN_hp_fraction          current_hp / max_hp
+    [5]  npcN_distance             chebyshev_distance / 64
+    [6]  npcN_attack_style         last attack style (0.33=melee, 0.67=ranged, 1.0=magic)
+    [7]  npcN_attack_timer         ticks_until_next_attack / attack_speed (0=about to fire)
+    [8]  npcN_size                 tile_size / 5
+    [9]  npcN_is_healer            0 or 1 (Yt-HurKot)
+    [10] npcN_jad_telegraph        0=idle, 0.5=magic_windup, 1.0=ranged_windup
+    [11] npcN_aggro                1=targeting player
+    [12] npcN_line_of_sight        1=clear LOS from player
+    [13] npcN_pending_attack_style 0=none in flight, 0.33/0.67/1.0=attack in flight
+    [14] npcN_pending_attack_ticks ticks_until_hit_resolves / 10 (0=none)
+
+  Meta (10 floats, positions 141-150):
+    [0]  current_wave               wave / 63
+    [1]  rotation_id                rotation / 15
+    [2]  npcs_remaining             count / 16
+    [3]  tick                       tick / 200000
+    [4]  total_damage_dealt         total / 10000
+    [5]  total_damage_taken         total / max_hp
+    [6]  damage_dealt_this_tick     damage / 1000
+    [7]  damage_taken_this_tick     damage / max_hp
+    [8]  npcs_killed_this_tick      count / 16
+    [9]  wave_just_cleared          0 or 1
 
 REWARD FEATURES (16 floats, emitted by C, shaped by Python):
     [0]  Damage dealt: damage / 1000
@@ -636,6 +647,68 @@ ACTION SPACE (7 heads, 5 used in PufferLib v1):
 ACTION MASK (36 floats for v1, 166 for full 7-head):
   1.0 = valid, 0.0 = masked. Included in observation buffer for policy.
   PufferLib v1: OBS = 126 policy + 36 mask = 162 total.
+
+REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
+
+  All weights applied in fc_puffer_compute_reward() in fight_caves.h.
+  Reward each tick = weighted sum of reward features + hardcoded bonuses.
+
+  COMBAT:
+    w_damage_dealt      Per-tick damage dealt to NPCs (normalized /1000).
+                        Incentivizes attacking. Higher = more aggressive.
+    w_npc_kill          Fires when an NPC dies. Incentivizes finishing kills.
+    w_wave_clear        Fires when all NPCs in a wave are dead. Wave progression.
+    w_jad_damage        Extra damage bonus specifically for hitting Jad.
+    w_jad_kill          Big reward for killing Jad (wave 63 boss).
+    w_cave_complete     Ultimate reward for clearing all 63 waves.
+
+  SURVIVAL:
+    w_damage_taken      Per-tick damage taken. QUADRATIC scaling:
+                        penalty = dmg_frac² × 70 × weight. Small hits
+                        ignorable, big hits catastrophic.
+    w_player_death      Terminal penalty when player HP reaches 0.
+
+  CONSUMABLES:
+    w_food_used         Base penalty for eating. Scaled by waste fraction
+                        (overheal / shark_heal × 9). Wasteful eating costs
+                        up to 10x the base. Teaches eat-when-hurt.
+    food_used_well      Hardcoded +1.0 when eating with 20+ HP missing.
+                        Net reward for well-timed eat = +0.5.
+    w_prayer_pot_used   Base penalty for drinking prayer potion. Same waste
+                        scaling as food. Wasteful drinking costs up to 10x.
+
+  PRAYER:
+    w_correct_danger_prayer  Reward for correct prayer blocking a ranged/magic
+                        hit at resolve time. Positive reinforcement only.
+    w_wrong_danger_prayer    Penalty for wrong prayer when hit. Set to 0 in v9+
+                        (damage_taken handles this implicitly).
+    w_correct_jad_prayer     Jad-specific prayer reward (disabled since v5).
+    w_wrong_jad_prayer       Jad-specific prayer penalty (disabled since v5).
+
+  OTHER:
+    w_invalid_action    Small penalty when agent picks a masked action.
+    w_movement          Reward/penalty for walking/running. Usually 0.
+    w_idle              Reward/penalty for choosing idle movement. Usually 0.
+    w_tick_penalty      Fires every tick. Small time pressure to progress.
+
+  HARDCODED (in fight_caves.h, not configurable):
+    Prayer drain cost   -0.01/tick when any prayer is active. Incentivizes
+                        prayer conservation and flicking.
+    Prayer pot timing   +1.0 for drinking when prayer below 20%.
+
+  TRAINING HYPERPARAMETERS:
+    learning_rate       PPO learning rate. 0.001 default.
+    anneal_lr           1=decay LR to 0 over training, 0=constant LR.
+    gamma               Discount factor. 0.999 for long-horizon games.
+    gae_lambda          GAE smoothing. 0.95 standard.
+    clip_coef           PPO clip coefficient. 0.2 standard.
+    vf_coef             Value loss weight. 0.5 standard.
+    ent_coef            Entropy bonus. Higher = more exploration.
+    max_grad_norm       Gradient clipping. 0.5 standard.
+    horizon             Rollout length per update. 256.
+    minibatch_size      Samples per gradient step. 4096.
+    total_agents        Parallel environments. 4096.
+    total_timesteps     Training budget.
 
 ================================================================================
 PART 2: HOW WE GOT HERE

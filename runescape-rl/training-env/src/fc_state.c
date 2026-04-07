@@ -1,6 +1,7 @@
 #include "fc_api.h"
 #include "fc_wave.h"
 #include "fc_pathfinding.h"
+#include "fc_player_init.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,8 +37,11 @@ static void load_collision_once(void) {
 
     static const char* collision_paths[] = {
         "assets/fightcaves.collision",
+        "demo-env/assets/fightcaves.collision",
+        "training-env/assets/fightcaves.collision",
         "../demo-env/assets/fightcaves.collision",
         "../training-env/assets/fightcaves.collision",
+        "../../demo-env/assets/fightcaves.collision",
         NULL
     };
     FILE* f = NULL;
@@ -80,68 +84,42 @@ static void setup_arena(FcState* state) {
     memcpy(state->walkable, g_collision_cache, sizeof(state->walkable));
 }
 
-/* ======================================================================== */
-/* Player initialization                                                     */
-/* ======================================================================== */
+/* Player initialization — constants defined in fc_player_init.h */
 
 static void init_player(FcPlayer* p) {
-    /* Position: center of arena */
     p->x = FC_ARENA_WIDTH / 2;
     p->y = FC_ARENA_HEIGHT / 2;
-
-    /* Vitals */
     p->current_hp = FC_PLAYER_MAX_HP;
     p->max_hp = FC_PLAYER_MAX_HP;
     p->current_prayer = FC_PLAYER_MAX_PRAYER;
     p->max_prayer = FC_PLAYER_MAX_PRAYER;
-
-    /* Prayer off at start */
     p->prayer = PRAYER_NONE;
-
-    /* Consumables */
     p->sharks_remaining = FC_MAX_SHARKS;
     p->prayer_doses_remaining = FC_MAX_PRAYER_DOSES;
-
-    /* Timers: 0 = ready */
     p->attack_timer = 0;
     p->food_timer = 0;
     p->potion_timer = 0;
     p->combo_timer = 0;
-
-    /* Run */
-    p->run_energy = 10000;  /* 100% */
-    p->is_running = 1;  /* FC players typically run */
-
-    /* Stats (from FightCaveEpisodeInitializer.kt) */
+    p->run_energy = 10000;
+    p->is_running = 1;
     p->attack_level = FC_PLAYER_ATTACK_LVL;
     p->strength_level = FC_PLAYER_STRENGTH_LVL;
     p->defence_level = FC_PLAYER_DEFENCE_LVL;
     p->ranged_level = FC_PLAYER_RANGED_LVL;
     p->prayer_level = FC_PLAYER_PRAYER_LVL;
     p->magic_level = FC_PLAYER_MAGIC_LVL;
-
-    /* Equipment bonuses — exact values from Void 634 cache item definitions:
-     * Coif + Rune Crossbow + Black D'hide Body/Chaps/Vambraces + Snakeskin Boots + Adamant Bolts */
-    p->ranged_attack_bonus = 153;   /* 2+90+30+17+11+3 */
-    p->ranged_strength_bonus = 100; /* adamant bolts (param 643) */
-    p->defence_stab = 97;           /* 4+0+55+31+6+1 */
-    p->defence_slash = 84;          /* 6+0+47+25+5+1 */
-    p->defence_crush = 110;         /* 8+0+60+33+7+2 */
-    p->defence_magic = 91;          /* 4+0+50+28+8+1 */
-    p->defence_ranged = 90;         /* 4+0+55+31+0+0 */
-    p->prayer_bonus = 0;            /* no prayer bonus from this loadout */
-
-    /* Ammo */
-    p->ammo_count = 1000;
-
-    /* HP regen counter */
+    p->ranged_attack_bonus = FC_EQUIP_RANGED_ATK;
+    p->ranged_strength_bonus = FC_EQUIP_RANGED_STR;
+    p->defence_stab = FC_EQUIP_DEF_STAB;
+    p->defence_slash = FC_EQUIP_DEF_SLASH;
+    p->defence_crush = FC_EQUIP_DEF_CRUSH;
+    p->defence_magic = FC_EQUIP_DEF_MAGIC;
+    p->defence_ranged = FC_EQUIP_DEF_RANGED;
+    p->prayer_bonus = FC_EQUIP_PRAYER_BONUS;
+    p->ammo_count = FC_PLAYER_AMMO;
     p->hp_regen_counter = 0;
-
-    /* Route (click-to-move) — empty */
     p->route_len = 0;
     p->route_idx = 0;
-
-    /* Attack target — none */
     p->attack_target_idx = -1;
     p->approach_target = 0;
 }
@@ -250,6 +228,7 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_RNG_LVL]   = (float)p->ranged_level / 99.0f;
     player[FC_OBS_PLAYER_DMG_TICK]  = (p->max_hp > 0) ? (float)p->damage_taken_this_tick / (float)p->max_hp : 0.0f;
     player[FC_OBS_PLAYER_HIT_STYLE] = (float)p->hit_style_this_tick / 3.0f;  /* 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
+    player[FC_OBS_PLAYER_HIT_SRC]  = (float)p->hit_source_npc_type / (float)NPC_TYPE_COUNT;  /* 0=none, normalized NPC type */
     player[FC_OBS_PLAYER_TARGET]    = 0.0f;  /* filled after NPC slot computation below */
 
     /* NPC slot selection: gather active NPCs, sort, take first 8 */
@@ -281,6 +260,18 @@ void fc_write_obs(const FcState* state, float* out) {
         npc_out[FC_NPC_AGGRO]         = (n->aggro_target >= 0) ? 1.0f : 0.0f;
         npc_out[FC_NPC_LOS]           = (float)fc_has_line_of_sight(
             p->x, p->y, n->x + n->size/2, n->y + n->size/2, state->walkable);
+
+        /* Pending attack from this NPC — scan player's pending hits */
+        npc_out[FC_NPC_PENDING_STYLE] = 0.0f;
+        npc_out[FC_NPC_PENDING_TICKS] = 0.0f;
+        for (int hi = 0; hi < p->num_pending_hits; hi++) {
+            const FcPendingHit* ph = &p->pending_hits[hi];
+            if (ph->active && ph->source_npc_idx == active_indices[slot]) {
+                npc_out[FC_NPC_PENDING_STYLE] = (float)ph->attack_style / 3.0f;
+                npc_out[FC_NPC_PENDING_TICKS] = (float)ph->ticks_remaining / 10.0f;
+                break;  /* report first pending hit from this NPC */
+            }
+        }
     }
     /* Remaining NPC slots already zeroed by memset */
 
@@ -380,7 +371,6 @@ void fc_write_mask(const FcState* state, float* out) {
     if (p->sharks_remaining <= 0 || p->food_timer > 0 || p->current_hp >= p->max_hp) {
         out[FC_MASK_EAT_START + FC_EAT_SHARK] = 0.0f;
     }
-    /* Combo eat: also need food timer check (separate timer path in PR 2) */
     if (p->sharks_remaining <= 0 || p->combo_timer > 0 || p->current_hp >= p->max_hp) {
         out[FC_MASK_EAT_START + FC_EAT_COMBO] = 0.0f;
     }

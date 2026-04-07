@@ -29,9 +29,9 @@ import struct
 import numpy as np
 
 # Observation/action dimensions (must match fc_contracts.h)
-POLICY_OBS_SIZE = 135
+POLICY_OBS_SIZE = 152  # 22 player + 8*15 NPC + 10 meta
 MASK_5HEAD_SIZE = 36   # 17 + 9 + 5 + 3 + 2
-TOTAL_LINE_FLOATS = POLICY_OBS_SIZE + MASK_5HEAD_SIZE  # 171
+TOTAL_LINE_FLOATS = POLICY_OBS_SIZE + MASK_5HEAD_SIZE  # 188
 NUM_ACTIONS = 5
 ACT_DIMS = [17, 9, 5, 3, 2]
 
@@ -57,8 +57,9 @@ def find_viewer():
 
 def find_latest_checkpoint(env_name="fight_caves"):
     """Find the most recent .bin checkpoint."""
-    puffer_dir = os.environ.get("PUFFERLIB_DIR",
-        "/home/joe/projects/runescape-rl-reference/pufferlib_4")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_puffer = os.path.normpath(os.path.join(script_dir, "..", "pufferlib_4"))
+    puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer)
     pattern = os.path.join(puffer_dir, "checkpoints", env_name, "**", "*.bin")
     candidates = glob.glob(pattern, recursive=True)
     if not candidates:
@@ -123,6 +124,8 @@ def main():
                         help="Use argmax instead of sampling")
     parser.add_argument("--random", action="store_true",
                         help="Use random valid actions (no checkpoint needed)")
+    parser.add_argument("--start-wave", type=int, default=0,
+                        help="Start at this wave (0 = wave 1)")
     args = parser.parse_args()
     # Clear sys.argv so PufferLib doesn't see our flags
     sys.argv = [sys.argv[0]]
@@ -211,7 +214,8 @@ def main():
     # Launch viewer subprocess
     print("[eval] Launching viewer...", file=sys.stderr)
     proc = subprocess.Popen(
-        [viewer_path, "--policy-pipe"],
+        [viewer_path, "--policy-pipe"] +
+            (["--start-wave", str(args.start_wave)] if args.start_wave > 0 else []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=None,  # let viewer stderr pass through to terminal

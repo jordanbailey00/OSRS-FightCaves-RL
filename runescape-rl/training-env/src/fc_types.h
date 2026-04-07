@@ -114,15 +114,8 @@ typedef enum {
 #define FC_MAX_EPISODE_TICKS   200000 /* ~33 hours at 0.6s/tick — force prayer drain */
 #define FC_HP_REGEN_INTERVAL     10  /* HP regen: 1 HP every 10 ticks (6 seconds) */
 
-/* Player base stats (from FightCaveEpisodeInitializer.kt) */
-#define FC_PLAYER_MAX_HP        700  /* 70 HP in tenths */
-#define FC_PLAYER_MAX_PRAYER    430  /* 43 prayer points in tenths */
-#define FC_PLAYER_ATTACK_LVL      1
-#define FC_PLAYER_STRENGTH_LVL    1
-#define FC_PLAYER_DEFENCE_LVL    70
-#define FC_PLAYER_RANGED_LVL     70
-#define FC_PLAYER_PRAYER_LVL     43
-#define FC_PLAYER_MAGIC_LVL       1
+/* Player base stats — defined in fc_player_init.h */
+#include "fc_player_init.h"
 
 /* ======================================================================== */
 /* Pending Hit (projectile in flight or delayed melee)                       */
@@ -230,6 +223,7 @@ typedef struct {
     /* Per-tick event flags (cleared each tick, used for obs/reward/hitsplats) */
     int damage_taken_this_tick;
     int hit_style_this_tick;    /* FcAttackStyle of the last hit that resolved this tick */
+    int hit_source_npc_type;    /* FcNpcType of the NPC that landed the last hit this tick */
     int hit_landed_this_tick;
     int food_eaten_this_tick;
     int potion_used_this_tick;
@@ -383,6 +377,22 @@ typedef struct {
     int idle_this_tick;
     int food_used_this_tick;
     int prayer_potion_used_this_tick;
+    int pre_eat_hp;                 /* HP before eating (for reward threshold check) */
+    int pre_drink_prayer;           /* prayer before drinking (for reward threshold check) */
+
+    /* Episode-level analytics (cumulative, zeroed on fc_reset via memset) */
+    int ep_ticks_praying;       /* ticks with any prayer active */
+    int ep_correct_blocks;      /* hits correctly blocked by matching prayer */
+    int ep_wrong_prayer_hits;   /* hits where prayer active but wrong type */
+    int ep_no_prayer_hits;      /* hits where no prayer was active */
+    int ep_hits_total;          /* total hits resolved against player */
+    int ep_damage_blocked;      /* total damage prevented by correct prayer */
+    int ep_prayer_switches;     /* number of prayer changes */
+    int ep_pots_used;           /* prayer pot doses consumed */
+    int ep_pots_wasted;         /* doses consumed when prayer was above 20% */
+    int ep_food_eaten;          /* sharks consumed */
+    int ep_food_overhealed;     /* sharks that overhealed (wasted HP) */
+    int ep_pots_overrestored;   /* doses that over-restored (wasted prayer) */
 } FcState;
 
 #endif /* FC_TYPES_H */

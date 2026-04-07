@@ -52,8 +52,9 @@
 #define FC_OBS_PLAYER_RNG_LVL   17  /* ranged_level / 99 */
 #define FC_OBS_PLAYER_DMG_TICK  18  /* damage_taken_this_tick / max_hp */
 #define FC_OBS_PLAYER_HIT_STYLE 19  /* hit_style_this_tick/3: 0=none, 0.33=melee, 0.67=ranged, 1.0=magic */
-#define FC_OBS_PLAYER_TARGET    20  /* attack_target NPC slot index / 8 (0=no target, 0.125-1.0=slot 0-7) */
-#define FC_OBS_PLAYER_SIZE      21
+#define FC_OBS_PLAYER_HIT_SRC  20  /* hit_source_npc_type/NPC_TYPE_COUNT: which NPC type landed the hit */
+#define FC_OBS_PLAYER_TARGET    21  /* attack_target NPC slot index / 8 (0=no target, 0.125-1.0=slot 0-7) */
+#define FC_OBS_PLAYER_SIZE      22
 
 /* --- Per-NPC features (12 floats × 8 visible NPCs = 96 floats) --- */
 /*
@@ -75,7 +76,7 @@
  * equal, which is critical for replay consistency and debug reproducibility.
  */
 #define FC_OBS_NPC_START        FC_OBS_PLAYER_SIZE  /* 20 */
-#define FC_OBS_NPC_STRIDE       13
+#define FC_OBS_NPC_STRIDE       15
 #define FC_OBS_NPC_SLOTS        8   /* FC_VISIBLE_NPCS */
 
 /* Per-NPC feature offsets within stride */
@@ -92,6 +93,8 @@
 #define FC_NPC_JAD_TELEGRAPH    10  /* jad_telegraph / 2 (idle=0, magic=0.5, ranged=1.0) */
 #define FC_NPC_AGGRO            11  /* 1 if targeting player, 0 otherwise */
 #define FC_NPC_LOS              12  /* 1 if player has line of sight, 0 if blocked */
+#define FC_NPC_PENDING_STYLE    13  /* incoming attack style (0=none, 0.33/0.67/1.0) */
+#define FC_NPC_PENDING_TICKS    14  /* ticks until incoming attack resolves (normalized) */
 
 #define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 104 */
 

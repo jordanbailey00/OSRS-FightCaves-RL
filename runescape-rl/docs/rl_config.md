@@ -1,3 +1,285 @@
+# RL Configuration & Reward Reference
+
+## OBS
+
+The policy network receives **152 floats** (`FC_POLICY_OBS_SIZE`) per tick, plus a **36-float action mask** appended by PufferLib (total 188 floats). All values are float32, normalized to [0,1]. An additional 18 reward features exist in a separate internal buffer used for reward computation and logging only — the policy never sees them.
+
+Observations are written in `fc_state.c:fc_write_obs()` after each `fc_tick()` call. The tick processing order is: (1) clear per-tick flags, (2) process player actions (prayer is instant), (3) decrement timers, (4) prayer drain, (4b) HP regen, (5) NPC AI, (6) resolve pending hits, (7) check terminal, (8) increment tick. Observations reflect the state **after** all phases complete.
+
+### Player Features (22 floats, indices 0-21)
+
+- **[0] player_hp** — `current_hp / max_hp`. Source: `FcPlayer.current_hp` (tenths, max 700). Decremented in `fc_combat.c:fc_resolve_player_pending_hits()` when unblocked hits resolve. Incremented by eating (+200 tenths shark, +180 karambwan) and HP regen (+10 tenths every 10 ticks).
+
+- **[1] player_prayer** — `current_prayer / max_prayer`. Source: `FcPlayer.current_prayer` (tenths, max 430). Drained each tick by `fc_prayer.c:fc_prayer_drain_tick()` using OSRS counter-based system: counter += 12/tick, drain 10 tenths when counter > resistance (60 + 2*prayer_bonus). Also drained by Tz-Kih hits (10 tenths per impact, regardless of block). Restored by prayer potions (+170 tenths per dose). Prayer auto-deactivates at 0.
+
+- **[2] player_x** — `x / 64`. Source: `FcPlayer.x`. 64x64 arena with irregular cave collision (2153 walkable tiles from Void 634 cache).
+
+- **[3] player_y** — `y / 64`. Source: `FcPlayer.y`.
+
+- **[4] player_atk_timer** — `attack_timer / 5`. Source: `FcPlayer.attack_timer`. Set to 5 when player fires ranged attack (rune crossbow, 5-tick speed). Decremented each tick in phase 3. 0 = ready to fire.
+
+- **[5] player_food_timer** — `food_timer / 3`. Source: `FcPlayer.food_timer`. Set to 3 (FC_FOOD_COOLDOWN_TICKS) on eat. 0 = can eat.
+
+- **[6] player_pot_timer** — `potion_timer / 2`. Source: `FcPlayer.potion_timer`. Set to 2 (FC_POTION_COOLDOWN_TICKS) on drink. Separate clock from food (OSRS: food and potions have independent timers).
+
+- **[7] player_combo_timer** — `combo_timer / 1`. Source: `FcPlayer.combo_timer`. Karambwan combo-eat delay. 1 tick after combo eat.
+
+- **[8] player_run_energy** — `run_energy / 10000`. Source: `FcPlayer.run_energy`. Run energy fraction (100.00% = 10000). Currently not depleted — run actions always available if energy > 0.
+
+- **[9] player_is_running** — 0 or 1. Source: `FcPlayer.is_running`. Set when player successfully runs (2-tile step).
+
+- **[10] player_pray_melee** — 0 or 1. Source: `FcPlayer.prayer == PRAYER_PROTECT_MELEE`. Protect from Melee active. Prayer is toggled instantly in tick phase 2 (before NPC AI and hit resolution).
+
+- **[11] player_pray_range** — 0 or 1. Source: `FcPlayer.prayer == PRAYER_PROTECT_RANGE`. Protect from Missiles active.
+
+- **[12] player_pray_magic** — 0 or 1. Source: `FcPlayer.prayer == PRAYER_PROTECT_MAGIC`. Protect from Magic active.
+
+- **[13] player_sharks** — `sharks / 20`. Source: `FcPlayer.sharks_remaining`. Food remaining. Starts at 20 (FC_MAX_SHARKS).
+
+- **[14] player_doses** — `doses / 32`. Source: `FcPlayer.prayer_doses_remaining`. Prayer potion doses remaining. Starts at 32 (8 pots x 4 doses).
+
+- **[15] player_ammo** — `ammo / 1000`. Source: `FcPlayer.ammo_count`. Bolt ammo remaining. Starts at 1000. Decremented by 1 per ranged attack.
+
+- **[16] player_def_level** — `defence / 99`. Source: `FcPlayer.defence_level`. Fixed at 70.
+
+- **[17] player_rng_level** — `ranged / 99`. Source: `FcPlayer.ranged_level`. Fixed at 70.
+
+- **[18] player_dmg_tick** — `damage / max_hp`. Source: `FcPlayer.damage_taken_this_tick`. Damage received this tick. Accumulated across all resolving hits in `fc_combat.c:227`. Only counts **unblocked** damage — blocked hits contribute 0. Cleared each tick in phase 1.
+
+- **[19] player_hit_style** — `style / 3`. Source: `FcPlayer.hit_style_this_tick`. Attack style of hits that resolved this tick. 0=none, 0.33=melee, 0.67=ranged, 1.0=magic. Set in `fc_combat.c:228` for every resolving hit (blocked or not). **Note:** if multiple hits resolve in one tick, this is overwritten to the last hit's style.
+
+- **[20] player_hit_source** — `npc_type / 9`. Source: `FcPlayer.hit_source_npc_type`. NPC type that landed the last hit this tick. Set in `fc_combat.c:229` from `state->npcs[source_npc_idx].npc_type`. Values: 0=none, 0.11=Tz-Kih, 0.22=Tz-Kek, 0.33=Tz-Kek-Sm, 0.44=Tok-Xil, 0.56=Yt-MejKot, 0.67=Ket-Zek, 0.78=TzTok-Jad, 0.89=Yt-HurKot. Same overwrite behavior as hit_style for multi-hit ticks.
+
+- **[21] player_target** — `slot / 8`. Source: `FcPlayer.attack_target_idx` mapped to visible slot. Current attack target. 0=no target. 0.125-1.0 = NPC slot 0-7. Mapped from internal NPC array index to the distance-sorted visible slot index used in the NPC observation below.
+
+### Per-NPC Features (15 floats x 8 slots = 120 floats, indices 22-141)
+
+NPCs are sorted by **Chebyshev distance** to player (closest first), tiebreak by `spawn_index` (earlier spawns first). Only the 8 closest active (alive) NPCs are visible. Remaining slots are zeroed (`valid=0`). NPCs beyond slot 8 are still simulated (attack, move, take damage) but invisible to the agent and untargetable via the ATTACK action.
+
+For each slot, 15 features at offset `22 + slot * 15`:
+
+- **[+0] valid** — 0 or 1. 1 if an NPC is assigned to this slot, 0 if slot is empty (padding).
+
+- **[+1] npc_type** — `type / 9`. Source: `FcNpc.npc_type`. Monster type encoded as: 0.11=Tz-Kih (lv22, melee, prayer-drain), 0.22=Tz-Kek (lv45, melee, splits), 0.33=Tz-Kek-Sm (lv22, melee, split-child), 0.44=Tok-Xil (lv90, ranged + melee-dual), 0.56=Yt-MejKot (lv180, melee, heals NPCs), 0.67=Ket-Zek (lv360, magic + melee-dual), 0.78=TzTok-Jad (lv702, magic + ranged, telegraph), 0.89=Yt-HurKot (lv140, melee, heals Jad).
+
+- **[+2] npc_x** — `x / 64`. Source: `FcNpc.x`.
+
+- **[+3] npc_y** — `y / 64`. Source: `FcNpc.y`.
+
+- **[+4] npc_hp** — `current_hp / max_hp`. Source: `FcNpc.current_hp / max_hp`.
+
+- **[+5] npc_distance** — `dist / 64`. Chebyshev distance (max of abs dx, abs dy) from player tile to nearest NPC footprint tile. Computed in `fc_state.c:npc_distance()`.
+
+- **[+6] npc_atk_style** — `style / 3`. Source: `FcNpc.attack_style`. NPC's primary attack style: 0.33=melee, 0.67=ranged, 1.0=magic. Dual-mode NPCs (Tok-Xil, Ket-Zek) show their primary style here; they switch to melee at distance 1 in `fc_npc.c` AI but the observation shows the base type.
+
+- **[+7] npc_atk_timer** — `timer / speed`. Source: `FcNpc.attack_timer / attack_speed`. Attack cooldown fraction. All FC NPCs have attack_speed=4 ticks except Jad (8 ticks). 0 = about to attack.
+
+- **[+8] npc_size** — `size / 5`. Source: `FcNpc.size`. Tile footprint. 1 for most NPCs, larger for Ket-Zek and Jad. Affects distance calculations and collision.
+
+- **[+9] npc_is_healer** — 0 or 1. Source: `FcNpc.is_healer`. 1 for Yt-HurKot (Jad healers). Healers restore Jad HP unless distracted by player attack.
+
+- **[+10] npc_jad_telegraph** — `telegraph / 2`. Source: `FcNpc.jad_telegraph`. Jad wind-up indicator: 0=idle, 0.5=magic windup, 1.0=ranged windup. Visible for 3 ticks before attack fires. Agent has 3 telegraph ticks + projectile flight ticks to switch prayer. Only meaningful for Jad (0 for all other NPCs).
+
+- **[+11] npc_aggro** — 0 or 1. Source: `FcNpc.aggro_target >= 0`. 1 if this NPC is targeting the player. In FC, all NPCs aggro the player (always 1 when valid).
+
+- **[+12] npc_los** — 0 or 1. Source: `fc_has_line_of_sight()`. 1 if player has clear line of sight to the NPC center tile. Computed via raycast through the walkability grid. LOS blocked by cave walls/pillars.
+
+- **[+13] npc_pending_style** — `style / 3`. Scanned from `FcPlayer.pending_hits[]` matching `source_npc_idx` to this NPC's array index. Attack style of a projectile currently in flight from this NPC to the player. 0 if no in-flight attack.
+
+- **[+14] npc_pending_ticks** — `ticks / 10`. Paired with pending_style. Ticks until the in-flight attack from this NPC resolves. Agent can use this to time prayer switches.
+
+### Meta Features (10 floats, indices 142-151)
+
+- **[+0] wave** — `wave / 63`. Source: `FcState.current_wave`. Current wave number (1-63). Advances when all NPCs in a wave die.
+- **[+1] rotation** — `rotation / 15`. Source: `FcState.rotation_id`. Spawn rotation (0-14). Determines NPC spawn positions. Selected randomly at episode start.
+- **[+2] npcs_remaining** — `remaining / 16`. Source: `FcState.npcs_remaining`. Active NPCs still alive in current wave.
+- **[+3] tick** — `tick / 200000`. Source: `FcState.tick`. Current tick. Max episode length is 200,000 ticks.
+- **[+4] total_dmg_dealt** — `total / 10000`. Source: `FcPlayer.total_damage_dealt`. Cumulative damage dealt this episode.
+- **[+5] total_dmg_taken** — `total / max_hp`. Source: `FcPlayer.total_damage_taken`. Cumulative damage received this episode. Can exceed 1.0 (HP can be restored).
+- **[+6] dmg_dealt_tick** — `dealt / 1000`. Source: `FcState.damage_dealt_this_tick`. Damage dealt to NPCs this tick.
+- **[+7] dmg_taken_tick** — `taken / max_hp`. Source: `FcState.damage_taken_this_tick`. Damage received this tick (state-level aggregate, mirrors player feature idx 18).
+- **[+8] kills_tick** — `kills / 16`. Source: `FcState.npcs_killed_this_tick`. NPCs killed this tick.
+- **[+9] wave_cleared** — 0 or 1. Source: `FcState.wave_just_cleared`. 1 if the last NPC in the wave died this tick.
+
+### Action Space (5 heads for RL, 7 defined total)
+
+- **Head 0 — MOVE** (17 values): 0=idle, 1-8=walk (N,NE,E,SE,S,SW,W,NW), 9-16=run (same dirs). Directional tile movement. Ignored while a BFS route is active. Walk=1 tile, run=2 tiles. Masked if destination tile is unwalkable or run energy depleted.
+
+- **Head 1 — ATTACK** (9 values): 0=none, 1-8=NPC slot 0-7. Target a visible NPC (same slot ordering as observation). Auto-approach into weapon range (7 tiles for rune crossbow) then auto-attack on cooldown. Slots without a valid NPC are masked.
+
+- **Head 2 — PRAYER** (5 values): 0=no change, 1=off, 2=protect magic, 3=protect missiles, 4=protect melee. Toggle protection prayer. Applied instantly at the start of tick processing (phase 2), before NPC AI and hit resolution. Always unmasked.
+
+- **Head 3 — EAT** (3 values): 0=none, 1=shark, 2=karambwan combo. Shark heals 200 tenths (20 HP), karambwan 180 tenths (18 HP). Masked if food_timer > 0, no sharks, or HP full.
+
+- **Head 4 — DRINK** (2 values): 0=none, 1=prayer potion. Restores 170 tenths (17 prayer points for lv43). Masked if potion_timer > 0, no doses, or prayer full.
+
+- **Heads 5-6 — MOVE_TARGET_X/Y** (65 values each): 0=no-op, 1-64=tile coordinate. BFS pathfinding. Not used by RL agent, defined for viewer.
+
+Action mask (36 floats) is appended after the 152 policy obs floats in the PufferLib buffer.
+
+---
+
+## Reward Shaping
+
+All reward computation happens in `fight_caves.h:fc_puffer_compute_reward()`, called once per tick after `fc_tick()`. Reward features are written to a separate internal buffer by `fc_state.c:fc_write_reward_features()` — the policy network never sees reward features.
+
+Config weights are parsed from `config/fight_caves.ini` in `binding.c:my_init()`. Some rewards are hardcoded directly in the reward function and not configurable via ini. Note: PufferLib 4 CUDA kernel does NOT enforce action masks at the sampling level — masks are observation features the policy learns from, not hard constraints.
+
+### Active Signals
+
+**1. damage_dealt** — extrinsic | dense per-hit reward | progress reward | heuristic shaping | **active** (w=1.0)
+- `fight_caves.h:149` — `reward += (damage_dealt_this_tick / 1000) * w_damage_dealt`
+- Linear scaling. Accumulated in `fc_combat.c:288` when player's ranged attacks resolve on NPCs
+- 100 damage this tick = +0.1 reward. Incentivizes the agent to keep attacking
+
+**2. damage_taken** — extrinsic | dense per-hit penalty | safety penalty | heuristic shaping | **active** (w=-0.75, quadratic x70)
+- `fight_caves.h:155-158` — `reward += (dmg_frac)^2 * 70 * w_damage_taken`
+- **Quadratic** scaling with 70x multiplier makes large hits disproportionately painful
+- `dmg_frac = damage_taken_this_tick / max_hp`. Examples: 10 HP = -1.07, 20 HP = -4.28, 50 HP = -26.8
+- Only counts unblocked damage — prayer-blocked hits contribute 0
+
+**3. npc_kill** — extrinsic | sparse event reward | subgoal reward | task reward | **active** (w=2.0)
+- `fight_caves.h:159` — `reward += npcs_killed_this_tick * w_npc_kill`
+- Fires when NPC HP reaches 0. Tz-Kek splits count as 1 kill for the parent; the 2 split children are separate kills
+
+**4. wave_clear** — extrinsic | sparse event reward | subgoal / checkpoint reward | task reward | **active** (w=10.0 x wave_num)
+- `fight_caves.h:166-170` — `reward += w_wave_clear * cleared_wave_number`
+- Scales linearly with wave number. Wave 1 = +10, Wave 15 = +150, Wave 30 = +300, Wave 63 = +630
+- **Primary objective signal.** All other dense signals are kept small so this dominates
+
+**5. jad_damage** — extrinsic | dense per-hit reward | progress reward (boss-specific) | heuristic shaping | **active** (w=2.0)
+- `fight_caves.h:171` — `reward += (jad_damage_this_tick / 1000) * w_jad_damage`
+- Stacks with damage_dealt (both fire for Jad hits)
+
+**6. jad_kill** — extrinsic | sparse event reward | subgoal reward (boss-specific) | task reward | **active** (w=50.0)
+- `fight_caves.h:172` — `reward += jad_killed * w_jad_kill`
+- Stacks with npc_kill (+2.0) and wave_clear (+630 for wave 63)
+
+**7. player_death** — extrinsic | terminal reward | survival penalty | task reward | **active** (w=-20.0)
+- Terminal penalty when player HP <= 0
+
+**8. cave_complete** — extrinsic | terminal reward | success reward | task reward | **active** (w=100.0)
+- Terminal reward when all 63 waves cleared
+
+**9. food_waste** — cost / constraint | dense event penalty | resource-use penalty | heuristic shaping | **active** (hardcoded)
+- Penalty only, no reward for eating. Full HP: -5.0. Otherwise: -(heal_wasted / 200), 0 to -1.0 scaled
+- Uses `pre_eat_hp` (saved before heal) to compute actual waste
+
+**10. pot_waste** — cost / constraint | dense event penalty | resource-use penalty | heuristic shaping | **active** (hardcoded)
+- Penalty only, no reward for drinking. Full prayer: -5.0. Otherwise: -(restore_wasted / 170), 0 to -1.0 scaled
+- Uses `pre_drink_prayer` (saved before restore) to compute actual waste
+
+**11. correct_prayer** — extrinsic | dense per-hit reward | correctness reward | heuristic shaping | **active** (w=1.0)
+- `reward += w_correct_danger_prayer` when a hit resolves and active prayer matches attack style
+- Covers all styles (melee, ranged, magic). PvM prayer = 100% block = 0 damage
+
+**12. wrong_prayer** — cost / constraint | dense per-hit penalty | safety penalty | heuristic shaping | **active** (hardcoded -1.0)
+- Fires when a hit resolves, prayer is active, but prayer does NOT match attack style
+
+**13. npc_specific_prayer** — extrinsic | dense per-hit reward | correctness reward | heuristic shaping | **active** (hardcoded +2.0)
+- Extra reward when correct prayer blocks a hit from a specific NPC while agent has a target. All NPCs mapped: Ket-Zek→magic, Tok-Xil→ranged, MejKot/Tz-Kih/Tz-Kek/Tz-Kek-Sm→melee. Stacks with #11.
+
+**14. npc_melee_range** — cost / constraint | dense per-step penalty | safety penalty | heuristic shaping | **active** (hardcoded -0.5/tick per NPC)
+- Fires per-tick for ANY NPC at distance 1. All NPCs should be kited.
+
+**15. prayer_flick** — extrinsic | dense event reward | correctness reward | heuristic shaping | **active** (hardcoded +0.5)
+- Fires ONLY when: prayer just toggled, blocked an actual hit, no prayer point drained, AND agent has a target. Cannot be farmed by idle toggling.
+
+**16. wasted_attack** — cost / constraint | dense per-step penalty | efficiency penalty | heuristic shaping | **active** (hardcoded -0.3)
+- Fires when attack timer is 0 (ready), agent has a target, but didn't deal damage. Encourages attack-while-kiting.
+
+**17. wave_stall** — cost / constraint | dense per-step penalty | time pressure | heuristic shaping | **active** (hardcoded, escalating after 500 ticks)
+- Fires after 500 ticks in the same wave. -0.75 base, scales by +0.75 every 50 ticks: 500=-0.75, 550=-1.50, 600=-2.25, 650=-3.00, etc. Resets on wave clear.
+
+**18. kiting** — extrinsic | dense per-hit reward | progress reward | heuristic shaping | **active** (hardcoded +1.0)
+- Fires when agent deals damage AND target NPC is at distance 5-7 (near max weapon range of 7)
+
+**19. prayer_waste** — cost / constraint | dense per-step penalty | resource conservation | heuristic shaping | **active** (hardcoded -0.2/tick)
+- Fires when prayer is active but no NPC is within its attack range AND no pending hits in flight
+
+**20. combat_idle** — cost / constraint | dense per-step penalty | engagement forcing | heuristic shaping | **active** (hardcoded -0.5/tick)
+- Fires when `ticks_since_attack >= 2` and `npcs_remaining > 0`. Resets when damage dealt
+
+**21. tick_penalty** — cost / constraint | per-step penalty | living penalty / time cost | heuristic shaping | **active** (w=-0.001)
+- Fires unconditionally every tick. -0.001 per tick = -1.0 per 1000 ticks
+
+### Inactive / Broken Signals
+
+**20. invalid_action** — **broken** (w=-0.1, signal never fires)
+
+**21. correct_jad_prayer** — **inactive** (w=0.0, dead code)
+
+**22. wrong_jad_prayer** — **inactive** (w=0.0, dead code)
+
+**23. wrong_danger_prayer** — **inactive** (w=0.0, dead code)
+
+**24. movement** — **inactive** (w=0.0)
+
+**25. idle** — **inactive** (w=0.0)
+
+**26. w_food_used / w_food_used_well / w_prayer_pot_used** — **inactive** (legacy, parsed but unused)
+- These config weights are still parsed by binding.c but the reward function no longer uses them. Replaced by flat hardcoded food_timing (#9) and pot_timing (#10)
+
+### Audit Notes
+
+- **`invalid_action_this_tick` never set** — Field declared and cleared but never assigned to 1. Dead signal.
+- **`w_correct_jad_prayer` / `w_wrong_jad_prayer` / `w_wrong_danger_prayer` never applied** — Weights parsed from config but reward function has no code path that reads them.
+- **Multi-hit overwrite in `hit_style_this_tick`** (Medium) — If 2+ hits resolve in one tick, only last hit's style is tracked. Correct/wrong prayer reward may be inaccurate for multi-hit ticks.
+- **PufferLib 4 does not enforce action masks** — Masks are observation features only. The CUDA sampling kernel samples from raw policy logits without masking. The policy must learn to respect masks.
+- **Stale comments in `fc_contracts.h`** — Comments say "20 floats" (now 22), "104" (now 120), etc. Macros compute correctly.
+
+---
+
+## Hyperparameters
+
+Training hyperparameters configured in `config/fight_caves.ini` under `[train]`, `[vec]`, and `[policy]` sections. These control the PPO algorithm, vectorized environment, and neural network architecture.
+
+### Training (`[train]`)
+
+- **total_timesteps** — Total environment steps before training ends. Determines run length. 1.25B ≈ 10 min, 5B ≈ 40 min, 20B ≈ 3 hrs at ~2M SPS.
+
+- **learning_rate** — Initial learning rate for the Adam optimizer. Controls how much each gradient update changes the policy. Higher = faster learning but risk of instability. Lower = stable but slower.
+
+- **anneal_lr** — 0 = constant LR throughout training. 1 = linearly decay LR from `learning_rate` to 0 over `total_timesteps`. Annealing prevents late-training instability where a near-converged policy gets destructive gradient updates.
+
+- **gamma** — Discount factor (0-1). How much the agent values future rewards vs immediate rewards. 0.999 means a reward 1000 steps in the future is worth ~37% of an immediate reward. Higher gamma = more forward-looking. Critical for Fight Caves where wave-clear rewards are sparse and delayed.
+
+- **gae_lambda** — GAE (Generalized Advantage Estimation) lambda (0-1). Controls bias-variance tradeoff in advantage estimation. 0.95 is standard. Higher = less bias, more variance. Lower = more bias, less variance.
+
+- **clip_coef** — PPO clip ratio. Limits how much the policy can change in a single update. 0.2 means the new policy's probability ratio is clipped to [0.8, 1.2]. Prevents destructive large updates. Standard value.
+
+- **vf_coef** — Value function loss coefficient. Weight of the value function loss relative to the policy loss. 0.5 is standard. Higher = value function trains faster relative to policy.
+
+- **ent_coef** — Entropy coefficient. Bonus reward for maintaining policy randomness. 0.02 encourages exploration. Higher = more random actions. Lower = more deterministic. If entropy collapses to ~0, the policy is frozen and can't explore.
+
+- **max_grad_norm** — Maximum gradient norm for gradient clipping. 0.5 prevents gradient explosions from large reward spikes (like the escalating wave stall penalty).
+
+- **horizon** — Number of steps per rollout before a PPO update. 256 means the agent collects 256 steps of experience, then does a policy update. Shorter = more frequent updates. Longer = more stable gradients but slower learning.
+
+- **minibatch_size** — Number of samples per gradient step within a PPO update. 4096 = one minibatch per env set (total_agents=4096). Matches total_agents for single-pass updates.
+
+### Vectorized Environment (`[vec]`)
+
+- **total_agents** — Number of parallel environment instances. 4096 agents run simultaneously via OpenMP. More agents = more experience per step = higher SPS but more VRAM.
+
+- **num_buffers** — Number of experience buffers. 1 = single buffer (all agents share one rollout buffer). Standard for single-GPU training.
+
+### Policy Network (`[policy]`)
+
+- **hidden_size** — Width of each hidden layer in the MLP policy network. 256 neurons per layer. Larger = more capacity but slower inference.
+
+- **num_layers** — Number of hidden layers. 2 = two hidden layers (256→256) between encoder and decoder. More layers = more capacity for complex strategies.
+
+### Curriculum (`[env]`)
+
+- **curriculum_wave** — Wave to start episodes at. 0 = always wave 1. >0 = start at this wave for `curriculum_pct` fraction of episodes.
+
+- **curriculum_pct** — Fraction of episodes (0.0-1.0) that start at `curriculum_wave`. 1.0 = all episodes start there.
+
+- **disable_movement** — 1 = force movement action to idle every tick. Agent can't walk/run. Used to isolate combat learning from movement complexity.
+
+---
+
 # RL Configuration History
 
 Tracks every training config change with results and reasoning.
@@ -5,7 +287,1415 @@ Current config is at the top. Older runs below.
 
 ---
 
-## CURRENT: v7 (2026-04-04)
+## v16.2 (2026-04-06)
+
+Changes from v16.1:
+
+No reward or signal changes. Same config as v16.1.
+- total_timesteps: 1.25B → **20B**. v16.1 showed a late breakthrough
+  at 890M steps (wave 20→25 in 200M steps) that was still climbing
+  when LR annealed to ~0. 20B gives the agent time for the
+  breakthrough phase to fully play out.
+
+```ini
+[train]
+total_timesteps = 20_000_000_000
+learning_rate = 0.001
+anneal_lr = 1
+```
+
+All other config, loadout, rewards identical to v16.1.
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=20B, lr=0.001, anneal_lr=1.
+
+Results (20B steps, ~191min, wandb run rqvxfqmq):
+- SPS: 1.67M
+- Wave reached: 12.73 avg (final — collapsed), **29.1 peak** (at ~4.7B)
+- Max wave: **32**
+- Most NPCs slayed: **121**
+- Episode return: 512.6 (final), 5,235 peak
+- Episode length: 837 (final), 3,610 peak
+- Score: 0
+- Epochs: 19,073
+- Entropy: **0.025** (final — completely collapsed)
+- Clipfrac: 0.003 (final)
+- Value loss: 43.5
+
+Analytics (final):
+- prayer_uptime: 0.988
+- correct_prayer: 0.0
+- dmg_taken_avg: 1,395
+- pots_used: 7.6
+- food_eaten: 0.0
+
+Progression — THREE DISTINCT PHASES:
+
+Phase 1 — Growth (0-4.7B, LR 0.001→0.00077):
+- Wave climbed 18.7 → 29.1 over 4.7B steps. Best wave performance
+  of any run. Episode return grew from 1,283 to 5,235.
+- Agent learned kiting, combat engagement, and basic prayer.
+- Entropy declined steadily 8.0→4.8 as policy committed to strategy.
+- Clipfrac elevated at 0.4-0.5 — large policy updates happening.
+  This is healthy during the growth phase but foreshadows instability.
+- Value loss volatile (64-120) — the value function struggled to
+  keep up with rapidly changing policy. Normal during fast learning.
+- **Key checkpoint: ~4.7B steps = best policy of the entire run.**
+
+Phase 2 — Destabilization (4.7B-9.8B, LR 0.00077→0.00051):
+- Wave regressed 29.1 → 27.0 over 5B steps. Slow bleed, not sudden.
+- Entropy continued dropping 4.8→1.9 — policy over-committing.
+  The agent was specializing into a narrow strategy that worked at
+  wave 27-29 but couldn't improve further.
+- Clipfrac still 0.3-0.5 — LR was still high enough for destructive
+  updates. The policy was near-converged but gradients kept pushing.
+- Value loss remained extreme (89-120) — value function diverged
+  from actual returns, causing bad advantage estimates, which caused
+  bad policy updates, creating a feedback loop.
+- Return dropped 5,235→3,498 despite wave only dropping 29→27.
+  The agent earned less reward per wave because its strategy was
+  degrading (worse kiting, worse combat efficiency).
+
+Phase 3 — Entropy Collapse (9.8B-20B, LR 0.00051→0):
+- **Catastrophic entropy collapse at ~9.8B.** Entropy crashed from
+  1.9 to 0.027 in one logging interval. Wave dropped 27→13 instantly.
+- The policy became deterministic — entropy 0.025 means the agent
+  picks the same action in every state with >99.9% probability.
+  It cannot explore or adapt. Effectively a fixed program.
+- Episode return hit **-269,923** at 14.2B — the escalating wave
+  stall penalty generated massive negative reward on a single bad
+  episode (1052 ticks at wave 13 = ~550 ticks over limit, scale
+  ~11x, penalty ~-8.25/tick for 550 ticks = -4,537 per episode,
+  but accumulated over multiple waves within the episode).
+- Policy could not recover because entropy=0 means no exploration.
+  LR was still 0.0005 but every gradient update just reinforced the
+  same frozen action distribution.
+- food_eaten=0.0 — agent stopped eating entirely. pots_used=7.6 —
+  barely drinking. correct_prayer=0.0 — praying 99% of ticks but
+  never the correct type. The agent is a zombie — alive but not
+  functioning.
+- **The last 10B steps (50% of training) were completely wasted.**
+
+Root cause analysis:
+
+1. **LR annealing too slow for 20B.** Linear anneal from 0.001 over
+   20B means LR was still 0.00075 at 5B when the policy was already
+   near-converged. Previous 1.25B runs annealed fast enough that LR
+   hit ~0 before destabilization could occur. With 20B the dangerous
+   LR zone (0.001-0.0005) lasted for ~10B steps.
+
+2. **Clipfrac at 0.4-0.5 for too long.** PPO's clip ratio is designed
+   to limit policy updates. Clipfrac >0.3 means >30% of samples are
+   being clipped — the policy wants to change faster than clipping
+   allows. This sustained pressure eventually finds a way through
+   (a bad batch that aligns with the clip direction), causing a
+   destructive update that triggers the entropy collapse.
+
+3. **Escalating wave stall penalty amplified the collapse.** Once the
+   agent dropped to wave 13 and couldn't recover, the stall penalty
+   generated -4K+ per episode. These extreme negative rewards created
+   enormous gradients that pushed the policy further into the frozen
+   state. The penalty designed to prevent stalling actually made
+   recovery impossible.
+
+4. **No entropy floor.** PPO's entropy coefficient (ent_coef=0.02)
+   provides a small incentive to maintain entropy, but it was
+   overwhelmed by the much larger reward signals. A minimum entropy
+   constraint or adaptive entropy would have prevented the 0.025
+   collapse.
+
+Key takeaways:
+
+- The v16.1 reward signals ARE WORKING. The agent reached wave 29.1
+  with clean, non-exploited returns. The problem is training stability
+  over long runs, not reward design.
+- **The best policy exists at ~4.7B steps.** The checkpoint at that
+  point should be the starting point for future work.
+- Long runs need either: lower LR, faster annealing schedule,
+  entropy floor, or checkpoint-based early stopping.
+- The escalating wave stall penalty needs a cap to prevent
+  catastrophic gradient amplification during collapse.
+
+---
+
+## v16.1 (2026-04-05)
+
+Changes from v16:
+
+Fixes for v16 prayer flick exploit + new signals:
+
+Prayer flick reward fixed:
+- Now requires ALL of: prayer just toggled, blocked an actual hit,
+  no prayer point drained, AND agent has a target selected. Cannot
+  be farmed by toggling prayer without engaging in combat.
+
+NPC melee range penalty expanded:
+- Now penalizes ALL NPCs at melee range (distance 1), not just
+  Ket-Zek/Tok-Xil/MejKot. Includes Tz-Kih, Tz-Kek, Tz-Kek-Sm.
+  Agent should kite everything.
+
+NPC-specific prayer bonus expanded:
+- Added Tz-Kih, Tz-Kek, Tz-Kek-Sm → protect melee (+2.0).
+  Now all combat NPCs have explicit prayer mappings.
+
+Wasted attack penalty (-0.3):
+- Fires when attack timer is 0 (ready to fire), agent has a target
+  but didn't deal damage this tick. Encourages attack-while-kiting.
+
+Wave stall penalty (escalating after 500 ticks):
+- -0.75/tick base after 500 ticks, scales +0.75 every 50 ticks.
+  500=-0.75, 550=-1.50, 600=-2.25, etc. Resets on wave clear.
+
+New analytics:
+- food_wasted: sharks that overhealed (lower is better)
+- pots_wasted: doses that over-restored (lower is better)
+
+All other config unchanged from v16.
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~10.5min, wandb run wcfgtykg):
+- SPS: 1.93M
+- Wave reached: 25.16 avg (final), max wave 28
+- Most NPCs slayed: 112
+- Episode return: 3,144 (healthy, not inflated)
+- Episode length: 2,231 (short — wave stall working)
+- Score: 0
+- Epochs: 1192
+- Entropy: 6.565 (very healthy, still exploring)
+- Clipfrac: 0.001 (LR annealed to ~0)
+- Value loss: 20.8
+
+Analytics:
+- prayer_uptime: 0.800
+- dmg_taken_avg: 2,730
+- pots_used: 32.0
+- food_eaten: 20.0
+
+Progression — LATE BREAKTHROUGH PATTERN:
+- 0-890M: Slow climb wave 17 → 20.8. Spent 890M steps building
+  foundational skills (kiting, attacking, basic prayer). Much slower
+  than previous runs which climbed to 21 in 100M steps.
+- **890M: BREAKOUT.** Wave jumped 20.8→22→23.5→25.2 in ~200M steps.
+  Entropy dropped 7.4→6.1 (policy committed to a strategy). Value
+  loss spiked to 41 (world model updating dramatically). Policy loss
+  hit -0.14 (massive policy update). Something clicked.
+- 1010M-1250M: Stabilized at 25.0-25.3. Still climbing when LR
+  annealed to ~0 and policy stopped updating.
+
+Diagnosis — reward signals working, needs more steps:
+
+First run with NO reward exploit. Episode return 3,144 is healthy
+(not inflated). Episode length 2,231 is short (wave stall penalty
+working). No prayer farming. The late breakthrough at 890M suggests
+the agent needed ~900M steps to learn foundational behaviors before
+the "real" learning could begin.
+
+The breakthrough was STILL HAPPENING when training ended. The agent
+was climbing from 23 to 25 in the final 200M steps. LR had already
+annealed to ~0 (clipfrac=0.001), cutting off further learning. A
+longer run would let the agent continue past wave 25.
+
+Recommendation: same config, 2.5B steps. The agent needs ~1B to
+build foundations, then ~1.5B at useful LR for the breakthrough
+phase. No reward changes — v16.1 signals are clean.
+
+---
+
+## v16 (2026-04-05)
+
+Changes from v15.3:
+
+Major reward shaping overhaul focused on teaching prayer mechanics
+and punishing resource waste through domain-specific signals.
+
+New reward signals:
+- **NPC-specific prayer bonus (+2.0):** Extra reward when correct
+  prayer blocks a hit from a specific dangerous NPC while attacking:
+  Ket-Zek→protect magic, Tok-Xil→protect missiles, MejKot→protect
+  melee. Stacks with the generic +1.0 correct prayer reward. Explicit
+  hint that shortcuts the NPC-prayer mapping the agent needs to learn.
+- **Dangerous NPC melee range penalty (-0.5/tick per NPC):** Penalizes
+  having Ket-Zek, Tok-Xil, or Yt-MejKot at distance 1. These NPCs
+  should be kited. At melee range, dual-mode NPCs use melee attacks,
+  making the agent's ranged prayer useless.
+- **Prayer flick reward (+0.5):** Fires when prayer was just toggled
+  ON this tick AND the drain counter hasn't exceeded resistance
+  (meaning no prayer point was drained). Teaches the OSRS prayer
+  flicking mechanic: activate prayer briefly to block a hit, then
+  deactivate before drain fires. Conserves prayer points.
+
+Changed reward signals:
+- **Food/pot rewards removed entirely.** No +1 for good timing. Only
+  waste-based penalty remains:
+  - Full HP/prayer: -5.0 (complete waste)
+  - Otherwise: -(wasted / max_heal_or_restore), 0 to -1.0 scaled
+  - Philosophy: consuming scarce resources is never rewarded. The
+    agent eats/drinks for survival, not for reward.
+
+Removed legacy signals:
+- All old food/pot timing rewards (+1/-1 at thresholds) removed
+- Config weights w_food_used, w_food_used_well, w_prayer_pot_used
+  are still parsed but completely unused
+
+Analytics changes:
+- Replaced `wrong_prayer` with `dmg_taken_avg` (total damage taken
+  per episode). More useful for understanding overall survivability.
+- Renamed `correct_blocks` to `correct_prayer` — tracks how many
+  hits per episode were correctly blocked by matching prayer.
+
+All other config unchanged from v15.3 (no curriculum, Loadout B,
+anneal_lr=1, 1.25B steps, kiting +1.0, prayer waste -0.2).
+
+Hardcoded in fight_caves.h:
+- NPC-specific prayer: +2.0 (Ket-Zek/magic, Tok-Xil/ranged, MejKot/melee) — requires agent to have a target selected
+- Dangerous NPC melee range: -0.5/tick per NPC at distance 1
+- Prayer flick: +0.5 when prayer on without drain
+- Food waste: -5.0 at full HP, else -(wasted/200)
+- Pot waste: -5.0 at full prayer, else -(wasted/170)
+- Kiting: +1.0 at range 5-7 while attacking (from v15.3)
+- Prayer waste: -0.2/tick praying with no threat (from v15.3)
+- Wrong prayer: -1.0 per hit (unchanged)
+- Combat idle: -0.5/tick after 2 ticks (unchanged)
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~10.2min, wandb run qg2ovzqp):
+- SPS: 2.06M
+- Wave reached: 16.19 avg (massive regression from v15.3's 28.36)
+- Max wave: 31
+- Most NPCs slayed: 119
+- Episode return: 5,834 (inflated — reward hacking)
+- Episode length: 6,479 (stalling)
+- Score: 0
+- Epochs: 1192
+- Entropy: 5.90
+- Value loss: 47.3 (unstable)
+
+Analytics:
+- prayer_uptime: 0.917 (92% praying)
+- correct_prayer: 0.0 (NEVER blocks a hit correctly)
+- dmg_taken_avg: 2,604
+- pots_used: 31.9
+- food_eaten: 20.0
+
+Progression:
+- 0-70M: Climbed to wave 19, then immediately collapsed to 15-16.
+- 70M-1.25B: Stuck at wave 15-17 for entire run. Episode return
+  inflated to 5800-8500 despite low wave — reward hacking.
+
+Diagnosis — PRAYER FLICK FARMING:
+
+The agent exploited the prayer flick reward (+0.5 per tick when
+prayer toggled on without drain). It toggles prayer every tick to
+farm +0.5 per tick while the prayer_waste penalty is only -0.2.
+Net: +0.3/tick for doing nothing useful. Over 6000 ticks this
+generates ~+1800 free reward, dominating wave_clear entirely.
+
+correct_prayer=0.0 confirms the agent NEVER actually blocks a hit.
+It just toggles prayer for the flick reward without matching the
+correct style. The NPC-specific prayer bonus (+2.0) doesn't fire
+because prayer never matches the attack style.
+
+The prayer flick reward is fundamentally exploitable — any per-tick
+reward for toggling prayer can be farmed without engaging in combat.
+It must be removed. Prayer conservation should be taught through
+prayer_waste penalty (-0.2) alone. Correct prayer usage through
+the on-hit correct_prayer reward (+1.0).
+
+The dangerous NPC melee range penalty (-0.5) and NPC-specific
+prayer bonus (+2.0) were not the issue — they couldn't fire because
+the agent wasn't engaging correctly to begin with.
+
+---
+
+## v15.3 (2026-04-05)
+
+Changes from v15.2:
+
+Two new reward signals to teach kiting and prayer discipline:
+
+Kiting reward (+1.0 hardcoded):
+- Fires when agent deals damage while target NPC is at distance 5-7
+  (near max weapon range of 7). Only fires when attacking — no
+  reward for just standing at range without engaging.
+- Incentivizes ranged combat at distance. Melee NPCs can't reach the
+  agent at range 5+, so the agent dodges melee damage entirely.
+  Dual-mode NPCs (Tok-Xil, Ket-Zek) use their ranged/magic attacks
+  at distance, forcing the agent to learn correct prayer switching
+  because only ranged/magic hits land.
+
+Unnecessary prayer penalty (-0.2/tick hardcoded):
+- Fires when prayer is active but no NPC is within its attack range
+  of the player AND no pending hits are in flight.
+- Teaches the agent to turn prayer OFF when nothing is threatening,
+  conserving prayer points. Combined with kiting, the agent learns:
+  stay at range → melee NPCs out of range → turn prayer off → only
+  pray when ranged/magic attack incoming → pray the correct type.
+
+No curriculum — starts at wave 1. Kiting is most impactful in early
+waves where all NPCs are melee. Loadout B, anneal_lr=1, 1.25B steps.
+
+Hardcoded in fight_caves.h (new):
+- Kiting reward: +1.0 when attacking from range 5-7
+- Prayer waste: -0.2/tick when praying with no threat in range
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~10.6min, wandb run fjss9fzb):
+- SPS: 1.88M
+- Wave reached: 28.36 avg
+- Max wave: 32
+- Most NPCs slayed: 121
+- Episode return: 5,491
+- Episode length: 4,716
+- Entropy: 5.87
+- Value loss: 21.9
+
+Analytics:
+- prayer_uptime: 0.902
+- correct_blocks: 2,922
+- wrong_prayer_hits: 110.9 (first time non-zero — kiting working)
+- pots_used: 32.0
+- food_eaten: 20.0
+
+Progression:
+- 0-200M: Climb to wave 28.5.
+- 200M-1.25B: Stable 27.9-28.8. No collapse.
+
+Diagnosis: Kiting reward caused wrong_prayer to jump from 0 to 110.
+Agent now faces ranged attacks at distance. Hasn't learned to switch
+prayer yet but is experiencing the training signal for the first time.
+
+---
+
+## v15.2 (2026-04-05)
+
+Changes from v15.1:
+
+Curriculum only — same loadout and reward weights as v15.1.
+- curriculum_wave: 0 → **30**
+- curriculum_pct: 0 → **1.0** (100% of episodes start at wave 30)
+
+ALL episodes start at wave 30. Skips 29 waves of melee-only content
+the agent already handles perfectly. Forces immediate exposure to
+Tok-Xil (ranged), Ket-Zek (magic), and mixed combat requiring prayer
+switching — the exact content the agent has never learned.
+
+```ini
+[env]
+# All weights identical to v15/v15.1
+curriculum_wave = 30
+curriculum_pct = 1.0
+
+[train]
+total_timesteps = 1_250_000_000
+learning_rate = 0.001
+anneal_lr = 1
+```
+
+Loadout: B (Masori (f) + Twisted Bow, 99/99/99/99)
+Curriculum: 100% of episodes start at wave 30
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~9.7min, wandb run bsf4ecjl):
+- SPS: 2.06M
+- Wave reached: 30.00 avg (never clears wave 30)
+- Max wave: 33 (occasionally breaks through)
+- Most NPCs slayed: 7 (per episode avg — barely denting wave 30)
+- Episode return: 756
+- Episode length: 6,194 (very long — surviving but not killing)
+- Score: 0
+- Epochs: 1192
+- Entropy: 6.14 (healthy)
+- Clipfrac: 0.006 (LR annealed)
+- Value loss: 14.3
+
+Analytics:
+- prayer_uptime: 0.968 (97%! praying almost every tick)
+- correct_blocks: 3,203 per episode
+- wrong_prayer_hits: **0.0** (still zero across entire run)
+- pots_used: 29.2
+- food_eaten: **0.0** (never eats — doesn't need to with 99 HP + prayer)
+
+Progression:
+- Plateau at wave 30.00 for entire run. Episode return stable 750-890.
+- Agent survives ~6200 ticks at wave 30 then runs out of prayer and dies.
+- Never learns to clear wave 30 consistently.
+
+Diagnosis — agent camps melee prayer and tanks everything:
+
+wrong_prayer_hits=0.0 across every single run (v13-v15.2) reveals
+the fundamental problem: the agent has NEVER been hit while praying
+the wrong style. It camps protect melee and everything that reaches
+melee range attacks with melee — including Tok-Xil, which is a
+dual-mode NPC that switches from ranged to melee at distance 1.
+
+The agent's strategy: stand still, pray melee, let all NPCs walk
+into melee range (where they all use melee), block everything, wait
+until prayer runs out, die. It works for 6000+ ticks but can't
+kill Yt-MejKot fast enough (800 HP + heals nearby NPCs).
+
+Wave 30 spawns: 2x Yt-MejKot (melee, 800 HP, heals) + Tok-Xil
+(ranged/melee dual). The agent should kite Tok-Xil at range and
+pray ranged, switch to melee for MejKot. Instead it tanks all three
+with melee prayer and slowly chips away.
+
+Root cause — misleading observation for dual-mode NPCs:
+
+The `npc_atk_style` observation shows the NPC's BASE style (ranged
+for Tok-Xil), not what it's CURRENTLY attacking with (melee when at
+range 1). The agent sees "ranged NPC" but gets hit with melee. This
+contradicts the prayer matching logic — the observation says "pray
+ranged" but melee prayer blocks the actual hit. The agent learns to
+ignore `npc_atk_style` and just camp melee because it always works.
+
+---
+
+## v15.1 (2026-04-05)
+
+Changes from v15:
+
+Loadout change only — no reward or training parameter changes.
+Switched from Loadout A (mid-level) to Loadout B (end-game) to test
+how much player power affects wave progression.
+
+Player stats changed:
+- HP: 70 → **99** (990 tenths)
+- Prayer: 43 → **99** (990 tenths)
+- Defence: 70 → **99**
+- Ranged: 70 → **99**
+
+Equipment changed:
+- Weapon: Rune Crossbow → **Twisted Bow**
+- Armour: Black D'hide → **Masori (f) set**
+- Ammo: Adamant Bolts → **Dragon Arrows**
+- Added: Ava's assembler, Necklace of anguish, Zaryte vambraces,
+  Pegasian boots, Venator ring
+- Prayer bonus: 0 → **9** (prayer drains ~30% slower)
+
+```ini
+[env]
+curriculum_wave = 0
+curriculum_pct = 0.0
+
+[train]
+total_timesteps = 1_250_000_000
+learning_rate = 0.001
+anneal_lr = 1
+```
+
+Loadout: B (Masori (f) + Twisted Bow, 99/99/99/99)
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~10.2min, wandb run wj3p2wj9):
+- SPS: 2.08M
+- Wave reached: 28.65 avg, 29.2 peak
+- Max wave: **32** (first time breaking wave 30)
+- Most NPCs slayed: **121**
+- Episode return: 5,003
+- Episode length: 4,717
+- Entropy: 6.07
+- Value loss: 34.96
+
+Analytics:
+- prayer_uptime: 0.911
+- correct_blocks: 2,721
+- wrong_prayer_hits: 0.0
+- pots_used: 31.9
+- food_eaten: 20.0
+
+Progression:
+- 0-200M: Fast climb wave 17 → 28.9.
+- 200M-1.25B: Stable plateau at 28.6-29.2. No collapse.
+
+Diagnosis: End-game gear broke the wave 22 ceiling. Wave 21.7→29.2
+(+7 waves) with zero reward changes. wrong_prayer_hits=0 — agent
+still only prays melee, hasn't learned prayer switching.
+
+---
+
+## v15 (2026-04-05)
+
+Changes from v14:
+
+Anti-reward-hacking — reduce all dense signal magnitudes:
+- v14's +20 correct prayer reward caused the agent to farm prayer
+  blocks at easy melee waves (+43K/episode) rather than progress.
+  All dense signals reduced to ±1.0 so wave_clear is the dominant signal.
+- w_correct_danger_prayer: 20.0 → **1.0**
+- w_damage_dealt: 2.0 → **1.0**
+- w_npc_kill: 5.0 → **2.0**
+- Wrong prayer: -5.0 → **-1.0** hardcoded
+- Food timing: +50/-30 → **+1/-1** hardcoded (threshold unchanged at 70% HP)
+- Pot timing: +50/-30 → **+1/-1** hardcoded, threshold changed from
+  20% → **70%** prayer. Agent rewarded for drinking at or below 70%
+  prayer, penalized above.
+- All other weights unchanged from v14.
+
+Principle: wave_clear (10 × wave_num) should be the loudest signal.
+At wave 22: wave_clear = +2530 total. Prayer blocks at +1 each =
+~+2000. Kills at +2 each = ~+100. No single dense signal dominates.
+
+Training: 1.25B steps (shorter run for faster iteration).
+
+```ini
+[env]
+w_damage_dealt = 1.0
+w_damage_taken = -0.75
+w_npc_kill = 2.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_correct_danger_prayer = 1.0
+w_invalid_action = -0.1
+w_tick_penalty = -0.001
+curriculum_wave = 0
+curriculum_pct = 0.0
+disable_movement = 0
+
+[train]
+total_timesteps = 1_250_000_000
+learning_rate = 0.001
+anneal_lr = 1
+```
+
+Hardcoded in fight_caves.h:
+- Wrong prayer: -1.0 per hit with wrong prayer active
+- Wave clear: w_wave_clear × cleared_wave_number
+- Combat idle: -0.5/tick after 2 ticks no damage dealt
+- Food at/below 70% HP (pre-eat): +1.0, above 70%: -1.0
+- Prayer pot at/below 70% prayer (pre-drink): +1.0, above 70%: -1.0
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=1.
+
+Results (1.25B steps, ~10.6min, wandb run f6z3abj1):
+- SPS: 1.94M
+- Wave reached: 21.65 avg (final), 21.8 peak
+- Max wave: 26 (all-time best single episode)
+- Most NPCs slayed: 94
+- Episode return: 2,680 (healthy, not inflated)
+- Episode length: 2,730
+- Score: 0
+- Epochs: 1192
+- Entropy: 5.984 (healthy, slightly rising at end)
+- Clipfrac: 0.006 (naturally decayed via LR annealing)
+- Value loss: 3.52 (stable 3-4 entire run — best stability ever)
+- Policy loss: -0.025
+
+Analytics:
+- prayer_uptime: 0.707 (71% of ticks praying)
+- correct_blocks: 1,368 per episode
+- wrong_prayer_hits: 0.0 (perfect prayer against melee waves)
+- pots_used: 32.0 (all doses consumed)
+- food_eaten: 20.0 (all sharks consumed)
+
+Progression:
+- 0-130M: Fast climb wave 9 → 20.6. Return 163 → 2224.
+- 130M-1.25B: Gradual plateau at wave 21.4-21.8. Return slowly
+  climbed from 2224 to 2680. Value loss stable at 3-4.6.
+- **NO COLLAPSE.** First run without late-training instability.
+  LR annealing worked — clipfrac naturally decayed from 0.036 to
+  0.006 as LR approached 0. Entropy stayed healthy at 5.8-6.0.
+
+Compared to v14: reward hacking eliminated. Episode return 2,680
+vs v14's inflated 42,121. No wave regression — v14 collapsed from
+21.8 to 13, v15 held at 21.7 for the entire run.
+
+Compared to v13 (best prior peak): identical wave ceiling (~21.8)
+but v15 is stable where v13 collapsed to 16. The reduced signal
+magnitudes successfully prevented both reward hacking and late
+instability.
+
+Diagnosis — wave 22 ceiling:
+The agent plateaus at wave 21-22 in every run (v13, v14, v15).
+Wave 22 introduces Tok-Xil (ranged, lv90) alongside melee NPCs.
+The agent has never learned to prayer-switch between melee and
+ranged because it rarely survives past wave 21 to get exposure.
+wrong_prayer_hits = 0 confirms the agent only faces melee content
+and prays melee perfectly — it has zero experience with mixed
+combat styles.
+
+Food/pot consumption: still 32/20 per episode. With +1/-1 rewards,
+the signal is too weak to change behavior. But consumption is now
+at the correct thresholds (HP <=70%, prayer <=70%) — the agent
+isn't wasting resources, it's just using them as fast as prayer
+drains and combat damages HP. This is a resource economy issue,
+not a reward shaping issue.
+
+Key takeaway: reward shaping is now clean and stable. The wave 22
+wall is a content exposure problem — the agent needs to see Tok-Xil
+and Ket-Zek to learn prayer switching. Options for v16: curriculum
+(expose agent to wave 22+ content), or longer training at 5B+ to
+give more episodes to randomly break through.
+
+---
+
+## v14 (2026-04-05)
+
+Changes from v13:
+
+Prayer reward/penalty overhaul:
+- Correct prayer: 1.0 → **20.0**. Massive positive reinforcement when
+  the agent has the correct protection prayer active and a hit of that
+  style resolves. Only fires when prayer is active at resolution time —
+  toggling too late gives nothing. Uses config weight w_correct_danger_prayer.
+- Wrong prayer: **NEW, -5.0 hardcoded**. When a hit resolves and the agent
+  has a prayer active that does NOT match the attack style, -5.0 penalty.
+  Fires even on 0-damage hits (misses). Previously there was no penalty
+  for wrong prayer — the agent could pray missiles against melee-only
+  NPCs with zero signal that anything was wrong. Now the agent gets
+  explicit negative feedback for having the wrong prayer on.
+- The +20/-5 asymmetry is intentional: correct prayer should be strongly
+  rewarded to encourage the agent to learn which prayer matches which NPC,
+  while wrong prayer gets a moderate penalty. The quadratic damage_taken
+  penalty already heavily punishes unblocked hits on top of the -5.
+
+Food and prayer pot — flat reward/penalty with pre-consumption check:
+- Replaced old waste-scaled system with flat values. Reward function
+  checks HP/prayer BEFORE the heal/restore is applied (using
+  pre_eat_hp / pre_drink_prayer saved in fc_tick.c). Previous versions
+  checked post-consumption values which made the pot reward impossible
+  to trigger (pot restore always pushed prayer above 20% threshold).
+- **Food at or below 70% HP (pre-eat): +50.0 reward.**
+- **Food above 70% HP (pre-eat): -30.0 penalty.**
+- **Prayer pot at or below 20% prayer (pre-drink): +50.0 reward.**
+- **Prayer pot above 20% prayer (pre-drink): -30.0 penalty.**
+- Note: PufferLib 4 CUDA kernel does NOT enforce action masks at the
+  sampling level. Masks are observation features the policy learns
+  from, not hard constraints. Standard masks (no food, on cooldown,
+  full HP/prayer) are still set but are advisory only.
+
+Hit source observation:
+- NEW: player_hit_source (obs index 20). When an NPC hits the player,
+  the agent now sees which NPC type dealt the damage. Normalized as
+  npc_type / NPC_TYPE_COUNT. Lets the agent learn "Ket-Zek = magic,
+  Tok-Xil = ranged" directly rather than inferring from pending attacks.
+
+Training stability:
+- anneal_lr: 0 → **1**. Linear LR decay from 0.001 to 0 over training.
+  Every run with constant lr=0.001 has collapsed late (v10 at ~1B,
+  v11 at ~1.2B, v13 at ~1.4B). Annealing gives aggressive early
+  learning with stable late fine-tuning.
+- total_timesteps: 1.5B → **5B**. Much longer run to take advantage of
+  LR annealing and give the new prayer signals time to shape behavior.
+
+No curriculum. No movement changes. Wave-scaled clear reward unchanged.
+
+```ini
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_danger_prayer = 20.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_tick_penalty = -0.001
+curriculum_wave = 0
+curriculum_pct = 0.0
+disable_movement = 0
+
+[train]
+total_timesteps = 5_000_000_000
+learning_rate = 0.001
+anneal_lr = 1
+```
+
+Hardcoded in fight_caves.h:
+- Wrong prayer: -5.0 per hit with wrong prayer active
+- Wave clear: w_wave_clear × cleared_wave_number
+- Combat idle: -0.5/tick after 2 ticks no damage dealt
+- Food at/below 70% HP (pre-eat): +50.0, above 70%: -30.0
+- Prayer pot at/below 20% prayer (pre-drink): +50.0, above 20%: -30.0
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=5B, lr=0.001, anneal_lr=1.
+
+Results (5B steps, ~41.5min, wandb run tutxtn7x):
+- SPS: 1.94M
+- Wave reached: 13.03 avg (final), 21.8 peak (at ~1B steps)
+- Max wave: 26 (all-time best single episode)
+- Most NPCs slayed: 94
+- Episode return: 42,121 (final — massively inflated)
+- Episode length: 3,436 (stable, no stalling)
+- Score: 0
+- Epochs: 4768
+- Entropy: 5.287 (healthy)
+- Clipfrac: 0.097 (collapsed to near-zero by end — LR annealed out)
+- Value loss: 48.4 (unstable at end)
+- Policy loss: -0.009
+
+Analytics:
+- prayer_uptime: 0.762 (praying 76% of ticks)
+- correct_blocks: 2,167 per episode
+- wrong_prayer_hits: 0.0 (never has wrong prayer when hit)
+- pots_used: 32.0 (all doses consumed every episode)
+- food_eaten: 20.0 (all sharks consumed every episode)
+
+Progression:
+- 0-1B: Climbed wave 9 → 21.8. Return 26K-30K.
+- ~1.2B: Collapsed wave 21.8 → 13.0. Return INCREASED to 41K-43K.
+- 1.5B-5B: Stuck at wave 13.0 for 3.5B steps. Never recovered.
+
+Diagnosis — REWARD HACKING via prayer blocks:
+
+The agent earns MORE reward at wave 13 than at wave 22. The +20.0
+correct prayer reward completely dominates all other signals:
+- correct_blocks per episode: 2,167 × +20.0 = **+43,340**
+- wave_clear rewards (waves 1-13): 10+20+...+130 = **+910**
+- Prayer blocks = **47x** more valuable than wave progression
+
+Waves 1-13 are all melee NPCs. The agent prays protect melee, blocks
+every hit (+20 each), and has zero incentive to push to wave 14+ where
+Tok-Xil (ranged) would require risky prayer switching. Farming melee
+prayer blocks at easy waves is overwhelmingly more profitable than
+progressing.
+
+The +50 food/pot rewards also contribute to inflation (eating 20
+sharks at +50 each = +1000, drinking 32 doses at +50 each = +1600)
+but prayer blocks are the dominant factor.
+
+LR annealing (0.001 → 0) did NOT prevent the collapse — it happened
+at ~1.2B when LR was still 0.00075. Annealing did prevent the late
+value-loss explosion seen in v13 (value loss stable at 5-11 for most
+of training vs v13's 3→11 spike). But by the end (LR≈0), clipfrac
+dropped to 0.097 and the policy stopped updating entirely.
+
+Lesson: any dense per-hit reward that fires thousands of times per
+episode will dominate sparse event rewards (wave clear, kills). The
+reward magnitude must be proportional to rarity: frequent signals
+need small weights, rare milestones need large weights.
+
+---
+
+## v13 (2026-04-05)
+
+Changes from v12:
+
+Wave clear reward scaling:
+- Wave clear now scales with wave number: reward = w_wave_clear × wave.
+  Wave 1 clear = 10. Wave 15 = 150. Wave 30 = 300. Wave 63 = 630.
+  Previously a flat 10.0 regardless of wave. The flat reward meant the
+  agent earned the same +10 clearing wave 1 as wave 30, so farming easy
+  waves (fewer per-tick penalties, simpler combat) was equally profitable.
+  Scaling makes pushing to higher waves overwhelmingly more valuable than
+  any per-tick exploit.
+
+  v12 analysis showed the agent earned ~600 episode_return at both wave 22
+  (before collapse) and wave 13 (after collapse). Per-tick rewards (combat
+  idle, prayer, damage) accumulated over longer episodes at easy waves and
+  equaled the wave-clear bonuses from harder waves. Scaling breaks this:
+  clearing waves 1-22 gives 10+20+...+220 = 2530 total. Clearing waves
+  1-13 gives only 10+20+...+130 = 910 total. The agent can't earn more
+  by farming easy waves.
+
+All other config unchanged from v12. Movement enabled, no curriculum,
+anneal_lr=0, combat idle -0.5 after 2 ticks.
+
+```ini
+[env]
+# unchanged from v12, wave_clear scaling is in code not config
+w_wave_clear = 10.0
+
+[train]
+total_timesteps = 1_500_000_000
+```
+
+Hardcoded in fight_caves.h:
+- Wave clear: w_wave_clear × cleared_wave_number (scales with progression)
+- Combat idle: -0.5/tick after 2 ticks no damage dealt
+- Food timing: +1.0 for eating with 20+ HP missing
+- Prayer pot below 20%: +2.0, above 80%: -3.0
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.5B, lr=0.001, anneal_lr=0.
+
+Results (1.5B steps, ~12.5min, wandb run 0pwza2dq):
+- SPS: 1.94M
+- Wave reached: 16.01 avg (final), 21.8 peak (at ~1428M steps)
+- Max wave: 26 (all-time best single episode)
+- Most NPCs slayed: 94
+- Episode return: 2040.5 (final), 2846 peak (at ~1428M)
+- Episode length: 2737 (stable throughout, no stalling)
+- Score: 0
+- Epochs: 1430
+- Entropy: 4.915 (final — dropped from ~5.8 plateau)
+- Clipfrac: 0.275 (elevated at end)
+- Value loss: 11.26 (spiked at end — was ~3 for most of training)
+- Policy loss: 0.023
+- KL: 0.022
+
+Progression:
+- 0-80M: Fast climb, wave 9 → 19.5. Agent learns basic combat quickly.
+- 80M-1430M: Plateaued at wave 21-22 for the entire training run.
+  Wave oscillated 21.1-21.8, return slowly climbed 2224 → 2846.
+  Agent never broke past wave 22 consistently. Entropy stable at
+  5.7-5.8, value loss stable at 3-4, clipfrac ~0.22. Training was
+  healthy but the agent could not progress.
+- 1430M-1500M: Late collapse. Wave dropped 21.8 → 16.0. Value loss
+  spiked 3.0 → 11.3. Entropy dropped 5.7 → 4.9. Clipfrac rose to
+  0.27. This is a catastrophic policy update — the value function
+  diverged, bad advantages were computed, and a large destructive
+  policy update destroyed learned behavior.
+
+Compared to v11 (best prior run, an75g72f):
+- Wave: 21.8 peak → **29.23** (v13 is 8 waves worse at peak)
+- Return: 2846 peak → 2045 (comparable)
+- Entropy: 5.7-5.8 → 5.56 (similar)
+- Value loss: 3-4 → 28.1 (v13 much healthier until collapse)
+- Episode length: 2700-2900 → 2973 (similar, no stalling in either)
+
+Diagnosis — why v13 regressed 8 waves from v11:
+
+1. **No curriculum is the primary cause.** v11 used curriculum_wave=28,
+   curriculum_pct=0.5 — half of all episodes started at wave 28, so the
+   agent regularly faced Tok-Xil+Yt-MejKot combos and occasionally saw
+   Ket-Zek (wave 31+). In v13, the agent starts wave 1 every episode and
+   must grind through 21 waves of easy melee-only content before seeing
+   anything challenging. It never gets enough exposure to hard content
+   to learn how to handle it.
+
+2. **Movement adds complexity.** v11 disabled movement entirely. v13
+   re-enabled it. With 17 move actions available every tick, the agent
+   has much more to explore. The combination of movement + no curriculum
+   means the agent has a harder problem (larger action space) and less
+   exposure to the hard content that would teach it to use prayer
+   switching and kiting effectively.
+
+3. **Wave-scaled rewards may be underweighting early progress.** With
+   scaling, clearing waves 1-10 gives 10+20+...+100 = 550 total. With
+   flat 10.0 (v11), waves 1-10 gave 100 total. The scaled reward
+   makes early waves worth MORE, but the agent can't distinguish "I
+   should push harder" from "I'm already getting good reward." The
+   flat reward in v11 was simpler and the agent found it equally
+   worth pushing to wave 29 as wave 10 — the only difference was
+   duration. This interacts with curriculum: with curriculum, the
+   agent saw waves 28-31 often enough that the high wave-clear
+   rewards there (~300-310) dominated. Without curriculum, the agent
+   never sees those rewards.
+
+4. **Late collapse from constant LR.** anneal_lr=0 with lr=0.001 is
+   too aggressive for late training. Same failure mode as v10 and v11
+   late instability. At 1430M steps the policy was near-converged at
+   wave 21.8, and a single bad batch caused value loss to spike 3→11
+   and wave to drop to 16. LR decay or a lower constant LR (0.0003)
+   would reduce this risk.
+
+Recommendations for v14:
+- Re-enable curriculum: curriculum_wave=30, curriculum_pct=0.5. This
+  was the single biggest factor in v11's success. The agent needs
+  regular exposure to Ket-Zek (magic, wave 31+) and Tok-Xil+MejKot
+  combos to learn prayer switching and target priority.
+- Consider anneal_lr=1 or reducing LR to 0.0003. Every run with
+  constant 0.001 eventually collapses (v10, v11, v13). The late
+  instability is a recurring pattern.
+- Keep movement enabled. v11 hit wave 29 without movement but couldn't
+  push past it. Movement is needed for kiting Yt-MejKot and dodging
+  multi-NPC combos in waves 30+. The solution to movement complexity
+  is curriculum exposure, not disabling movement.
+- Keep wave-scaled rewards. The concept is sound (prevent farming easy
+  waves) but it needs curriculum to expose the agent to the high-value
+  wave clears that make scaling worthwhile.
+
+---
+
+## v12 (2026-04-04)
+
+Changes from v11:
+
+Movement:
+- RE-ENABLED. disable_movement=0. Full action space restored. v10-v11
+  disabled movement to isolate combat learning, but without movement the
+  agent couldn't get past wave 14-15 (Yt-MejKot with 800HP + healing).
+  Movement is part of how the agent survives (kiting, repositioning).
+
+Curriculum:
+- Disabled (wave 0). Agent starts wave 1 every episode.
+
+Pre-impact prayer window:
+- REMOVED. The +0.5 per pending hit per tick within 3-tick window was
+  being EXPLOITED by the agent. With multiple NPCs attacking, correct
+  prayer generated +1.5-2.0/tick of free reward — 10x more than combat
+  rewards (damage_dealt ≈ +0.05/tick). The agent learned to just turn
+  prayer on and stop fighting, collecting prayer reward passively.
+  This caused the deterministic collapse at ~40M steps seen in 3
+  consecutive runs: agent rapidly reaches wave 20+, discovers the prayer
+  exploit, commits to it, stops killing NPCs, waves stall, dies.
+  The correct-prayer-at-resolve reward (+1.0 per hit) remains and is
+  sufficient — it fires once per hit, not per tick, so can't be farmed.
+
+Combat idle punishment:
+- NEW. -0.5 per tick when agent hasn't dealt damage in 2+ ticks and
+  NPCs are alive. Forces the agent to engage in combat instead of
+  standing idle with prayer on. Counter resets when damage is dealt.
+  Tracked via ticks_since_attack in FightCaves struct.
+
+New metrics:
+- max_wave: highest wave any single episode reached (all-time max).
+- most_npcs_slayed: highest NPC kill count in any single episode.
+  Both tracked as globals, visible in wandb User Stats.
+
+```ini
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_danger_prayer = 1.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_tick_penalty = -0.001
+curriculum_wave = 0
+curriculum_pct = 0.0
+disable_movement = 0
+
+[train]
+total_timesteps = 1_500_000_000
+learning_rate = 0.001
+anneal_lr = 0
+```
+
+Hardcoded rewards in fight_caves.h (not in config):
+- food_used_well: +1.0 for eating with 20+ HP missing
+- prayer_pot below 20%: +2.0 for drinking when low
+- prayer_pot above 80%: -3.0 extra for wasteful drinking
+- combat idle: -0.5/tick after 2 ticks of no damage dealt
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.5B, lr=0.001, anneal_lr=0.
+
+Results: not run — v12 config was superseded by v13 before training.
+
+---
+
+## v11 (2026-04-04)
+
+Changes from v10 (based on policy replay of v10 peak + collapse):
+
+Prayer correctness:
+- Correct prayer reward now fires for ALL attack styles (melee, ranged,
+  magic), not just ranged/magic. In v9/v10 the agent had zero signal for
+  melee prayer in waves 1-28 (all melee). It randomly switched between
+  protect ranged and magic because those were the only styles that gave
+  reward. Now protect melee is rewarded in early waves.
+- Pre-impact window (+0.5) also fires for ALL styles, not just ranged/magic.
+
+Prayer drain cost:
+- REMOVED entirely. The -0.01/tick cost from v9/v10 taught the agent to
+  never pray (v9: 67K tick stalling, v10: contributed to value loss
+  explosion). Prayer conservation now handled by potion timing reward.
+
+Prayer potion timing:
+- Below 20% prayer: +2.0 reward for drinking (was +1.0 in v10)
+- Above 80% prayer: -3.0 extra penalty for drinking (on top of existing
+  waste scaling). Agent punished for wasteful chugging.
+- Between 20-80%: only the waste scaling applies (base -1.0)
+
+No wrong-prayer penalty: kept at 0 (removed since v9). damage_taken
+quadratic penalty handles this implicitly — wrong prayer = full damage =
+harsh penalty proportional to hit size.
+
+Movement: still disabled (disable_movement=1).
+anneal_lr: still 0 (constant LR).
+All config weights unchanged from v10.
+
+Code changes (fight_caves.h):
+- fc_puffer_compute_reward: prayer correctness checks ATTACK_NONE instead
+  of ATTACK_RANGED||ATTACK_MAGIC. Pre-impact window same change.
+- Removed prayer drain cost block.
+- Prayer potion timing: +2.0 below 20%, -3.0 above 80%.
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 1.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+disable_movement = 1
+
+[train]
+total_timesteps = 1_250_000_000
+learning_rate = 0.001
+anneal_lr = 0
+```
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=1.25B, lr=0.001, anneal_lr=0.
+
+Results (1.25B steps, ~10.1min, wandb run an75g72f):
+- SPS: 2.0M
+- Wave reached: 29.23 avg
+- Max wave: N/A (metric added after this run started)
+- Most NPCs slayed: N/A (metric added after this run started)
+- Episode length: 2973 (stable, not stalling)
+- Episode return: 2045 (up from v10's 993)
+- Score: 0
+- Epochs: 1192
+- Entropy: 5.56 (healthy — not collapsing, not random)
+- Clipfrac: 0.310 (high but stable — not diverging like v10)
+- Value loss: 28.1 (healthy, similar to v7's 31.7)
+- Policy loss: 0.124
+- KL: 0.029
+
+Progression notes: Agent hit wave 30.0 by 67M steps and stayed near 30
+for most of training. Episode return climbed steadily from 747 to 2658
+at 889M steps. Then a late dip at 1187M (value_loss spiked to 154,
+return dropped to 497) before recovering to 2045. The late instability
+may be from anneal_lr=0 keeping LR too high (0.001) when policy should
+be fine-tuning.
+
+Compared to v10:
+- Wave: 28.74 → 29.23 (improved, though not 30.0)
+- Episode return: 993 → 2045 (2x improvement)
+- Value loss: 325 → 28 (12x better — stable training)
+- Entropy: 3.13 → 5.56 (much healthier, not over-converging)
+- Episode length: 1732 → 2973 (surviving longer)
+
+Key improvements from v11 changes:
+- Removing prayer drain cost eliminated the v9/v10 death spiral.
+- Correct prayer reward for ALL styles (including melee) gave the agent
+  a learning signal in early waves. Previously had zero signal for the
+  first 28 waves of melee.
+- Prayer potion timing (+2 below 20%, -3 above 80%) should help with
+  pot conservation, though replay needed to verify.
+
+Still stuck at wave 30 wall. Agent dies during wave 30 (Yt-MejKot +
+Tok-Xil + 2× Tz-Kek = 6+ simultaneous NPCs). Has never seen Ket-Zek
+(wave 31+). Consider curriculum at wave 30 or 31 to expose agent to
+harder content.
+
+Late training instability (1187M spike) suggests anneal_lr=0 with
+lr=0.001 is too aggressive for late fine-tuning. Consider anneal_lr=1
+with lower starting LR, or reducing LR to 0.0003.
+
+---
+
+## v10 (2026-04-04)
+
+Changes from v8 (based on v8 regression analysis + policy replay):
+
+Philosophy shift: stop punishing wrong prayer explicitly. Let damage_taken
+handle it implicitly. Use positive reinforcement and natural costs instead.
+
+Reward changes:
+- w_correct_danger_prayer: 2.0 → 1.0, now RANGED/MAGIC ONLY. Positive
+  reinforcement when correct prayer blocks a dangerous hit. Melee excluded.
+- w_wrong_danger_prayer: -5.0 → 0.0. Removed entirely. The quadratic
+  damage_taken penalty already punishes wrong prayer (wrong prayer = full
+  damage = big penalty). Explicit punishment created too much noise in v8.
+- Prayer drain cost: NEW, hardcoded -0.01/tick when any prayer is active.
+  Incentivizes turning prayer OFF when not needed. Over 100 ticks of
+  leaving prayer on = -1.0. Pushes toward prayer flicking (on before hit,
+  off after). Teaches prayer conservation without prayer potions.
+- Prayer potion timing: NEW, +1.0 for drinking when prayer below 20%
+  (86/430 tenths). Combined with existing waste scaling, agent learns to
+  drink only when actually low.
+
+Code changes:
+- fight_caves.h: prayer correctness check restricted to ranged/magic only,
+  removed wrong-prayer branch, added per-tick prayer drain cost, added
+  prayer potion timing bonus.
+
+All other weights unchanged from v8:
+- w_damage_dealt=2.0, w_npc_kill=5.0, w_food_used=-0.5, w_prayer_pot=-1.0
+- w_damage_taken=-0.75 (quadratic), w_player_death=-20.0
+
+```ini
+[base]
+env_name = fight_caves
+
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 1.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+
+[vec]
+total_agents = 4096
+num_buffers = 1
+
+[train]
+total_timesteps = 1_250_000_000
+learning_rate = 0.001
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.02
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+Results (1.25B steps, ~10.6min, wandb run njxrz8l2):
+- SPS: 1.9M
+- Wave reached: 29.81 avg (recovered from v8's 28.05, close to v7's 29.96)
+- Episode length: 67505 (STALLING AGAIN — back to v6.1 behavior)
+- Episode return: 1158
+- Score: 0
+- Epochs: 1192
+- Entropy: 8.16 (shot UP — policy became near-random)
+- Clipfrac: 0.0002 (policy stopped updating entirely)
+- Value loss: 20.8 (healthy, reward signal stable)
+- Policy loss: -0.017
+- KL: 0.0004
+
+Diagnosis: Removing wrong-prayer penalty fixed the instability from v8
+(value loss back to healthy 20 vs 222). But the -0.01/tick prayer drain
+cost taught the agent to turn prayer OFF entirely. No prayer = no drain
+cost. Agent found a strategy to avoid damage without prayer (safespotting/
+kiting) and converged to it. Clipfrac dropped to 0 — policy stopped
+learning. Entropy rose to 8.16 (near-random) because the policy gave up
+on combat actions. Episode length 67505 = stalling again like v6.1.
+
+Lesson: per-tick prayer cost incentivizes no-prayer-ever, not prayer
+flicking. Need positive incentives for correct prayer usage, not costs
+for having prayer on.
+
+---
+
+## v10 (2026-04-04)
+
+Changes from v9:
+
+Observation improvements:
+- Added 2 new per-NPC features (NPC_STRIDE 13→15, OBS_SIZE 171→187):
+  - npcN_pending_attack_style: attack style of projectile in flight from
+    this NPC (0=none, 0.33=melee, 0.67=ranged, 1.0=magic)
+  - npcN_pending_attack_ticks: ticks until that hit resolves (normalized /10)
+  Agent now sees "Ket-Zek magic attack landing in 2 ticks" and can switch
+  prayer preemptively.
+
+Reward changes:
+- Pre-impact prayer window: NEW, +0.5 per tick when correct prayer is
+  active within 3 ticks of a ranged/magic hit resolving. Rewards having
+  correct prayer up BEFORE impact.
+- Prayer drain cost: kept at -0.01/tick (from v9).
+- All other weights unchanged from v9.
+
+Training changes:
+- anneal_lr: 1 → 0. Constant learning rate (0.001) throughout training.
+  Prevents late-training stalling from LR decay.
+- disable_movement: NEW flag = 1. Agent's movement action forced to idle.
+  Cannot walk or run. NPCs come to the agent. Forces learning of combat
+  actions (prayer, attack, eat, drink) without movement as a crutch.
+
+```ini
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_danger_prayer = 1.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+disable_movement = 1
+
+[train]
+anneal_lr = 0
+total_timesteps = 1_250_000_000
+```
+
+Results (1.25B steps, ~10.8min, wandb run m8nr3tnt):
+- SPS: 1.8M
+- Wave reached: 28.74 avg (down from v9's 29.81)
+- Episode length: 1732 (SHORT — agent dying fast without movement)
+- Episode return: 993
+- Score: 0
+- Epochs: 1192
+- Entropy: 3.13 (very low — agent converged hard)
+- Clipfrac: 0.414 (VERY HIGH — policy thrashing)
+- Value loss: 325 (CATASTROPHIC — worse than v8's 222)
+- Policy loss: 0.009
+- KL: 0.158 (extremely high — policy diverging)
+
+Progression notes: Agent peaked at wave 30 and ep_return ~2400 around
+500M-700M steps. Then value_loss exploded (11→325) and the agent
+collapsed. Wave dropped 30→28.7, episode length 3000→1732. The policy
+destabilized in the second half of training.
+
+Diagnosis: Two problems compounded:
+1. Without movement, the agent takes more damage (can't kite/dodge).
+   This amplifies the quadratic damage_taken penalty, making rewards
+   more volatile → value_loss explosion.
+2. The -0.01/tick prayer drain cost is STILL causing problems. With no
+   movement, prayer is more important (can't avoid hits). But the drain
+   cost pushes the agent to turn prayer off, causing more damage, which
+   causes more penalty, creating a death spiral.
+3. anneal_lr=0 kept the LR at 0.001 throughout, which may have caused
+   the late-training instability (policy kept making large updates even
+   as it should have been fine-tuning).
+
+---
+
+## v9 (2026-04-04)
+
+Changes from v7 (based on policy replay observations):
+
+Prayer fix:
+- Prayer correctness now fires for ALL attack types including melee
+  (v7 only checked ranged/magic). Fires on zero-damage hits too.
+- No prayer active when hit = same punishment as wrong prayer.
+- w_correct_danger_prayer: 2.0 (unchanged)
+- w_wrong_danger_prayer: 0.0 → -5.0 (harsh punishment for wrong prayer)
+
+Combat incentive:
+- w_damage_dealt: 0.5 → 2.0 (4x stronger incentive to attack)
+- w_npc_kill: 3.0 → 5.0 (bigger kill reward)
+
+```ini
+[env]
+w_damage_dealt = 2.0
+w_damage_taken = -0.75
+w_npc_kill = 5.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.5
+w_food_used_well = 1.0
+w_prayer_pot_used = -1.0
+w_correct_danger_prayer = 2.0
+w_wrong_danger_prayer = -5.0
+w_invalid_action = -0.1
+w_idle = 0.0
+w_tick_penalty = -0.001
+curriculum_wave = 28
+curriculum_pct = 0.5
+```
+
+Hyperparameters: gamma=0.999, gae_lambda=0.95, clip_coef=0.2,
+vf_coef=0.5, ent_coef=0.02, max_grad_norm=0.5, horizon=256,
+minibatch_size=4096, total_agents=4096, hidden_size=256,
+num_layers=2. total_timesteps=2.5B, lr=0.001, anneal_lr=1.
+
+Results (2.5B steps, ~23min, wandb run w8nsir07):
+- SPS: 1.7M (down from v7's 2.0M)
+- Wave reached: 28.05 avg (REGRESSED from v7's 29.96 — lost 2 waves)
+- Episode length: 2615 (down from v7's 5438 — dying 2x faster)
+- Episode return: 2564 (down from v7's 3421)
+- Score: 0
+- Epochs: 2384
+- Entropy: 4.56 (lower than v7's 5.3)
+- Clipfrac: 0.280 (4.5x v7's 0.061 — UNSTABLE, policy thrashing)
+- Value loss: 222.6 (7x v7's 31.7 — CATASTROPHIC)
+- Policy loss: -0.053
+- KL: 0.032
+
+Diagnosis: w_wrong_danger_prayer=-5.0 destroyed training. In waves 1-28,
+melee NPCs attack every 4 ticks. Each hit with wrong prayer = -5.0.
+Over a 3000-tick episode that's ~3750 in prayer penalties, drowning out
+all other rewards. Value loss exploded 7x, clipfrac hit 0.28 (28% of
+updates clipped). Agent regressed 2 waves and learned nothing useful.
+
+Lesson: don't apply equal punishment for all prayer mismatches. Melee
+attacks are frequent and low-damage. Punishing them at -5.0 per hit
+overwhelms the reward signal. Let damage_taken handle it implicitly.
+
+---
+
+## v7 (2026-04-04)
 
 Changes from v6/v6.1 (based on policy replay observations):
 
@@ -90,6 +1780,35 @@ minibatch_size = 4096
 hidden_size = 256
 num_layers = 2
 ```
+
+Results (2.5B steps, ~21min, wandb run er56r0lu):
+- SPS: 2.0M (down from v6's 2.3M — collision-enabled pathfinding overhead)
+- Wave reached: 29.96 avg (same wave 30 wall as v6)
+- Episode length: 5438 ticks (down from v6.1's 200K — agent dying, not stalling)
+- Episode return: 3421 (up from v6's 37.7 — new rewards providing dense signal)
+- Score: 0 (no cave completions)
+- Epochs: 2384
+- Entropy: 8.3 → 5.3 (converging, possibly too fast)
+- Clipfrac: 0.061 (healthy — policy updating)
+- Value loss: 31.7 (very high — reward variance too large for value network)
+- Policy loss: -0.028
+- KL: 0.005
+
+Key observations:
+- Agent no longer stalls indefinitely. Episode length 5438 means it engages
+  and dies, unlike v6.1's 200K-tick survival strategy. The consumable waste
+  penalties are working — agent isn't chugging pots/food mindlessly.
+- Collision is loaded and working for the first time. No more open arena.
+- Wave 30 wall persists. Reaches ~29.8 within first 200M steps, then flat.
+  Ket-Zek (magic+melee, size 5) still the blocker. Agent may not be
+  learning to prayer switch despite the new prayer rewards.
+- Value loss 31.7 is concerning — means reward signal has high variance.
+  The value network can't predict expected returns, which hurts GAE
+  advantage estimation and slows learning.
+- Entropy dropped to 5.3 from 8.3 — agent may be converging prematurely.
+
+Next: replay v7 policy to observe prayer switching behavior, consumable
+usage, and movement with real collision. Compare to v6 replay.
 
 ---
 
@@ -184,7 +1903,7 @@ hidden_size = 256
 num_layers = 2
 ```
 
-Results (2.5B/5B steps, stopped early — wave 30 wall):
+Results (2.5B/5B steps, stopped early — wave 30 wall, wandb run cz6dyc3p):
 - SPS: 2.3M
 - Wave reached: 30.0 avg (same wall as v5, reached immediately)
 - Episode length: 30001 ticks (hit tick cap — agent surviving but stuck)
@@ -250,7 +1969,7 @@ Same config as v6 except:
   200K ticks should drain all 32 prayer pot doses and expose whether
   the agent actually learned to fight.
 
-Results (2.0B steps, ~14m38s):
+Results (2.0B steps, ~14m38s, wandb run ss966rf9):
 - SPS: 2.3M
 - Wave reached: 30.0 avg (still wave 30 wall — unchanged)
 - Episode length: 199,939 ticks (HITTING 200K CAP! agent still not dying!)
@@ -310,7 +2029,7 @@ IMPLICATIONS FOR v7:
 
 ## v5 (2026-04-03)
 
-Results (5B steps, ~37min):
+Results (5B steps, ~37min, wandb run plpi9rgf):
 - SPS: 2.3M (restored from v3's 1.5M)
 - Wave reached: 30.0 avg (up from v2's 28.2)
 - Episode length: 5056 ticks (up from v2's 3101 — surviving 63% longer)
@@ -451,7 +2170,7 @@ num_layers = 2
 
 ## v3 (2026-04-03)
 
-Results (1.7B/5B steps, stopped early — broken):
+Results (1.7B/5B steps, stopped early — broken, wandb run crb1jwbv):
 - SPS: 1.5M (down from 2.2M — horizon 512 too slow)
 - Wave reached: 15.2 avg (CRASHED from v2's 28.2)
 - Episode length: 4115 ticks (longer but worse — agent idling)
@@ -532,7 +2251,7 @@ num_layers = 2
 
 ## v2 (2026-04-03)
 
-Results (2.5B steps, ~19min):
+Results (2.5B steps, ~19min, wandb run lsw5jibn):
 - SPS: 2.2M
 - Wave reached: 28.2 avg (barely improved from v1's 27.6)
 - Episode length: 3101 ticks
@@ -609,7 +2328,7 @@ num_layers = 2
 
 ## v1 (2026-04-03) — First training run
 
-Results (500M steps, ~3m43s):
+Results (500M steps, ~3m43s, wandb run xgsb170g):
 - SPS: 2.2M
 - Wave reached: 27.6 avg
 - Episode length: 3110 ticks avg

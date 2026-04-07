@@ -46,10 +46,13 @@ static void clear_per_tick_flags(FcState* state) {
     state->idle_this_tick = 0;
     state->food_used_this_tick = 0;
     state->prayer_potion_used_this_tick = 0;
+    state->pre_eat_hp = 0;
+    state->pre_drink_prayer = 0;
 
     FcPlayer* p = &state->player;
     p->damage_taken_this_tick = 0;
     p->hit_style_this_tick = 0;
+    p->hit_source_npc_type = 0;
     p->hit_landed_this_tick = 0;
     p->food_eaten_this_tick = 0;
     p->potion_used_this_tick = 0;
@@ -125,6 +128,9 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
     if (act_eat == FC_EAT_SHARK && p->food_timer <= 0 &&
         p->sharks_remaining > 0 && p->current_hp < p->max_hp) {
         int heal = 200;  /* shark heals 20 HP = 200 tenths */
+        state->pre_eat_hp = p->current_hp;
+        state->ep_food_eaten++;
+        p->total_food_eaten++;
         p->current_hp += heal;
         if (p->current_hp > p->max_hp) p->current_hp = p->max_hp;
         p->sharks_remaining--;
@@ -136,6 +142,9 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
     if (act_eat == FC_EAT_COMBO && p->combo_timer <= 0 &&
         p->sharks_remaining > 0 && p->current_hp < p->max_hp) {
         int heal = 180;  /* karambwan heals 18 HP = 180 tenths */
+        state->pre_eat_hp = p->current_hp;
+        state->ep_food_eaten++;
+        p->total_food_eaten++;
         p->current_hp += heal;
         if (p->current_hp > p->max_hp) p->current_hp = p->max_hp;
         p->sharks_remaining--;
@@ -147,6 +156,11 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
     /* ---- Drink prayer potion ---- */
     if (act_drink == FC_DRINK_PRAYER_POT && p->potion_timer <= 0 &&
         p->prayer_doses_remaining > 0 && p->current_prayer < p->max_prayer) {
+        state->pre_drink_prayer = p->current_prayer;
+        state->ep_pots_used++;
+        if (p->current_prayer > p->max_prayer / 5)
+            state->ep_pots_wasted++;
+        p->total_potions_used++;
         int restore = fc_prayer_potion_restore(FC_PLAYER_PRAYER_LVL);
         p->current_prayer += restore;
         if (p->current_prayer > p->max_prayer) p->current_prayer = p->max_prayer;
@@ -462,6 +476,12 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     /* 7. Check terminal */
     check_terminal(state);
 
-    /* 8. Increment tick */
+    /* 8. Episode analytics */
+    if (state->player.prayer != PRAYER_NONE)
+        state->ep_ticks_praying++;
+    if (state->player.prayer_changed_this_tick)
+        state->ep_prayer_switches++;
+
+    /* 9. Increment tick */
     state->tick++;
 }

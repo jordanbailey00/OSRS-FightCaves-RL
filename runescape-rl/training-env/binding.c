@@ -66,6 +66,8 @@ void my_init(Env* env, Dict* kwargs) {
     env->curriculum_wave = item ? (int)item->value : 0;
     item = dict_get_unsafe(kwargs, "curriculum_pct");
     env->curriculum_pct = item ? (float)item->value : 0.0f;
+    item = dict_get_unsafe(kwargs, "disable_movement");
+    env->disable_movement = item ? (int)item->value : 0;
 
     /* Initialize game state */
     env->seed_counter = 0;
@@ -77,4 +79,25 @@ void my_log(Log* log, Dict* out) {
     dict_set(out, "episode_return", log->episode_return);
     dict_set(out, "episode_length", log->episode_length);
     dict_set(out, "wave_reached", log->wave_reached);
+    /* Globals — bypass PufferLib Log struct, averaged here */
+    extern float g_max_wave_ever;
+    extern float g_most_npcs_ever;
+    extern float g_sum_prayer_uptime, g_sum_correct_blocks, g_sum_damage_taken;
+    extern float g_sum_pots_used, g_sum_food_eaten;
+    extern float g_sum_food_wasted, g_sum_pots_wasted, g_n_analytics;
+    dict_set(out, "max_wave", g_max_wave_ever);
+    dict_set(out, "most_npcs_slayed", g_most_npcs_ever);
+    if (g_n_analytics > 0) {
+        dict_set(out, "prayer_uptime", g_sum_prayer_uptime / g_n_analytics);
+        dict_set(out, "correct_prayer", g_sum_correct_blocks / g_n_analytics);
+        dict_set(out, "dmg_taken_avg", g_sum_damage_taken / g_n_analytics);
+        dict_set(out, "pots_used", g_sum_pots_used / g_n_analytics);
+        dict_set(out, "food_eaten", g_sum_food_eaten / g_n_analytics);
+        dict_set(out, "food_wasted", g_sum_food_wasted / g_n_analytics);
+        dict_set(out, "pots_wasted", g_sum_pots_wasted / g_n_analytics);
+        g_sum_prayer_uptime = 0; g_sum_correct_blocks = 0;
+        g_sum_damage_taken = 0; g_sum_pots_used = 0;
+        g_sum_food_eaten = 0; g_sum_food_wasted = 0;
+        g_sum_pots_wasted = 0; g_n_analytics = 0;
+    }
 }

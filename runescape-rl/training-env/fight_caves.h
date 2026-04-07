@@ -44,6 +44,20 @@
 #include "fc_render.h"
 #endif
 
+/* All-time max trackers (global, bypasses PufferLib Log averaging) */
+float g_max_wave_ever = 0;
+float g_most_npcs_ever = 0;
+
+/* Per-logging-period analytics (accumulated across all envs, averaged in my_log) */
+float g_sum_prayer_uptime = 0;
+float g_sum_correct_blocks = 0;
+float g_sum_damage_taken = 0;
+float g_sum_pots_used = 0;
+float g_sum_food_eaten = 0;
+float g_sum_food_wasted = 0;
+float g_sum_pots_wasted = 0;
+float g_n_analytics = 0;
+
 /* ======================================================================== */
 /* PufferLib Log struct (required fields)                                    */
 /* ======================================================================== */
@@ -102,6 +116,9 @@ typedef struct FightCaves {
     /* Curriculum */
     int curriculum_wave;         /* 0 = always wave 1, >0 = X% of episodes start at this wave */
     float curriculum_pct;        /* fraction of episodes that start at curriculum_wave (0.0-1.0) */
+    int disable_movement;        /* 1 = force idle movement, agent can't walk/run */
+    int ticks_since_attack;      /* ticks since agent last dealt damage */
+    int ticks_in_wave;           /* ticks since current wave started */
 
     /* Episode tracking */
     float ep_return;
@@ -151,55 +168,185 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         reward += dmg_frac * dmg_frac * 70.0f * env->w_damage_taken;
     }
     reward += rwd[FC_RWD_NPC_KILL]         * env->w_npc_kill;
-    reward += rwd[FC_RWD_WAVE_CLEAR]       * env->w_wave_clear;
+    /* Wave clear scales with wave number — higher waves = bigger reward.
+     * current_wave has already advanced when WAVE_CLEAR fires, so the
+     * wave just cleared = current_wave - 1.
+     * Wave 1: 10 * 1 = 10. Wave 15: 10 * 15 = 150. Wave 30: 10 * 30 = 300.
+     * Makes pushing to higher waves always more valuable than farming
+     * easy waves for per-tick rewards. */
+    if (rwd[FC_RWD_WAVE_CLEAR] > 0.0f) {
+        int cleared_wave = env->state.current_wave - 1;
+        if (cleared_wave < 1) cleared_wave = 1;
+        reward += env->w_wave_clear * (float)cleared_wave;
+    }
     reward += rwd[FC_RWD_JAD_DAMAGE]       * env->w_jad_damage;
     reward += rwd[FC_RWD_JAD_KILL]         * env->w_jad_kill;
     reward += rwd[FC_RWD_PLAYER_DEATH]     * env->w_player_death;
     reward += rwd[FC_RWD_CAVE_COMPLETE]    * env->w_cave_complete;
-    /* Food/pot penalty scales by how much of the heal was wasted.
-     * Shark heals 200 tenths (20 HP). If current_hp + 200 > max_hp,
-     * the overheal is waste. Penalty = base * (wasted / total_heal).
-     * Eating at 50/70 HP: heals to 70, 0 waste → 0 penalty.
-     * Eating at 68/70 HP: heals 2, wastes 18 → penalty * 0.9.
-     * Same logic for prayer pots (restore 170 tenths = 17 points). */
+    /* Food — penalize wasting scarce resources. No reward for eating.
+     * Full HP: -5.0 strong penalty. Otherwise: penalty scaled by waste fraction. */
     if (rwd[FC_RWD_FOOD_USED] > 0.0f) {
-        int shark_heal = 200;  /* tenths */
-        int hp_missing = env->state.player.max_hp - env->state.player.current_hp;
-        int overheal = (env->state.player.current_hp + shark_heal) - env->state.player.max_hp;
-        if (overheal < 0) overheal = 0;
-        float waste_frac = (float)overheal / (float)shark_heal;  /* 0 = no waste, 1 = total waste */
-        reward += rwd[FC_RWD_FOOD_USED] * env->w_food_used * (1.0f + waste_frac * 9.0f);
-        /* Reward eating at the right time (20+ HP = 200+ tenths missing) */
-        if (hp_missing >= 200) {
-            reward += 1.0f;  /* w_food_used_well hardcoded to avoid struct size change */
+        int pre_hp = env->state.pre_eat_hp;
+        int max_hp = env->state.player.max_hp;
+        if (pre_hp >= max_hp) {
+            reward += -5.0f;  /* eating at full HP — complete waste */
+        } else {
+            int shark_heal = 200;
+            int could_heal = max_hp - pre_hp;  /* how much HP was actually missing */
+            int wasted = shark_heal - could_heal;
+            if (wasted < 0) wasted = 0;
+            reward += -(float)wasted / (float)shark_heal;  /* 0 to -1.0 based on waste */
         }
     }
+    /* Prayer pot — penalize wasting scarce resources. No reward for drinking.
+     * Full prayer: -5.0 strong penalty. Otherwise: penalty scaled by waste fraction. */
     if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
-        int pot_restore = 170;  /* tenths (17 prayer points) */
-        int overrestore = (env->state.player.current_prayer + pot_restore) - env->state.player.max_prayer;
-        if (overrestore < 0) overrestore = 0;
-        float waste_frac = (float)overrestore / (float)pot_restore;
-        reward += rwd[FC_RWD_PRAYER_POT_USED] * env->w_prayer_pot_used * (1.0f + waste_frac * 9.0f);
+        int pre_prayer = env->state.pre_drink_prayer;
+        int max_prayer = env->state.player.max_prayer;
+        if (pre_prayer >= max_prayer) {
+            reward += -5.0f;  /* drinking at full prayer — complete waste */
+        } else {
+            int pot_restore = 170;
+            int could_restore = max_prayer - pre_prayer;
+            int wasted = pot_restore - could_restore;
+            if (wasted < 0) wasted = 0;
+            reward += -(float)wasted / (float)pot_restore;  /* 0 to -1.0 based on waste */
+        }
     }
-    /* Prayer correctness — computed from existing per-tick state.
-     * If player was hit by ranged/magic this tick, check if prayer matched.
-     * hit_style_this_tick: 0=none, ATTACK_RANGED=2, ATTACK_MAGIC=3.
-     * player.prayer: PRAYER_PROTECT_RANGE=2, PRAYER_PROTECT_MAGIC=3. */
+    /* Prayer correctness — +1/-1 for all attack styles.
+     * Reward correct prayer when any hit resolves (melee, ranged, magic).
+     * Penalize wrong prayer (active but doesn't match attack style). */
     {
         int style = env->state.player.hit_style_this_tick;
         int prayer = env->state.player.prayer;
-        if (style == ATTACK_RANGED || style == ATTACK_MAGIC) {
-            int correct = fc_prayer_blocks_style(prayer, style);
-            if (correct)
-                reward += env->w_correct_danger_prayer;
-            else
-                reward += env->w_wrong_danger_prayer;
+        if (style != ATTACK_NONE && prayer != PRAYER_NONE) {
+            if (fc_prayer_blocks_style(prayer, style)) {
+                reward += env->w_correct_danger_prayer;  /* +1.0 correct prayer */
+            } else {
+                reward += -1.0f;
+            }
         }
+    }
+    /* NPC-specific prayer rewards — +2.0 when correct prayer blocks a hit
+     * from a specific NPC type while agent has a target selected.
+     * Teaches explicit NPC→prayer mapping for ALL combat NPCs. */
+    {
+        int style = env->state.player.hit_style_this_tick;
+        int prayer = env->state.player.prayer;
+        int src_type = env->state.player.hit_source_npc_type;
+        if (style != ATTACK_NONE && prayer != PRAYER_NONE &&
+            fc_prayer_blocks_style(prayer, style) &&
+            env->state.player.attack_target_idx >= 0) {
+            if (src_type == NPC_KET_ZEK && prayer == PRAYER_PROTECT_MAGIC)
+                reward += 2.0f;
+            else if (src_type == NPC_TOK_XIL && prayer == PRAYER_PROTECT_RANGE)
+                reward += 2.0f;
+            else if ((src_type == NPC_YT_MEJKOT || src_type == NPC_TZ_KIH ||
+                      src_type == NPC_TZ_KEK || src_type == NPC_TZ_KEK_SM) &&
+                     prayer == PRAYER_PROTECT_MELEE)
+                reward += 2.0f;
+        }
+    }
+    /* Penalize ANY NPC in melee range — all NPCs should be kited.
+     * -0.5/tick per NPC at distance 1. */
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        FcNpc* n = &env->state.npcs[i];
+        if (!n->active || n->is_dead) continue;
+        int dist = fc_distance_to_npc(env->state.player.x, env->state.player.y, n);
+        if (dist <= 1) {
+            reward += -0.5f;
+        }
+    }
+    /* Prayer flick reward — +0.5 ONLY when prayer was just toggled,
+     * blocked an actual hit this tick, and no prayer point was drained.
+     * Must be attacking something. Cannot be farmed by toggling. */
+    {
+        int style = env->state.player.hit_style_this_tick;
+        int prayer = env->state.player.prayer;
+        if (style != ATTACK_NONE && prayer != PRAYER_NONE &&
+            fc_prayer_blocks_style(prayer, style) &&
+            env->state.player.prayer_changed_this_tick &&
+            env->state.player.attack_target_idx >= 0) {
+            int drain_rate = 12;
+            int resistance = 60 + 2 * env->state.player.prayer_bonus;
+            if (env->state.player.prayer_drain_counter + drain_rate <= resistance) {
+                reward += 0.5f;
+            }
+        }
+    }
+    /* Wasted attack penalty — -0.3 when attack timer is 0 (ready to fire)
+     * but agent didn't deal damage this tick and NPCs are alive. */
+    if (env->state.player.attack_timer <= 0 && rwd[FC_RWD_DAMAGE_DEALT] <= 0.0f &&
+        env->state.npcs_remaining > 0 && env->state.player.attack_target_idx >= 0) {
+        reward += -0.3f;
+    }
+    /* Wave stall penalty — escalating after 500 ticks in the same wave.
+     * -0.75 base, increases by 0.75 every 50 ticks beyond 500.
+     * 500 ticks: -0.75, 550: -1.50, 600: -2.25, etc. */
+    if (env->state.npcs_remaining > 0) {
+        env->ticks_in_wave++;
+        if (env->ticks_in_wave > 500) {
+            int over = env->ticks_in_wave - 500;
+            float scale = 1.0f + (float)(over / 50);
+            reward += -0.75f * scale;
+        }
+    }
+    if (rwd[FC_RWD_WAVE_CLEAR] > 0.0f) {
+        env->ticks_in_wave = 0;
     }
     reward += rwd[FC_RWD_INVALID_ACTION]   * env->w_invalid_action;
     reward += rwd[FC_RWD_MOVEMENT]         * env->w_movement;
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
     reward += rwd[FC_RWD_TICK_PENALTY]     * env->w_tick_penalty;
+
+    /* Punish not attacking — if agent hasn't dealt damage in 2+ ticks
+     * and there are NPCs alive, penalize. Forces combat engagement. */
+    if (rwd[FC_RWD_DAMAGE_DEALT] > 0.0f) {
+        env->ticks_since_attack = 0;
+    } else if (env->state.npcs_remaining > 0) {
+        env->ticks_since_attack++;
+        if (env->ticks_since_attack >= 2) {
+            reward += -0.5f;
+        }
+    }
+
+    /* Kiting reward — +1.0 when agent attacks from near-max range (5-7 tiles).
+     * Incentivizes fighting at distance so melee NPCs can't reach and
+     * dual-mode NPCs (Tok-Xil, Ket-Zek) use ranged/magic attacks,
+     * forcing the agent to learn correct prayer switching. */
+    if (rwd[FC_RWD_DAMAGE_DEALT] > 0.0f && env->state.player.attack_target_idx >= 0) {
+        FcNpc* target = &env->state.npcs[env->state.player.attack_target_idx];
+        if (target->active && !target->is_dead) {
+            int dist = fc_distance_to_npc(env->state.player.x, env->state.player.y, target);
+            if (dist >= 5 && dist <= 7) {
+                reward += 1.0f;
+            }
+        }
+    }
+
+    /* Unnecessary prayer penalty — -0.2/tick when prayer is active but
+     * no NPC is threatening the player (none in attack range, no pending
+     * hits in flight). Teaches the agent to only pray when needed,
+     * conserving prayer points. */
+    if (env->state.player.prayer != PRAYER_NONE) {
+        int threatened = 0;
+        /* Check if any NPC is within its attack range of the player */
+        for (int i = 0; i < FC_MAX_NPCS; i++) {
+            FcNpc* n = &env->state.npcs[i];
+            if (!n->active || n->is_dead) continue;
+            int dist = fc_distance_to_npc(env->state.player.x, env->state.player.y, n);
+            if (dist <= n->attack_range) { threatened = 1; break; }
+        }
+        /* Check if any pending hits are in flight */
+        if (!threatened) {
+            for (int i = 0; i < env->state.player.num_pending_hits; i++) {
+                if (env->state.player.pending_hits[i].active) { threatened = 1; break; }
+            }
+        }
+        if (!threatened) {
+            reward += -0.2f;
+        }
+    }
 
     return reward;
 }
@@ -236,6 +383,8 @@ void c_reset(FightCaves* env) {
 
     env->ep_return = 0.0f;
     env->ep_length = 0;
+    env->ticks_since_attack = 0;
+    env->ticks_in_wave = 0;
 
     /* Compute initial observations */
     fc_puffer_write_obs(env);
@@ -254,6 +403,10 @@ void c_step(FightCaves* env) {
         actions[h] = (int)env->actions[h];
     }
     /* Heads 5+6 (walk-to-tile) always 0 — not used in v1 */
+
+    /* Force idle movement if disabled */
+    if (env->disable_movement)
+        actions[0] = 0;  /* FC_MOVE_IDLE */
 
     /* Step the game simulation */
     fc_step(&env->state, actions);
@@ -275,6 +428,20 @@ void c_step(FightCaves* env) {
         env->log.episode_return += env->ep_return;
         env->log.episode_length += (float)env->ep_length;
         env->log.wave_reached += (float)env->state.current_wave;
+        /* Analytics globals (averaged in my_log) */
+        g_sum_prayer_uptime += (env->ep_length > 0)
+            ? (float)env->state.ep_ticks_praying / (float)env->ep_length : 0.0f;
+        g_sum_correct_blocks += (float)env->state.ep_correct_blocks;
+        g_sum_damage_taken += (float)env->state.player.total_damage_taken;
+        g_sum_pots_used += (float)env->state.ep_pots_used;
+        g_sum_food_eaten += (float)env->state.ep_food_eaten;
+        g_sum_food_wasted += (float)env->state.ep_food_overhealed;
+        g_sum_pots_wasted += (float)env->state.ep_pots_overrestored;
+        g_n_analytics += 1.0f;
+        if ((float)env->state.current_wave > g_max_wave_ever)
+            g_max_wave_ever = (float)env->state.current_wave;
+        if ((float)env->state.total_npcs_killed > g_most_npcs_ever)
+            g_most_npcs_ever = (float)env->state.total_npcs_killed;
         env->log.n += 1.0f;
 
         /* Auto-reset for next episode. Obs already written above

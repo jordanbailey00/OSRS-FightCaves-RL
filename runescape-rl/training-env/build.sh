@@ -16,7 +16,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-PUFFERLIB_DIR="${PUFFERLIB_DIR:-/home/joe/projects/runescape-rl-reference/pufferlib_4}"
+PUFFERLIB_DIR="${PUFFERLIB_DIR:-$(cd "$REPO_DIR/../pufferlib_4" && pwd)}"
 
 if [ ! -d "$PUFFERLIB_DIR/src" ]; then
     echo "Error: PufferLib not found at $PUFFERLIB_DIR"

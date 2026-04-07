@@ -706,26 +706,214 @@ static int dbg_draw_panel_tabs(const FcState* state, int px, int x, int by,
         DrawText(buf, x, by, 8, DBG_COL_LABEL); by += lh;
 
     } else if (dbg_tab == 3) {
-        /* Reward features */
-        float obs[FC_OBS_SIZE];
-        fc_write_obs(state, obs);
-        float* rwd = obs + FC_REWARD_START;
+        /* Computed reward signals — mirrors fight_caves.h:fc_puffer_compute_reward().
+         * Shows the actual reward contribution per signal, not just raw features.
+         *
+         * UPDATE THESE WEIGHTS when config/fight_caves.ini changes.
+         * Set a weight to 0 to move a signal to the "inactive" section. */
+        #define RW_DMG_DEALT       2.0f    /* active */
+        #define RW_DMG_TAKEN      -0.75f   /* active (quadratic x70) */
+        #define RW_NPC_KILL        5.0f    /* active */
+        #define RW_WAVE_CLEAR     10.0f    /* active (x wave_num) */
+        #define RW_JAD_DAMAGE      2.0f    /* active */
+        #define RW_JAD_KILL       50.0f    /* active */
+        #define RW_PLAYER_DEATH  -20.0f    /* active */
+        #define RW_CAVE_COMPLETE 100.0f    /* active */
+        #define RW_CORRECT_PRAY    1.0f    /* active (from config w_correct_danger_prayer) */
+        #define RW_WRONG_PRAY_PEN -1.0f    /* active (hardcoded, wrong prayer on hit) */
+        #define RW_NPC_PRAY_BONUS  2.0f    /* active (Ket-Zek/Tok-Xil/MejKot specific) */
+        #define RW_MELEE_RANGE_PEN -0.5f   /* active (dangerous NPC at melee range) */
+        #define RW_PRAY_FLICK      0.5f    /* active (prayer on without drain) */
+        #define RW_COMBAT_IDLE    -0.5f    /* active (hardcoded, after 2 idle ticks) */
+        #define RW_TICK_PENALTY   -0.001f  /* active */
+        #define RW_INVALID_ACT    -0.1f    /* inactive (signal never fires) */
+        #define RW_JAD_PRAY_OK     0.0f    /* inactive */
+        #define RW_JAD_PRAY_BAD    0.0f    /* inactive */
+        #define RW_WRONG_PRAY      0.0f    /* inactive */
+        #define RW_MOVEMENT        0.0f    /* inactive */
+        #define RW_IDLE            0.0f    /* inactive */
 
-        static const char* rwd_names[] = {
-            "dmg_dealt","dmg_taken","npc_kill","wave_clr",
-            "jad_dmg","jad_kill","death","cave_done",
-            "food","ppot","jad_ok","jad_bad",
-            "invalid","move","idle","tick_pen"
-        };
-        for (int r = 0; r < FC_REWARD_FEATURES; r++) {
-            Color c = DBG_COL_DIM;
-            if (rwd[r] > 0.001f) {
-                c = (r == FC_RWD_DAMAGE_TAKEN || r == FC_RWD_PLAYER_DEATH ||
-                     r == FC_RWD_WRONG_JAD_PRAY || r == FC_RWD_INVALID_ACTION)
-                    ? DBG_COL_BAD : DBG_COL_GOOD;
+        float obs_buf[FC_OBS_SIZE];
+        fc_write_obs(state, obs_buf);
+        float* rwd = obs_buf + FC_REWARD_START;
+        const FcPlayer* p = &state->player;
+
+        /* Combat idle counter (static, persists across frames) */
+        static int ticks_since_attack = 0;
+        if (rwd[FC_RWD_DAMAGE_DEALT] > 0.0f) ticks_since_attack = 0;
+        else if (state->npcs_remaining > 0) ticks_since_attack++;
+        else ticks_since_attack = 0;
+
+        /* Compute each active signal's reward contribution this tick */
+        /* 1. damage_dealt — linear */
+        float r_dmg_dealt = rwd[FC_RWD_DAMAGE_DEALT] * RW_DMG_DEALT;
+        /* 2. damage_taken — quadratic x70 */
+        float dmg_frac = rwd[FC_RWD_DAMAGE_TAKEN];
+        float r_dmg_taken = dmg_frac * dmg_frac * 70.0f * RW_DMG_TAKEN;
+        /* 3. npc_kill */
+        float r_npc_kill = rwd[FC_RWD_NPC_KILL] * RW_NPC_KILL;
+        /* 4. wave_clear — scaled by wave number */
+        float r_wave_clear = 0.0f;
+        if (rwd[FC_RWD_WAVE_CLEAR] > 0.0f) {
+            int cleared = state->current_wave - 1;
+            if (cleared < 1) cleared = 1;
+            r_wave_clear = RW_WAVE_CLEAR * (float)cleared;
+        }
+        /* 5. jad_damage */
+        float r_jad_dmg = rwd[FC_RWD_JAD_DAMAGE] * RW_JAD_DAMAGE;
+        /* 6. jad_kill */
+        float r_jad_kill = rwd[FC_RWD_JAD_KILL] * RW_JAD_KILL;
+        /* 7. player_death */
+        float r_death = rwd[FC_RWD_PLAYER_DEATH] * RW_PLAYER_DEATH;
+        /* 8. cave_complete */
+        float r_cave = rwd[FC_RWD_CAVE_COMPLETE] * RW_CAVE_COMPLETE;
+        /* 9. food waste — penalty only, scaled by waste fraction */
+        float r_food = 0.0f;
+        if (rwd[FC_RWD_FOOD_USED] > 0.0f) {
+            int pre_hp = state->pre_eat_hp;
+            if (pre_hp >= p->max_hp) r_food = -5.0f;
+            else { int w = 200 - (p->max_hp - pre_hp); r_food = (w > 0) ? -(float)w/200.0f : 0.0f; }
+        }
+        /* 10. pot waste — penalty only, scaled by waste fraction */
+        float r_ppot = 0.0f;
+        if (rwd[FC_RWD_PRAYER_POT_USED] > 0.0f) {
+            int pre_pr = state->pre_drink_prayer;
+            if (pre_pr >= p->max_prayer) r_ppot = -5.0f;
+            else { int w = 170 - (p->max_prayer - pre_pr); r_ppot = (w > 0) ? -(float)w/170.0f : 0.0f; }
+        }
+        /* 11. correct/wrong prayer */
+        float r_pray = 0.0f;
+        float r_wrong_pray_pen = 0.0f;
+        if (p->hit_style_this_tick != ATTACK_NONE && p->prayer != PRAYER_NONE) {
+            if (fc_prayer_blocks_style(p->prayer, p->hit_style_this_tick))
+                r_pray = RW_CORRECT_PRAY;
+            else
+                r_wrong_pray_pen = RW_WRONG_PRAY_PEN;
+        }
+        /* 12. NPC-specific prayer bonus */
+        float r_npc_pray = 0.0f;
+        if (p->hit_style_this_tick != ATTACK_NONE && p->prayer != PRAYER_NONE &&
+            fc_prayer_blocks_style(p->prayer, p->hit_style_this_tick) &&
+            p->attack_target_idx >= 0) {
+            int src = p->hit_source_npc_type;
+            if ((src == NPC_KET_ZEK && p->prayer == PRAYER_PROTECT_MAGIC) ||
+                (src == NPC_TOK_XIL && p->prayer == PRAYER_PROTECT_RANGE) ||
+                (src == NPC_YT_MEJKOT && p->prayer == PRAYER_PROTECT_MELEE))
+                r_npc_pray = RW_NPC_PRAY_BONUS;
+        }
+        /* 13. dangerous NPC in melee range penalty */
+        float r_melee_range = 0.0f;
+        for (int ni = 0; ni < FC_MAX_NPCS; ni++) {
+            const FcNpc* tn = &state->npcs[ni];
+            if (!tn->active || tn->is_dead) continue;
+            if (tn->npc_type == NPC_KET_ZEK || tn->npc_type == NPC_TOK_XIL ||
+                tn->npc_type == NPC_YT_MEJKOT) {
+                if (fc_distance_to_npc(p->x, p->y, tn) <= 1) r_melee_range += RW_MELEE_RANGE_PEN;
             }
-            snprintf(buf, sizeof(buf), "%-9s %.4f", rwd_names[r], rwd[r]);
-            DrawText(buf, x, by, 8, c); by += lh - 2;
+        }
+        /* 14. prayer flick reward */
+        float r_flick = 0.0f;
+        if (p->prayer != PRAYER_NONE && p->prayer_changed_this_tick) {
+            int res = 60 + 2 * p->prayer_bonus;
+            if (p->prayer_drain_counter + 12 <= res) r_flick = RW_PRAY_FLICK;
+        }
+        /* 15. combat_idle */
+        float r_idle_combat = (ticks_since_attack >= 2 && state->npcs_remaining > 0)
+            ? RW_COMBAT_IDLE : 0.0f;
+        /* 16. tick_penalty */
+        float r_tick = RW_TICK_PENALTY;
+        /* 17. kiting reward — +1.0 when dealing damage from range 5-7 */
+        float r_kite = 0.0f;
+        if (rwd[FC_RWD_DAMAGE_DEALT] > 0.0f && p->attack_target_idx >= 0) {
+            const FcNpc* kt = &state->npcs[p->attack_target_idx];
+            if (kt->active && !kt->is_dead) {
+                int kd = fc_distance_to_npc(p->x, p->y, kt);
+                if (kd >= 5 && kd <= 7) r_kite = 1.0f;
+            }
+        }
+        /* 18. unnecessary prayer penalty — -0.2 when praying with no threat */
+        float r_pray_waste = 0.0f;
+        if (p->prayer != PRAYER_NONE) {
+            int threatened = 0;
+            for (int ni = 0; ni < FC_MAX_NPCS; ni++) {
+                const FcNpc* tn = &state->npcs[ni];
+                if (!tn->active || tn->is_dead) continue;
+                int td = fc_distance_to_npc(p->x, p->y, tn);
+                if (td <= tn->attack_range) { threatened = 1; break; }
+            }
+            if (!threatened) {
+                for (int hi = 0; hi < p->num_pending_hits; hi++)
+                    if (p->pending_hits[hi].active) { threatened = 1; break; }
+            }
+            if (!threatened) r_pray_waste = -0.2f;
+        }
+
+        /* Inactive signals — raw feature values only */
+        float r_invalid  = rwd[FC_RWD_INVALID_ACTION]      * RW_INVALID_ACT;
+        float r_jad_ok   = rwd[FC_RWD_CORRECT_JAD_PRAY]    * RW_JAD_PRAY_OK;
+        float r_jad_bad  = rwd[FC_RWD_WRONG_JAD_PRAY]      * RW_JAD_PRAY_BAD;
+        float r_wrong_pr = rwd[FC_RWD_WRONG_DANGER_PRAY]   * RW_WRONG_PRAY;
+        float r_move     = rwd[FC_RWD_MOVEMENT]             * RW_MOVEMENT;
+        float r_idle     = rwd[FC_RWD_IDLE]                 * RW_IDLE;
+
+        float total = r_dmg_dealt + r_dmg_taken + r_npc_kill + r_wave_clear
+            + r_jad_dmg + r_jad_kill + r_death + r_cave + r_food + r_ppot
+            + r_pray + r_wrong_pray_pen + r_npc_pray + r_melee_range + r_flick
+            + r_kite + r_pray_waste + r_idle_combat + r_tick;
+
+        /* Draw active signals */
+        int sh = lh - 3;
+        DrawText("-- ACTIVE --", x, by, 8, DBG_COL_VALUE); by += sh + 2;
+
+        struct { const char* name; float val; int is_penalty; } active[] = {
+            {"dmg_dealt",   r_dmg_dealt,      0},
+            {"dmg_taken",   r_dmg_taken,      1},
+            {"npc_kill",    r_npc_kill,       0},
+            {"wave_clear",  r_wave_clear,     0},
+            {"jad_dmg",     r_jad_dmg,        0},
+            {"jad_kill",    r_jad_kill,       0},
+            {"death",       r_death,          1},
+            {"cave_done",   r_cave,           0},
+            {"food_waste",  r_food,           1},
+            {"pot_waste",   r_ppot,           1},
+            {"pray_ok",     r_pray,           0},
+            {"pray_wrong",  r_wrong_pray_pen, 1},
+            {"npc_pray",    r_npc_pray,       0},
+            {"melee_rng",   r_melee_range,    1},
+            {"pray_flick",  r_flick,          0},
+            {"kite",        r_kite,           0},
+            {"pray_waste",  r_pray_waste,     1},
+            {"combat_idle", r_idle_combat,    1},
+            {"tick_pen",    r_tick,           1},
+        };
+        for (int i = 0; i < 19; i++) {
+            Color c = DBG_COL_DIM;
+            float v = active[i].val;
+            if (v > 0.0001f)  c = DBG_COL_GOOD;
+            if (v < -0.0001f) c = DBG_COL_BAD;
+            snprintf(buf, sizeof(buf), "%-11s %+.4f", active[i].name, v);
+            DrawText(buf, x, by, 8, c); by += sh;
+        }
+
+        /* Total */
+        by += 2;
+        Color tc = (total > 0.0001f) ? DBG_COL_GOOD : (total < -0.0001f) ? DBG_COL_BAD : DBG_COL_DIM;
+        snprintf(buf, sizeof(buf), "TOTAL       %+.4f", total);
+        DrawText(buf, x, by, 8, tc); by += sh + 4;
+
+        /* Draw inactive signals */
+        DrawText("-- INACTIVE --", x, by, 8, DBG_COL_DIM); by += sh + 2;
+        struct { const char* name; float raw; } inactive[] = {
+            {"invalid",    rwd[FC_RWD_INVALID_ACTION]},
+            {"jad_ok",     rwd[FC_RWD_CORRECT_JAD_PRAY]},
+            {"jad_bad",    rwd[FC_RWD_WRONG_JAD_PRAY]},
+            {"wrong_pray", rwd[FC_RWD_WRONG_DANGER_PRAY]},
+            {"movement",   rwd[FC_RWD_MOVEMENT]},
+            {"idle",       rwd[FC_RWD_IDLE]},
+        };
+        for (int i = 0; i < 6; i++) {
+            snprintf(buf, sizeof(buf), "%-11s  %.4f", inactive[i].name, inactive[i].raw);
+            DrawText(buf, x, by, 8, DBG_COL_DIM); by += sh;
         }
     } else if (dbg_tab == 4) {
         /* Event log — scrollable with scrollbar, most recent at top */
