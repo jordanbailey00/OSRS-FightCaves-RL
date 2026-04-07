@@ -111,3 +111,18 @@
   - `1.5B` total timesteps
   - otherwise keep the current `v17` obs/reward/PPO package unchanged
 - Added a new top `v17.1` entry to [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) documenting the exact control-run purpose, config, and success criteria.
+- Added [handoff.md](/home/joe/projects/runescape-rl/codex3/handoff.md) at the repo root as the single fresh-session handoff document:
+  - current branch / commit / remote state
+  - active run id `q3ald8bc`
+  - current live `v17.1` control-run config
+  - the key run-history context a new Codex session actually needs
+  - exact next-step instructions for when the run finishes
+- Analyzed completed `v17.1` control run `q3ald8bc` and updated [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md) with:
+  - final metrics and analytics
+  - direct comparison against `ge5sma5y` (`v16.2a`) and `mv0snohb` (`v17`)
+  - diagnosis that the current `v17` package does not bootstrap from scratch well enough
+  - recommendation for `v17.2`: keep the new obs contract and stability fixes, but revert the learning and dense reward recipe closer to `ge5sma5y`
+- Updated [handoff.md](/home/joe/projects/runescape-rl/codex3/handoff.md) so a fresh session sees `q3ald8bc` as completed, not active, and inherits the `v17.2` recommendation instead of the old `v17.1` placeholder state.
+- Corrected [handoff.md](/home/joe/projects/runescape-rl/codex3/handoff.md) repo-state notes so they no longer imply the current working tree is clean:
+  - the last pushed commit is still `df07aa8da5e1b800986e84eb19ad248f0f83dff1`
+  - the latest `q3ald8bc` analysis lives in local doc updates to `changelog.md`, `runescape-rl/docs/rl_config.md`, and `handoff.md`

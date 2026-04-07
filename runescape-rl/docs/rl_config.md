@@ -420,8 +420,192 @@ Success criteria:
 - answer whether the current `v17` package actually improves prayer
   learning and late-wave competence on its own
 
-Results:
-- Pending.
+Results (1.5B steps, ~12.5min, wandb run `q3ald8bc`):
+- SPS: **2.02M**
+- Wave reached: **17.17** avg
+- Max wave: **24**
+- Most NPCs slayed: **86**
+- Episode return: **1315.7**
+- Episode length: **997**
+- Score: 0
+- Epochs: 1430
+- Entropy: **8.044**
+- Clipfrac: **0.0001**
+- Value loss: **20.69**
+- Policy loss: `+0.0154`
+
+Analytics (final):
+- prayer_uptime: **0.647**
+- prayer_uptime_melee: **0.386**
+- prayer_uptime_range: **0.189**
+- prayer_uptime_magic: **0.072**
+- correct_prayer: **224.9**
+- wrong_prayer_hits: **62.4**
+- no_prayer_hits: **96.5**
+- prayer_switches: **339.4**
+- damage_blocked: **1,220.5**
+- dmg_taken_avg: **2683.5**
+- pots_used: **32.0**
+- avg_prayer_on_pot: **0.987**
+- food_eaten: **20.0**
+- avg_hp_on_food: **0.926**
+- food_wasted: **19.5**
+- pots_wasted: **32.0**
+- tokxil_melee_ticks: **12.1**
+- ketzek_melee_ticks: **0.0**
+- reached_wave_30: **0.0**
+- cleared_wave_30: **0.0**
+- reached_wave_31: **0.0**
+
+Progression:
+- This run never had a real breakout phase.
+- It briefly touched **wave 18.0** by `~84M` steps, then spent the
+  rest of the full `1.5B` run oscillating in a very tight **16.6-17.8**
+  band.
+- It never reached wave 20, never formed a late inflection, and never
+  showed the kind of entropy drop or return expansion that marked the
+  `ge5sma5y` breakthrough.
+- Unlike `v16.2a`, which built foundations slowly and then broke out
+  hard after `~550M-700M`, `v17.1` was flat from start to finish.
+
+Comparison vs `v16.2a` (`ge5sma5y`, scratch, no curriculum, 1.5B):
+
+Top-line:
+- `q3ald8bc`: wave `17.17`, max wave `24`, return `1315.7`
+- `ge5sma5y`: wave `28.82`, max wave `31`, return `4593.7`
+
+What improved:
+- Slightly better SPS: `2.02M` vs `1.95M`
+- Lower average damage taken: `2683.5` vs `3334.6`
+- Lower Tok-Xil melee exposure than `ge5sma5y`: `12.1` vs `28.4`
+
+What regressed badly:
+- Wave progression collapsed:
+  - `v17.1` never reached wave 20
+  - `v16.2a` reached wave 20 around `~550M`, wave 25 around `~730M`,
+    wave 28 around `~963M`, and wave 29 around `~1.17B`
+- Combat conversion was dramatically worse:
+  - `correct_prayer 224.9` vs `1604.2`
+  - `damage_blocked 1.2k` vs `23.2k`
+  - `prayer_switches 339.4` vs `1343.2`
+  - `episode_length 997` vs `3281`
+- Resource behavior was worse, not better:
+  - `pots_used 32.0` vs `30.5`
+  - `avg_prayer_on_pot 0.987` vs `0.767`
+  - `avg_hp_on_food 0.926` vs `0.923`
+  - `pots_wasted 32.0` vs `19.8`
+
+Interpretation:
+- `v17.1` was safer in a narrow sense, but it did not learn the actual
+  Fight Caves task nearly well enough.
+- The current `v17` package from scratch is nowhere near the `v16.2a`
+  frontier.
+
+Comparison vs `v17` warm-start (`mv0snohb`):
+
+Top-line:
+- `q3ald8bc`: wave `17.17`, max wave `24`, return `1315.7`
+- `mv0snohb`: wave `25.01`, max wave `32`, return `291.8`
+
+What this means:
+- Warm-start + curriculum was clearly carrying a large fraction of the
+  `v17` result.
+- The current `v17` package does **not** bootstrap well from scratch.
+- So the failure mode in `mv0snohb` was not "the package can learn but
+  warm-start hurt it a little." The package itself is weak enough that
+  it needed inherited competence just to reach the mid-20s.
+
+Comparison vs older `v16+` baselines:
+- `v17.1` is only slightly better than the broken `v16` run on average
+  wave (`17.17` vs `16.19`) and still far below:
+  - `v16.1`: `25.16`
+  - `v15.3`: `28.36`
+  - `v15.1`: `28.65`
+- That is a strong signal that the current `v17` package is not just
+  "not yet optimized"; it is materially worse than older working
+  scratch recipes.
+
+Diagnosis:
+
+1. **The current `v17` optimizer profile is too conservative for
+   scratch training.**
+   - `learning_rate=0.00025` and `clip_coef=0.12` appear appropriate
+     for fine-tuning or warm-start stabilization, not for learning
+     Fight Caves from random weights.
+   - Evidence: entropy stayed extremely high (`~8.0`) for the entire
+     run, and clipfrac decayed quickly to essentially zero without any
+     learning inflection.
+   - The policy barely specialized at all.
+
+2. **The current `v17` reward mix is likely under-driving combat
+   progress while over-complicating resource behavior.**
+   - `w_damage_dealt` was cut to `0.5` from the stronger scratch recipe.
+   - threat-aware food/pot penalties were added
+   - danger-prayer reward was increased
+   - but the resulting policy still wasted nearly every potion dose and
+     most food value while failing to learn late-wave combat
+   - the extra shaping complexity is not buying the intended behavior
+
+3. **Observation improvements alone did not rescue prayer learning.**
+   - `correct_prayer` is non-zero, so the policy is not totally blind
+   - but the scale is nowhere near `v16.2a`
+   - this suggests the new threat obs are probably useful, but they
+     still need a stronger optimization / reward recipe around them
+
+4. **Current resource penalties are not teaching thrift from scratch.**
+   - `avg_prayer_on_pot = 0.987`
+   - `pots_wasted = 32.0`
+   - `avg_hp_on_food = 0.926`
+   - `food_wasted = 19.5`
+   - This is nearly worst-case usage despite the threat-aware penalties.
+   - So those penalties are either too weak, too hard to learn through,
+     or simply distracting at this stage.
+
+Key takeaway:
+- `v17.1` answered the control question clearly:
+  the current `v17` package is **not** a better scratch recipe than
+  `v16.2a`.
+- The best path forward is not a sweep of the current package.
+- The best path forward is to keep the new observation contract and
+  stability fixes, but restore a proven learning recipe around them.
+
+Recommendation for `v17.2`:
+
+Run a focused ablation:
+- keep the current observation improvements:
+  - `effective_style_now`
+  - incoming-hit timeline summaries
+  - `prayer_drain_counter`
+- keep prayer flick reward disabled
+- keep the capped stall penalty
+
+But revert the training / reward recipe closer to `ge5sma5y`:
+- `learning_rate: 0.00025 -> 0.001`
+- `clip_coef: 0.12 -> 0.2`
+- `ent_coef: 0.03 -> 0.02`
+- `w_damage_dealt: 0.5 -> 1.0`
+- `w_npc_kill: 3.0 -> 2.0`
+- `w_correct_danger_prayer: 2.0 -> 1.0`
+- disable the extra threat-aware food/pot penalties:
+  - `shape_food_safe_hp_threshold = 1.0`
+  - `shape_food_no_threat_penalty = 0.0`
+  - `shape_pot_safe_prayer_threshold = 1.0`
+  - `shape_pot_no_threat_penalty = 0.0`
+- keep no curriculum
+- keep no warm-start
+- run `1.5B` again
+
+Why this is the best next step:
+- it isolates whether the failure came from the current `v17` reward /
+  PPO recipe rather than the new observation contract
+- it preserves the likely-good `codex3` threat representation work
+- it restores the only scratch recipe on current `codex3` that has
+  actually proven it can reach the wave-29 frontier
+
+What not to do next:
+- do not run another long warm-start + curriculum job yet
+- do not sweep the current `v17.1` package yet
+- do not add more shaping complexity until the baseline learns again
 
 ---
 
