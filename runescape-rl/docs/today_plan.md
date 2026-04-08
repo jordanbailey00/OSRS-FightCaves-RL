@@ -64,71 +64,47 @@ Required validation:
 ## 2. Eval Viewer Playback Speed Controls
 
 Primary objective:
-- add runtime playback-speed controls to `demo-env` / `eval_viewer` so policy replays can be watched faster without changing game logic
-- support hotkeys for `1x`, `2x`, `4x`, and `10x` speed
-- keep simulation behavior identical; only wall-clock playback speed should change
+- make policy replay faster to inspect without changing the actual simulation
+- keep `1x` identical to current replay behavior
+- add simple preset playback speeds: `1x`, `2x`, `4x`, `10x`
 
-Desired behavior:
-- default remains `1x`
-- hotkeys switch between `1x`, `2x`, `4x`, and `10x`
-- policy actions, backend logic, RNG, and tick ordering must remain identical to normal speed
-- only the viewer/update cadence changes so the same tick stream is consumed faster
+Current repo state:
+- `demo-env/src/viewer.c` already drives replay speed through `v.tps`
+- `eval_viewer.py` just launches `fc_viewer --policy-pipe` and feeds actions
+- so this should be a small viewer-side change, not a new replay system
 
-Terminology:
-- use `playback speed`, `simulation speed multiplier`, or `time-scale control`
-- avoid framing this as a gameplay/mechanics change; it is a viewer/evaluation throughput feature
+Implementation plan:
+- treat the current default policy replay rate as `1x`
+- map fixed replay presets onto the existing viewer tick-rate control
+- add hotkeys for `1x`, `2x`, `4x`, and `10x` in `--policy-pipe` replay mode
+- keep the existing manual viewer controls usable; do not break prayer keys for human play
+- show the active playback multiplier on screen
+- optionally add an `eval_viewer.py` arg to set the initial replay speed when launching
 
 Rules:
-- do not change backend mechanics to make this work
+- do not change backend mechanics
 - do not change action timing semantics
 - do not change policy inference inputs/outputs
-- keep manual debug viewer behavior usable at `1x`
+- only change wall-clock replay speed
+- keep manual debug viewer behavior unchanged at normal speed
 
-Required validation:
-- manual viewer still behaves the same at `1x`
-- eval viewer replay at `1x` matches current behavior exactly
-- faster modes only reduce wall-clock time, not alter deterministic policy behavior
-- on-screen indicator shows current speed multiplier
-
-Why this matters:
-- current policy replay is too slow for late-wave debugging
-- faster playback will make checkpoint inspection practical without compromising parity
-
-Checkpoint-selection follow-up in the same workstream:
-- once playback speed controls are working, add an automated checkpoint replay/eval path on top of `demo-env` / `eval_viewer`
-- goal: select the best continuation checkpoint from a prior training run based on replayed performance, not just training-history intuition
+Checkpoint-selection follow-up:
+- after playback presets work, add a small replay-metrics export path
+- current replay path does not yet emit a clean terminal summary for checkpoint ranking
+- export existing backend-safe metrics at episode end, then use that output to compare candidate checkpoints
 
 Desired checkpoint-eval workflow:
 - choose several candidate checkpoints from a prior run
-- replay each checkpoint in `demo-env` / `eval_viewer` at accelerated playback speed
-- keep backend mechanics, action timing, RNG, and policy behavior identical to normal replay
-- collect the same performance analytics we already use to judge runs:
-  - wave reached
-  - max wave
-  - episode return
-  - correct_prayer
-  - no_prayer_hits
-  - prayer_switches
-  - damage_blocked
-  - dmg_taken_avg
-  - and any other existing replay-safe analytics already exposed by the backend
-- rank the candidate checkpoints on those replay metrics
-- use the best checkpoint as the warm-start checkpoint for the next continuation run
-
-Implementation goal:
-- make checkpoint selection practical enough that it becomes part of the normal training loop
-- this should remove the current situation where checkpoint choice is based mostly on training-log heuristics
-
-Rules:
-- do not create a separate “eval-only” backend with different mechanics
-- do not change tick semantics to speed up replay
-- do not add fake or approximate metrics just for checkpoint ranking
-- reuse the existing backend analytics and replay path as much as possible
+- replay each checkpoint at accelerated playback speed
+- collect real replay metrics already backed by the existing environment state
+- rank checkpoints from replay results instead of training-log intuition
 
 Required validation:
-- replay metrics from automated checkpoint eval should match what we would see from the same checkpoint in normal-speed replay
-- accelerated replay must preserve deterministic behavior for deterministic policy runs
-- the selected “best” checkpoint should be traceable to logged replay metrics, not manual judgment alone
+- manual viewer still behaves the same at normal speed
+- eval replay at `1x` matches current behavior exactly
+- faster presets only reduce wall-clock time
+- deterministic replay stays deterministic at every speed
+- on-screen speed indicator is visible and correct
 
 ## 3. Training-Env Performance Refactor
 

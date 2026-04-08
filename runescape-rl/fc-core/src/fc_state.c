@@ -303,21 +303,24 @@ static float normalize_prayer_drain_counter(const FcPlayer* p) {
 static int npc_effective_style_now(const FcState* state, const FcNpc* npc, float has_los) {
     const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
     int dist = npc_distance(&state->player, npc);
+    int can_melee = fc_npc_can_melee_player(state->player.x, state->player.y,
+                                            npc->x, npc->y, npc->size,
+                                            state->walkable);
 
     /* Jad no longer exposes a wind-up or pre-fire style hint.
      * The policy has to react to the queued pending hit instead. */
     if (npc->npc_type == NPC_TZTOK_JAD) {
-        return (dist <= 1 && stats->melee_max_hit > 0) ? ATTACK_MELEE : ATTACK_NONE;
+        return (can_melee && stats->melee_max_hit > 0) ? ATTACK_MELEE : ATTACK_NONE;
     }
 
     /* Dual-mode NPCs switch to melee at distance 1. Expose the style that
      * would be used right now, not the static primary style from the stat table. */
-    if (dist <= 1 && (stats->melee_max_hit > 0 || npc->attack_style == ATTACK_MELEE)) {
+    if (can_melee && (stats->melee_max_hit > 0 || npc->attack_style == ATTACK_MELEE)) {
         return ATTACK_MELEE;
     }
 
     if (npc->attack_style == ATTACK_MELEE) {
-        return (dist <= npc->attack_range) ? ATTACK_MELEE : ATTACK_NONE;
+        return ATTACK_NONE;
     }
 
     if (dist <= npc->attack_range && has_los > 0.0f) {
@@ -388,8 +391,8 @@ void fc_write_obs(const FcState* state, float* out) {
         npc_out[FC_NPC_Y]             = (float)n->y / (float)FC_ARENA_HEIGHT;
         npc_out[FC_NPC_HP]            = (n->max_hp > 0) ? (float)n->current_hp / (float)n->max_hp : 0.0f;
         npc_out[FC_NPC_DISTANCE]      = (float)npc_distance(p, n) / (float)FC_ARENA_WIDTH;
-        float has_los = (float)fc_has_line_of_sight(
-            p->x, p->y, n->x + n->size/2, n->y + n->size/2, state->walkable);
+        float has_los = (float)fc_has_los_to_npc(
+            p->x, p->y, n->x, n->y, n->size, state->walkable);
         npc_out[FC_NPC_EFFECTIVE_STYLE] = (float)npc_effective_style_now(state, n, has_los) / 3.0f;
         npc_out[FC_NPC_ATK_TIMER]     = (n->attack_speed > 0) ? (float)n->attack_timer / (float)n->attack_speed : 0.0f;
         npc_out[FC_NPC_LOS]           = has_los;

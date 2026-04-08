@@ -11,10 +11,11 @@ Usage:
 
 Controls (in viewer window):
     Space       — pause/resume
-    Up/Down     — tick speed
+    1/2/4/0     — replay speed presets
+    Up/Down     — cycle replay speed presets
     Right-drag  — orbit camera
     Scroll      — zoom
-    4/5         — camera presets
+    Shift+4/5   — camera presets
     O           — debug overlays
     Q/Esc       — quit
 """
@@ -228,6 +229,10 @@ def main():
                         help="Use random valid actions (no checkpoint needed)")
     parser.add_argument("--start-wave", type=int, default=0,
                         help="Start at this wave (0 = wave 1)")
+    parser.add_argument("--speed", type=int, choices=[1, 2, 4, 10], default=1,
+                        help="Initial replay speed multiplier")
+    parser.add_argument("--episodes", type=int, default=0,
+                        help="Stop after this many replay episodes (0 = unlimited)")
     args = parser.parse_args()
     # Clear sys.argv so PufferLib doesn't see our flags
     sys.argv = [sys.argv[0]]
@@ -242,6 +247,9 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     print(f"[eval] Viewer: {viewer_path}", file=sys.stderr)
+    print(f"[eval] Replay speed: {args.speed}x", file=sys.stderr)
+    if args.episodes > 0:
+        print(f"[eval] Episode limit: {args.episodes}", file=sys.stderr)
     print(
         f"[eval] Contract: policy_obs={policy_obs_size} mask5={mask_5head_size} total={total_line_floats}",
         file=sys.stderr,
@@ -271,20 +279,11 @@ def main():
             vec.close()
 
             # Load raw .bin weights into the PyTorch model.
-            # CUDA kernel stores weights with NO biases, in order:
-            #   encoder.weight → network.layers.0..N → decoder.weight → value.weight
-            # PyTorch state_dict has biases (set to zero) and different key order.
+            # The CUDA trainer saves a flat float32 buffer in this order:
+            #   encoder.weight → fused decoder.weight(+value row) → network.layers.0..N
+            # PyTorch splits the decoder into separate action/value heads and includes biases.
             weights = np.fromfile(checkpoint_path, dtype=np.float32)
             print(f"[eval] Checkpoint: {len(weights)} floats", file=sys.stderr)
-
-            # Explicit weight mapping in CUDA kernel order (weights only, no biases)
-            cuda_order = [
-                "encoder.encoder.weight",
-                *[f"network.layers.{i}.weight" for i in range(
-                    len([k for k in policy.state_dict() if k.startswith("network.layers.")]))],
-                "decoder.decoder.weight",
-                "decoder.value_function.weight",
-            ]
 
             sd = policy.state_dict()
             # Zero all biases first
@@ -293,21 +292,60 @@ def main():
                     sd[key] = torch.zeros_like(sd[key])
 
             offset = 0
-            for key in cuda_order:
+
+            def load_tensor(key):
+                nonlocal offset
                 if key not in sd:
-                    print(f"[eval] Warning: {key} not in model", file=sys.stderr)
-                    continue
+                    raise KeyError(f"{key} not in model state_dict")
                 numel = sd[key].numel()
                 if offset + numel > len(weights):
-                    print(f"[eval] Warning: weights exhausted at {key}", file=sys.stderr)
-                    break
+                    raise RuntimeError(f"weights exhausted at {key}")
                 sd[key] = torch.from_numpy(
                     weights[offset:offset+numel].reshape(sd[key].shape).copy())
                 offset += numel
                 print(f"  loaded {key}: {list(sd[key].shape)} ({numel})", file=sys.stderr)
 
+            load_tensor("encoder.encoder.weight")
+
+            decoder_key = "decoder.decoder.weight"
+            value_key = "decoder.value_function.weight"
+            if decoder_key not in sd or value_key not in sd:
+                raise KeyError("decoder weights missing from model state_dict")
+
+            decoder_rows = sd[decoder_key].shape[0]
+            hidden_size = sd[decoder_key].shape[1]
+            value_rows = sd[value_key].shape[0]
+            fused_rows = decoder_rows + value_rows
+            fused_numel = fused_rows * hidden_size
+            if offset + fused_numel > len(weights):
+                raise RuntimeError("weights exhausted at fused decoder")
+
+            fused_decoder = weights[offset:offset+fused_numel].reshape(fused_rows, hidden_size).copy()
+            sd[decoder_key] = torch.from_numpy(fused_decoder[:decoder_rows])
+            sd[value_key] = torch.from_numpy(fused_decoder[decoder_rows:])
+            offset += fused_numel
+            print(
+                f"  loaded fused decoder: {list(fused_decoder.shape)} "
+                f"-> {list(sd[decoder_key].shape)} + {list(sd[value_key].shape)}",
+                file=sys.stderr,
+            )
+
+            network_keys = sorted(
+                [k for k in sd if k.startswith("network.layers.") and k.endswith(".weight")],
+                key=lambda k: int(k.split(".")[2]),
+            )
+            for key in network_keys:
+                load_tensor(key)
+
             policy.load_state_dict(sd)
-            print(f"[eval] Loaded {offset}/{len(weights)} weights", file=sys.stderr)
+            if offset != len(weights):
+                print(
+                    f"[eval] Warning: loaded {offset}/{len(weights)} floats; "
+                    f"{len(weights) - offset} unused",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"[eval] Loaded {offset}/{len(weights)} weights", file=sys.stderr)
 
             policy = policy.cpu()
             policy.eval()
@@ -326,7 +364,8 @@ def main():
     # Launch viewer subprocess
     print("[eval] Launching viewer...", file=sys.stderr)
     proc = subprocess.Popen(
-        [viewer_path, "--policy-pipe"] +
+        [viewer_path, "--policy-pipe", "--speed", str(args.speed)] +
+            (["--episodes", str(args.episodes)] if args.episodes > 0 else []) +
             (["--start-wave", str(args.start_wave)] if args.start_wave > 0 else []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

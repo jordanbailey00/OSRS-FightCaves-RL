@@ -15,6 +15,7 @@
 #include "fc_types.h"
 #include "fc_contracts.h"
 #include "fc_api.h"
+#include "fc_npc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,24 @@ static int test_rand(int max) {
     test_rng ^= test_rng >> 17;
     test_rng ^= test_rng << 5;
     return (int)(test_rng % (uint32_t)max);
+}
+
+static void init_manual_test_state(FcState* state) {
+    fc_init(state);
+    memset(state->walkable, 1, sizeof(state->walkable));
+
+    state->player.x = 10;
+    state->player.y = 10;
+    state->player.max_hp = FC_PLAYER_MAX_HP;
+    state->player.current_hp = FC_PLAYER_MAX_HP;
+    state->player.max_prayer = FC_PLAYER_MAX_PRAYER;
+    state->player.current_prayer = FC_PLAYER_MAX_PRAYER;
+    state->player.defence_level = FC_PLAYER_DEFENCE_LVL;
+    state->player.magic_level = FC_PLAYER_MAGIC_LVL;
+    state->player.defence_crush = FC_EQUIP_DEF_CRUSH;
+    state->player.defence_magic = FC_EQUIP_DEF_MAGIC;
+    state->player.defence_ranged = FC_EQUIP_DEF_RANGED;
+    state->player.attack_target_idx = -1;
 }
 
 /* ====================================================================== */
@@ -414,6 +433,85 @@ static void test_multi_episode(void) {
 }
 
 /* ====================================================================== */
+/* Test 6: Melee safespot gating                                           */
+/* ====================================================================== */
+
+static void test_melee_safespot_gating(void) {
+    printf("\n=== Melee Safespot Gating ===\n");
+
+    char err[128];
+    float obs[FC_OBS_SIZE];
+
+    FcState blocked;
+    init_manual_test_state(&blocked);
+    blocked.walkable[10][11] = 0;
+    blocked.walkable[11][10] = 0;
+
+    fc_npc_spawn(&blocked.npcs[0], NPC_YT_MEJKOT, 11, 11, 0);
+    fc_npc_spawn(&blocked.npcs[1], NPC_TZ_KIH, 15, 11, 1);
+    blocked.npcs[0].attack_timer = 0;
+    blocked.npcs[0].heal_timer = 0;
+    blocked.npcs[1].current_hp = blocked.npcs[1].max_hp / 4;
+
+    fc_npc_tick(&blocked, 0);
+    fc_write_obs(&blocked, obs);
+
+    TEST("Safespotted Yt-MejKot does not queue melee hits");
+    if (blocked.player.num_pending_hits == 0) PASS();
+    else {
+        snprintf(err, sizeof(err), "queued %d pending hits", blocked.player.num_pending_hits);
+        FAIL(err);
+    }
+
+    TEST("Safespotted Yt-MejKot does not heal nearby NPCs");
+    if (blocked.npcs[1].current_hp == blocked.npcs[1].max_hp / 4) PASS();
+    else {
+        snprintf(err, sizeof(err), "healed target to %d", blocked.npcs[1].current_hp);
+        FAIL(err);
+    }
+
+    TEST("Safespotted melee NPC exposes no active melee threat");
+    if (fabsf(obs[FC_OBS_NPC_START + FC_NPC_EFFECTIVE_STYLE]) < 0.01f) PASS();
+    else {
+        snprintf(err, sizeof(err), "effective_style = %.4f", obs[FC_OBS_NPC_START + FC_NPC_EFFECTIVE_STYLE]);
+        FAIL(err);
+    }
+
+    fc_destroy(&blocked);
+
+    FcState open;
+    init_manual_test_state(&open);
+    fc_npc_spawn(&open.npcs[0], NPC_YT_MEJKOT, 11, 11, 0);
+    fc_npc_spawn(&open.npcs[1], NPC_TZ_KIH, 15, 11, 1);
+    open.npcs[0].attack_timer = 0;
+    open.npcs[0].heal_timer = 0;
+    open.npcs[1].current_hp = open.npcs[1].max_hp / 4;
+
+    fc_npc_tick(&open, 0);
+    fc_write_obs(&open, obs);
+
+    TEST("Open-corner Yt-MejKot still queues a melee swing");
+    if (open.player.num_pending_hits == 1) PASS();
+    else {
+        snprintf(err, sizeof(err), "queued %d pending hits", open.player.num_pending_hits);
+        FAIL(err);
+    }
+
+    TEST("Open-corner Yt-MejKot still heals nearby NPCs");
+    if (open.npcs[1].current_hp > open.npcs[1].max_hp / 4) PASS();
+    else FAIL("expected heal tick");
+
+    TEST("Open-corner melee NPC exposes melee threat");
+    if (fabsf(obs[FC_OBS_NPC_START + FC_NPC_EFFECTIVE_STYLE] - (1.0f / 3.0f)) < 0.01f) PASS();
+    else {
+        snprintf(err, sizeof(err), "effective_style = %.4f", obs[FC_OBS_NPC_START + FC_NPC_EFFECTIVE_STYLE]);
+        FAIL(err);
+    }
+
+    fc_destroy(&open);
+}
+
+/* ====================================================================== */
 /* Main                                                                    */
 /* ====================================================================== */
 
@@ -429,6 +527,7 @@ int main(void) {
     test_action_mask();
     test_determinism();
     test_multi_episode();
+    test_melee_safespot_gating();
 
     printf("\n============================================================\n");
     printf("RESULTS: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);

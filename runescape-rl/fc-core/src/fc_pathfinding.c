@@ -145,6 +145,35 @@ int fc_has_los_to_npc(int px, int py, int npc_x, int npc_y, int npc_size,
     return fc_has_line_of_sight(px, py, cx, cy, walkable);
 }
 
+int fc_npc_can_melee_player(int player_x, int player_y,
+                            int npc_x, int npc_y, int npc_size,
+                            const uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT]) {
+    for (int dx = 0; dx < npc_size; dx++) {
+        for (int dy = 0; dy < npc_size; dy++) {
+            int tile_x = npc_x + dx;
+            int tile_y = npc_y + dy;
+            int step_x = tile_x - player_x;
+            int step_y = tile_y - player_y;
+            int abs_x = (step_x < 0) ? -step_x : step_x;
+            int abs_y = (step_y < 0) ? -step_y : step_y;
+
+            if (abs_x > 1 || abs_y > 1) continue;
+            if (abs_x == 0 && abs_y == 0) continue;
+
+            /* Diagonal melee contact is only valid when the corner is open. */
+            if (abs_x == 1 && abs_y == 1 &&
+                (!fc_tile_walkable(player_x, tile_y, walkable) ||
+                 !fc_tile_walkable(tile_x, player_y, walkable))) {
+                continue;
+            }
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 /* ======================================================================== */
 /* BFS pathfinding                                                           */
 /* ======================================================================== */

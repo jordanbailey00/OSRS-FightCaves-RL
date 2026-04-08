@@ -52,6 +52,13 @@ int fc_has_line_of_sight(int x0, int y0, int x1, int y1,
 int fc_has_los_to_npc(int px, int py, int npc_x, int npc_y, int npc_size,
                       const uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT]);
 
+/* Returns 1 if the player is in actual melee contact with any tile of the NPC
+ * footprint. Diagonal contact is only valid when the corner is open, matching
+ * the same corner-cut rules used by movement/pathing. */
+int fc_npc_can_melee_player(int player_x, int player_y,
+                            int npc_x, int npc_y, int npc_size,
+                            const uint8_t walkable[FC_ARENA_WIDTH][FC_ARENA_HEIGHT]);
+
 /* ======================================================================== */
 /* BFS pathfinding (for click-to-move)                                       */
 /* ======================================================================== */

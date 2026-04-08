@@ -164,6 +164,8 @@ static void jad_attack(FcState* state, FcNpc* npc, int npc_idx) {
     const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
     FcPlayer* p = &state->player;
     int dist = fc_distance_to_npc(p->x, p->y, npc);
+    int can_melee = fc_npc_can_melee_player(p->x, p->y, npc->x, npc->y,
+                                            npc->size, state->walkable);
 
     if (npc->attack_timer > 0) return;
 
@@ -171,7 +173,7 @@ static void jad_attack(FcState* state, FcNpc* npc, int npc_idx) {
     int use_max_hit = 0;
     int in_range = 0;
 
-    if (dist <= 1 && stats->melee_max_hit > 0) {
+    if (can_melee && stats->melee_max_hit > 0) {
         use_style = ATTACK_MELEE;
         use_max_hit = stats->melee_max_hit;
         in_range = 1;
@@ -205,6 +207,11 @@ static void jad_attack(FcState* state, FcNpc* npc, int npc_idx) {
 /* ======================================================================== */
 
 static void yt_mejkot_heal_tick(FcState* state, FcNpc* npc) {
+    if (!fc_npc_can_melee_player(state->player.x, state->player.y,
+                                 npc->x, npc->y, npc->size, state->walkable)) {
+        return;
+    }
+
     if (npc->heal_timer > 0) {
         npc->heal_timer--;
         return;
@@ -296,6 +303,8 @@ static void npc_generic_attack(FcState* state, FcNpc* npc, int npc_idx) {
     const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
     FcPlayer* p = &state->player;
     int dist = fc_distance_to_npc(p->x, p->y, npc);
+    int can_melee = fc_npc_can_melee_player(p->x, p->y, npc->x, npc->y,
+                                            npc->size, state->walkable);
 
     if (npc->attack_timer > 0) return;
 
@@ -304,12 +313,12 @@ static void npc_generic_attack(FcState* state, FcNpc* npc, int npc_idx) {
     int use_max_hit = npc->max_hit;
     int in_range = 0;
 
-    if (dist <= 1 && stats->melee_max_hit > 0) {
+    if (can_melee && stats->melee_max_hit > 0) {
         /* In melee range and has melee capability → melee */
         use_style = ATTACK_MELEE;
         use_max_hit = stats->melee_max_hit;
         in_range = 1;
-    } else if (dist <= 1 && npc->attack_style == ATTACK_MELEE) {
+    } else if (can_melee && npc->attack_style == ATTACK_MELEE) {
         /* Pure melee NPC, in range */
         in_range = 1;
     } else if (dist <= npc->attack_range && npc->attack_style != ATTACK_MELEE) {
@@ -319,8 +328,6 @@ static void npc_generic_attack(FcState* state, FcNpc* npc, int npc_idx) {
             in_range = 1;
         }
         /* No LOS → don't attack, NPC will continue chasing */
-    } else if (dist <= npc->attack_range && npc->attack_style == ATTACK_MELEE) {
-        in_range = 1;
     }
 
     if (!in_range) return;
