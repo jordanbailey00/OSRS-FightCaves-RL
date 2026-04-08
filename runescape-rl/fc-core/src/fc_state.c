@@ -25,7 +25,7 @@
  * 2153 walkable tiles, 1943 blocked. The irregular cave shape with walls,
  * pillars, and narrow passages is critical for safespot mechanics.
  *
- * Loaded from assets/fightcaves.collision at runtime.
+ * Loaded from fc-core/assets/fightcaves.collision at runtime.
  * If the file is missing, falls back to an open arena with border walls.
  */
 /* Cached collision data — loaded once, shared by all envs.
@@ -38,11 +38,9 @@ static void load_collision_once(void) {
 
     static const char* collision_paths[] = {
         "assets/fightcaves.collision",
-        "demo-env/assets/fightcaves.collision",
-        "training-env/assets/fightcaves.collision",
-        "../demo-env/assets/fightcaves.collision",
-        "../training-env/assets/fightcaves.collision",
-        "../../demo-env/assets/fightcaves.collision",
+        "fc-core/assets/fightcaves.collision",
+        "../fc-core/assets/fightcaves.collision",
+        "../../fc-core/assets/fightcaves.collision",
         NULL
     };
     FILE* f = NULL;

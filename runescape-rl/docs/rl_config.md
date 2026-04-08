@@ -435,6 +435,8 @@ Naming note:
   executed run is recorded here as `v19.3`
 - actual run id:
   - `hl0yb7qa`
+- warm-start source run id:
+  - `8u6flr5y` (`v19.1`)
 - warm-start checkpoint used:
   - [0000000263192576.bin](/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin)
 
@@ -710,6 +712,10 @@ Best checkpoint window:
 
 ## v19.2 (2026-04-08, staged)
 
+Actual run id:
+- none
+- `v19.2` was staged only and was not launched under its own label
+
 Mainline direction:
 - checkpoint transfer run
 - warm-start from `v19.1`
@@ -735,6 +741,8 @@ Budget:
 - `v19.2`: `2.5B`
 
 Checkpoint choice:
+- warm-start source run id:
+  - `8u6flr5y` (`v19.1`)
 - warm-start from:
   - [0000000263192576.bin](/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin)
 - rationale:
@@ -765,6 +773,21 @@ What changes versus `v19.1`:
 - `curriculum_wave: 31 -> 0`
 - `curriculum_pct: 1.0 -> 0.0`
 - all late-wave curriculum buckets disabled
+
+Results:
+- not launched under the `v19.2` label
+- this staged recipe was executed unchanged as `v19.3`
+- executed run id:
+  - `hl0yb7qa`
+- warm-start source run id stayed the same:
+  - `8u6flr5y` (`v19.1`)
+- executed warm-start checkpoint stayed the same:
+  - `8u6flr5y/0000000263192576.bin`
+- for actual rollout metrics and trajectory, see the `v19.3` section above
+
+Final metrics:
+- none recorded under `v19.2` because no run completed under that label
+- canonical results for this recipe live under `v19.3`
 
 Why this is the right next test:
 - if `v19.2` improves full-cave results from wave 1, then late-wave skill
@@ -870,6 +893,9 @@ num_layers = 2
 ```
 
 ## v19.1 (2026-04-08, completed)
+
+Actual run id:
+- `8u6flr5y`
 
 Mainline direction:
 - scratch run

@@ -11,6 +11,9 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Shared Fight Caves backend
+add_subdirectory(fc-core)
+
 # Demo environment (viewer + backend)
 add_subdirectory(demo-env)
 

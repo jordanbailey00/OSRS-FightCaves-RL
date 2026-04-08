@@ -30,6 +30,15 @@ import sys
 import numpy as np
 
 
+def ensure_local_pufferlib_on_path():
+    repo = os.path.dirname(os.path.abspath(__file__))
+    default_puffer_dir = os.path.join(os.path.dirname(repo), "pufferlib_4")
+    puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer_dir)
+    if os.path.isdir(puffer_dir) and puffer_dir not in sys.path:
+        sys.path.insert(0, puffer_dir)
+    return puffer_dir
+
+
 def _safe_eval_macro(expr, raw_defs, values):
     node = ast.parse(expr, mode="eval")
 
@@ -94,8 +103,7 @@ def parse_header_constants(path, names, base_values=None):
 
 def load_contract_dims():
     repo = os.path.dirname(os.path.abspath(__file__))
-    training_header = os.path.join(repo, "training-env", "src", "fc_contracts.h")
-    viewer_header = os.path.join(repo, "demo-env", "src", "fc_contracts.h")
+    shared_header = os.path.join(repo, "fc-core", "include", "fc_contracts.h")
     fight_caves_header = os.path.join(repo, "training-env", "fight_caves.h")
 
     names = [
@@ -106,15 +114,7 @@ def load_contract_dims():
         "FC_EAT_DIM",
         "FC_DRINK_DIM",
     ]
-    training_dims = parse_header_constants(training_header, names)
-    viewer_dims = parse_header_constants(viewer_header, names)
-
-    for name in names:
-        if training_dims[name] != viewer_dims[name]:
-            raise RuntimeError(
-                f"Viewer/training contract mismatch for {name}: "
-                f"{viewer_dims[name]} != {training_dims[name]}"
-            )
+    training_dims = parse_header_constants(shared_header, names)
 
     puffer_dims = parse_header_constants(
         fight_caves_header, ["FC_PUFFER_OBS_SIZE"], base_values=training_dims
@@ -231,6 +231,7 @@ def main():
     args = parser.parse_args()
     # Clear sys.argv so PufferLib doesn't see our flags
     sys.argv = [sys.argv[0]]
+    ensure_local_pufferlib_on_path()
 
     policy_obs_size, act_dims, mask_5head_size, total_line_floats = load_contract_dims()
 

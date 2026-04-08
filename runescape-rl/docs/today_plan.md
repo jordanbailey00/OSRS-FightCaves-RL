@@ -14,6 +14,10 @@ Primary objective:
 Execution document:
 - [component_symlink.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/component_symlink.md)
 
+Running cleanup candidates for later follow-up:
+- `training-env/fc_render.h`
+  - legacy in-wrapper Raylib render path; appears unused in the current headless training and external eval-viewer workflow, so it is a likely remove-or-relocate candidate
+
 Rules:
 - do not change gameplay logic intentionally
 - do not change the obs contract intentionally

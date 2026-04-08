@@ -16,9 +16,15 @@
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SRC_DIR/.." && pwd)"
 PUFFER_DIR="${PUFFER_DIR:-$ROOT_DIR/pufferlib_4}"
+TRAINING_BUILD_SH="$SRC_DIR/training-env/build.sh"
 
 if [ ! -d "$PUFFER_DIR" ]; then
     echo "Error: PufferLib not found at $PUFFER_DIR"
+    exit 1
+fi
+
+if [ ! -f "$TRAINING_BUILD_SH" ]; then
+    echo "Error: local training backend build script not found at $TRAINING_BUILD_SH"
     exit 1
 fi
 
@@ -47,7 +53,7 @@ cd "$PUFFER_DIR"
 source "$SRC_DIR/.venv/bin/activate"
 export PUFFERLIB_DIR="$PUFFER_DIR"
 export PATH=/usr/local/cuda/bin:$PATH
-export FC_COLLISION_PATH="$SRC_DIR/training-env/assets/fightcaves.collision"
+export FC_COLLISION_PATH="$SRC_DIR/fc-core/assets/fightcaves.collision"
 export WANDB_DIR="$PUFFER_DIR/wandb"
 export WANDB_CACHE_DIR="$PUFFER_DIR/wandb/.cache"
 export WANDB_CONFIG_DIR="$PUFFER_DIR/wandb/.config"
@@ -64,7 +70,9 @@ BACKEND_SO="$PUFFER_DIR/pufferlib/_C${EXT_SUFFIX}"
 BACKEND_REBUILD_REASON=""
 if [ ! -f "$BACKEND_SO" ]; then
     BACKEND_REBUILD_REASON="missing backend"
-elif find "$SRC_DIR/training-env" "$PUFFER_DIR/src/vecenv.h" -type f -newer "$BACKEND_SO" -print -quit | grep -q .; then
+elif ! python -c "import importlib.util, sys; spec=importlib.util.spec_from_file_location('pufferlib._C', sys.argv[1]); mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); ok=(getattr(mod, 'env_name', None) == 'fight_caves' and hasattr(mod, 'create_pufferl')); raise SystemExit(0 if ok else 1)" "$BACKEND_SO"; then
+    BACKEND_REBUILD_REASON="backend missing compiled trainer API"
+elif find "$SRC_DIR/fc-core" "$SRC_DIR/training-env" "$PUFFER_DIR/src/vecenv.h" -type f -newer "$BACKEND_SO" -print -quit | grep -q .; then
     BACKEND_REBUILD_REASON="backend sources newer than compiled extension"
 elif [ "${FORCE_BACKEND_REBUILD:-0}" = "1" ]; then
     BACKEND_REBUILD_REASON="FORCE_BACKEND_REBUILD=1"
@@ -72,7 +80,7 @@ fi
 
 if [ -n "$BACKEND_REBUILD_REASON" ]; then
     echo "[sweep_v18_3.sh] Rebuilding fight_caves backend: $BACKEND_REBUILD_REASON"
-    bash "$PUFFER_DIR/build.sh" fight_caves
+    bash "$TRAINING_BUILD_SH"
 fi
 
 WANDB_FLAG="--wandb"

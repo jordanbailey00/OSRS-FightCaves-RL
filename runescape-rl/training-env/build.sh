@@ -71,6 +71,8 @@ RAYLIB_A="$RAYLIB_NAME/lib/libraylib.a"
 
 # Compiler settings
 CLANG_WARN=(-Wall -Werror=return-type -Wno-unused-but-set-variable)
+FC_CORE_INCLUDE="$REPO_DIR/fc-core/include"
+FC_CORE_SRC="$REPO_DIR/fc-core/src"
 
 if [ -n "$DEBUG" ] || [ "$MODE" = "local" ]; then
     CLANG_OPT=(-g -O0 "${CLANG_WARN[@]}")
@@ -84,7 +86,7 @@ mkdir -p build
 if [ "$MODE" = "local" ] || [ "$MODE" = "fast" ]; then
     echo "Compiling standalone $ENV..."
     ${CC:-gcc} "${CLANG_OPT[@]}" \
-        -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$SRC_DIR/src" \
+        -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$FC_CORE_INCLUDE" -I"$FC_CORE_SRC" \
         -I"$RAYLIB_NAME/include" \
         -DPLATFORM_DESKTOP -DFC_NO_HASH $RENDER_FLAGS \
         "$SRC_DIR/$ENV.c" -o "$ENV" \
@@ -100,7 +102,7 @@ STATIC_LIB="build/libstatic_${ENV}.a"
 
 echo "Compiling static library for $ENV..."
 ${CC:-gcc} -c "${CLANG_OPT[@]}" \
-    -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$SRC_DIR/src" \
+    -I"$PUFFERLIB_DIR/src" -I"$SRC_DIR" -I"$FC_CORE_INCLUDE" -I"$FC_CORE_SRC" \
     -I"$RAYLIB_NAME/include" \
     -DPLATFORM_DESKTOP -DFC_NO_HASH $RENDER_FLAGS \
     -fno-semantic-interposition -fvisibility=hidden \
@@ -143,13 +145,36 @@ if [ "$MODE" = "cpu" ]; then
     echo "Built: $OUTPUT"
 else
     # CUDA build
-    CUDA_HOME=${CUDA_HOME:-${CUDA_PATH:-$(dirname "$(dirname "$(which nvcc)")")}}
+    NVCC_BIN=""
+    if [ -n "${CUDA_HOME:-}" ] && [ -x "$CUDA_HOME/bin/nvcc" ]; then
+        NVCC_BIN="$CUDA_HOME/bin/nvcc"
+    elif [ -n "${CUDA_PATH:-}" ] && [ -x "$CUDA_PATH/bin/nvcc" ]; then
+        NVCC_BIN="$CUDA_PATH/bin/nvcc"
+    elif command -v nvcc >/dev/null 2>&1; then
+        NVCC_BIN="$(command -v nvcc)"
+    elif [ -x /usr/local/cuda/bin/nvcc ]; then
+        NVCC_BIN="/usr/local/cuda/bin/nvcc"
+    else
+        for candidate in /usr/local/cuda-*/bin/nvcc; do
+            if [ -x "$candidate" ]; then
+                NVCC_BIN="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$NVCC_BIN" ]; then
+        echo "Error: nvcc not found. Set CUDA_HOME or add nvcc to PATH."
+        exit 1
+    fi
+
+    CUDA_HOME="$(dirname "$(dirname "$NVCC_BIN")")"
     CUDNN_IFLAG=""
     CUDNN_LFLAG=""
-    for dir in /usr/local/cuda/include /usr/include; do
+    for dir in "$CUDA_HOME/include" /usr/local/cuda/include /usr/include; do
         [ -f "$dir/cudnn.h" ] && CUDNN_IFLAG="-I$dir" && break
     done
-    for dir in /usr/local/cuda/lib64 /usr/lib/x86_64-linux-gnu; do
+    for dir in "$CUDA_HOME/lib64" /usr/local/cuda/lib64 /usr/lib/x86_64-linux-gnu; do
         [ -f "$dir/libcudnn.so" ] && CUDNN_LFLAG="-L$dir" && break
     done
     if [ -z "$CUDNN_IFLAG" ]; then
@@ -169,7 +194,7 @@ else
         ARCH=native
     fi
 
-    NVCC="$CUDA_HOME/bin/nvcc"
+    NVCC="$NVCC_BIN"
 
     echo "Compiling CUDA ($ARCH) training backend..."
     # Build RENDER_NVCC_FLAGS: convert -DFC_RENDER -I/path to -Xcompiler= form

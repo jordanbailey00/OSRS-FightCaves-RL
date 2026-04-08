@@ -1,41 +1,29 @@
-# demo-env: Self-contained Fight Caves debug viewer.
-# Contains both the authoritative backend (fc_*.c) and the Raylib viewer shell.
-# No external dependency on training-env/fc_core.
+# demo-env: Fight Caves debug viewer.
+# Links against the shared fc-core backend and keeps viewer/test utilities local.
 
-# Backend sources (game logic — shared with headless training-env)
-set(FC_BACKEND_SOURCES
-    src/fc_state.c
-    src/fc_rng.c
+set(FC_VIEWER_SOURCES
+    src/viewer.c
     src/fc_hash.c
     src/fc_debug.c
-    src/fc_tick.c
-    src/fc_combat.c
-    src/fc_prayer.c
-    src/fc_pathfinding.c
-    src/fc_npc.c
-    src/fc_wave.c
 )
 
-# Find Raylib — local copy in demo-env/raylib/
 set(RAYLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/raylib" CACHE PATH "Raylib root")
 
 if(EXISTS "${RAYLIB_ROOT}/include/raylib.h")
-    add_executable(fc_viewer
-        src/viewer.c
-        ${FC_BACKEND_SOURCES}
-    )
+    add_executable(fc_viewer ${FC_VIEWER_SOURCES})
 
     target_include_directories(fc_viewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/fc-core/include
         ${RAYLIB_ROOT}/include
     )
 
     target_link_libraries(fc_viewer PRIVATE
+        fc_core
         ${RAYLIB_ROOT}/lib/libraylib.a
         m dl pthread
     )
 
-    # Raylib on Linux needs X11/GL
     find_package(X11 QUIET)
     if(X11_FOUND)
         target_link_libraries(fc_viewer PRIVATE ${X11_LIBRARIES})
@@ -45,15 +33,17 @@ if(EXISTS "${RAYLIB_ROOT}/include/raylib.h")
         target_link_libraries(fc_viewer PRIVATE OpenGL::GL)
     endif()
 
-    message(STATUS "Raylib found at ${RAYLIB_ROOT} — fc_viewer will be built (self-contained)")
+    message(STATUS "Raylib found at ${RAYLIB_ROOT} — fc_viewer will be built")
 else()
     message(STATUS "Raylib not found at ${RAYLIB_ROOT} — fc_viewer skipped (set RAYLIB_ROOT)")
 endif()
 
-# Headless tests (no Raylib dependency)
 add_executable(test_headless
     tests/test_headless.c
-    ${FC_BACKEND_SOURCES}
+    src/fc_hash.c
 )
-target_include_directories(test_headless PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(test_headless PRIVATE m)
+target_include_directories(test_headless PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/fc-core/include
+)
+target_link_libraries(test_headless PRIVATE fc_core m)

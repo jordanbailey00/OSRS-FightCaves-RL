@@ -324,8 +324,9 @@ static TerrainMesh* load_terrain(ViewerState* v) {
 /* Load collision map for use during object height compression */
 static int load_collision_for_objects(uint8_t coll[64][64]) {
     const char* paths[] = {
-        "demo-env/assets/fightcaves.collision",
-        "../demo-env/assets/fightcaves.collision",
+        "fc-core/assets/fightcaves.collision",
+        "../fc-core/assets/fightcaves.collision",
+        "../../fc-core/assets/fightcaves.collision",
         "assets/fightcaves.collision", NULL };
     for (int i = 0; paths[i]; i++) {
         FILE* f = fopen(paths[i], "rb");

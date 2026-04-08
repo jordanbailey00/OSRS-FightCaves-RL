@@ -4,7 +4,8 @@ Reinforcement learning agent for Old School RuneScape Fight Caves.
 
 ## Architecture
 
-- **training-env/** — Shared C backend: all Fight Caves mechanics, state, tick simulation. Also owns the headless batched training kernel and Python C extension.
+- **fc-core/** — Shared C backend: all Fight Caves mechanics, state, tick simulation, contracts, and the shared collision asset.
+- **training-env/** — PufferLib/training wrapper, reward shaping, training harnesses, and Python-facing build glue.
 - **demo-env/** — Raylib viewer shell: rendering, HUD, input, replay. Links against the same C backend — no separate gameplay logic.
 - **RL/** — Python RL stack: PufferLib integration, policies, training scripts, evaluation, W&B logging.
 - **docs/** — `plan.md` and `pr_plan.md` only.
@@ -22,7 +23,7 @@ cd RL && uv sync
 
 ## Key constraints
 
-- Single gameplay/mechanics owner in C (training-env/fc_core)
+- Single gameplay/mechanics owner in C (`fc-core`)
 - Headless training and viewer share the same backend
 - Flat contiguous observation/action/reward/debug contracts
 - Determinism and replay are first-class
