@@ -443,7 +443,652 @@ Current config is at the top. Older runs below.
 
 ---
 
-## v18.3 (2026-04-08, prepared / not yet started)
+## v19 (2026-04-08, staged / not yet started)
+
+Mainline direction:
+- scratch run
+- no checkpoint
+- no sweep
+- no curriculum
+- same backend / same current pruned obs / same no-Jad-telegraph logic
+
+Why `v19` exists:
+- `v18.1` eventually recovered the wave-29 shelf, but only after a very long
+  budget
+- `v1_retro` reached comparable depth dramatically faster on the modern stack
+- `v19` is the intended hybrid:
+  - keep the strong `v1_retro` optimizer pressure and tempo
+  - keep a trimmed subset of the modern shaping instead of zeroing nearly
+    everything
+  - stay fully scratch so we do not inherit the continuation failures seen in
+    `v18.2` / `v18.3`
+
+Budget:
+- `v1_retro`: `500M`
+- `v18.1`: `10B`
+- `v19`: `10B`
+
+Run / trainer shape:
+- scratch run, not continuation
+- no `[sweep]` section
+- no curriculum buckets
+- default launch path:
+  - `cd /home/joe/projects/runescape-rl/codex3/runescape-rl && bash train.sh`
+
+Key PPO / vectorization choices:
+- copy the `v1_retro` base:
+  - `learning_rate = 0.0003`
+  - `anneal_lr = 0`
+  - `clip_coef = 0.2`
+  - `ent_coef = 0.01`
+  - `num_buffers = 2`
+- keep the stable shared core:
+  - `gamma = 0.999`
+  - `gae_lambda = 0.95`
+  - `vf_coef = 0.5`
+  - `max_grad_norm = 0.5`
+  - `horizon = 256`
+  - `minibatch_size = 4096`
+  - `total_agents = 4096`
+  - `hidden_size = 256`
+  - `num_layers = 2`
+
+Core reward intent:
+- keep `v1_retro` offensive pressure:
+  - `w_damage_dealt = 0.5`
+  - `w_npc_kill = 3.0`
+  - `w_tick_penalty = -0.005`
+  - new `w_attack_attempt = 0.1`
+- soften damage punishment relative to `v18.1`, but not all the way back to
+  `v1_retro`:
+  - `w_damage_taken = -0.6`
+- keep only moderate prayer guidance:
+  - `w_correct_danger_prayer = 0.5`
+  - `shape_wrong_prayer_penalty = -1.0`
+  - `shape_npc_specific_prayer_bonus = 2.5`
+- keep modern anti-waste shaping, but stronger:
+  - food/pot waste penalties increased beyond `v18.1`
+- keep tempo shaping, but reduce overconstraint:
+  - `shape_wasted_attack_penalty = -0.1`
+  - `shape_wave_stall_base_penalty = -0.5`
+  - `shape_wave_stall_cap = -2.0`
+  - `shape_not_attacking_penalty = -0.01`
+
+New reward term:
+- `w_attack_attempt = 0.1`
+- this rewards a real attack cycle being launched, even if the later hit
+  misses or rolls zero
+- it does **not** replace `w_damage_dealt`
+- paired backend fix already landed:
+  - “not attacking” now only counts when the weapon cooldown is ready, not
+    during time spent waiting between attacks
+
+Config deltas versus `v18.1`:
+- `learning_rate: 0.001 -> 0.0003`
+- `anneal_lr: 1 -> 0`
+- `ent_coef: 0.02 -> 0.01`
+- `num_buffers: 1 -> 2`
+- `w_damage_dealt: 1.0 -> 0.5`
+- `w_attack_attempt: new -> 0.1`
+- `w_damage_taken: -0.75 -> -0.6`
+- `w_npc_kill: 2.0 -> 3.0`
+- `w_tick_penalty: -0.001 -> -0.005`
+- `w_food_used: -0.5 -> 0.0`
+- `w_food_used_well: 1.0 -> 0.0`
+- `w_prayer_pot_used: -1.0 -> 0.0`
+- `w_correct_danger_prayer: 1.0 -> 0.5`
+- `shape_food_full_waste_penalty: -5.0 -> -6.5`
+- `shape_food_waste_scale: -1.0 -> -1.2`
+- `shape_pot_full_waste_penalty: -5.0 -> -6.5`
+- `shape_pot_waste_scale: -1.0 -> -1.2`
+- `shape_npc_specific_prayer_bonus: 2.0 -> 2.5`
+- `shape_npc_melee_penalty: -0.5 -> -0.3`
+- `shape_wasted_attack_penalty: -0.3 -> -0.1`
+- `shape_wave_stall_base_penalty: -0.75 -> -0.5`
+- `shape_wave_stall_cap: -3.0 -> -2.0`
+- `shape_not_attacking_penalty: -0.5 -> -0.01`
+
+Config deltas versus `v1_retro`:
+- same low-pressure PPO settings
+- same offensive pressure:
+  - `w_damage_dealt = 0.5`
+  - `w_npc_kill = 3.0`
+  - `w_tick_penalty = -0.005`
+- but reintroduce a trimmed set of modern shaping instead of zeroing nearly
+  all of it
+- add the new attack reward:
+  - `w_attack_attempt = 0.1`
+- increase waste penalties substantially above `v1_retro`
+- keep moderate prayer shaping instead of none
+
+Live `v19` config block:
+
+```ini
+[base]
+env_name = fight_caves
+checkpoint_interval = 50
+
+[env]
+w_damage_dealt = 0.5
+w_attack_attempt = 0.1
+w_damage_taken = -0.6
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = 0.0
+w_food_used_well = 0.0
+w_prayer_pot_used = 0.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.5
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.005
+shape_food_full_waste_penalty = -6.5
+shape_food_waste_scale = -1.2
+shape_food_safe_hp_threshold = 1.0
+shape_food_no_threat_penalty = 0.0
+shape_pot_full_waste_penalty = -6.5
+shape_pot_waste_scale = -1.2
+shape_pot_safe_prayer_threshold = 1.0
+shape_pot_no_threat_penalty = 0.0
+shape_wrong_prayer_penalty = -1.0
+shape_npc_specific_prayer_bonus = 2.5
+shape_npc_melee_penalty = -0.3
+shape_wasted_attack_penalty = -0.1
+shape_wave_stall_start = 500
+shape_wave_stall_base_penalty = -0.5
+shape_wave_stall_ramp_interval = 50
+shape_wave_stall_cap = -2.0
+shape_not_attacking_grace_ticks = 2
+shape_not_attacking_penalty = -0.01
+shape_kiting_reward = 1.0
+shape_kiting_min_dist = 5
+shape_kiting_max_dist = 7
+shape_unnecessary_prayer_penalty = -0.2
+shape_resource_threat_window = 2
+curriculum_wave = 0
+curriculum_pct = 0.0
+curriculum_wave_2 = 0
+curriculum_pct_2 = 0.0
+curriculum_wave_3 = 0
+curriculum_pct_3 = 0.0
+disable_movement = 0
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 10_000_000_000
+learning_rate = 0.0003
+anneal_lr = 0
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+Backend / obs:
+- same backend
+- same current pruned obs
+- same no-Jad-telegraph logic
+- same ammo `50,000`
+- policy obs remains **106**
+- reward features now **19** because of `attack_attempt`
+- RL-facing puffer obs remains **142**
+
+Pre-run expectation:
+- should retain the fast depth-building behavior seen in `v1_retro`
+- should be less sloppy with food/pot usage than `v1_retro`
+- should avoid the continuation failures seen in `v18.2` / `v18.3`
+- key thing to watch:
+  - whether the added shaping keeps the speed while reducing the messiness,
+    or whether it overconstrains the policy again
+
+## v1_retro (2026-04-08, completed)
+
+Changes from the current `v18.3` reference setup:
+
+This is a **fun retro scratch run**, not the next mainline experiment.
+
+Core intent:
+- revisit the original `v1` optimizer / reward recipe that first reached
+  the wave-27 shelf
+- run it on the **current** backend and **current** pruned obs contract
+- keep it isolated from the mainline plan so it does not overwrite the live
+  config
+
+What `v1_retro` is:
+- scratch run
+- no checkpoint
+- no sweep
+- no curriculum
+- `v1`-style PPO settings
+- `v1`-style exposed reward weights as closely as the current code allows
+- current backend / current obs / current trainer stack
+
+What `v1_retro` is **not**:
+- not an exact historical replay of the original `v1`
+- not a true reproduction of the 2026-04-03 codebase
+- not a replacement for the mainline `v18.3` / `v19` plan
+
+Why it cannot be exact:
+- the current obs contract is now the pruned **106-float** contract, not
+  the early `v1` obs layout
+- the current backend no longer has the old Jad telegraph behavior
+- ammo is now effectively unconstrained at **50,000**
+- some early `v1` weights are legacy/inactive in the modern reward code:
+  - `w_food_used`
+  - `w_prayer_pot_used`
+  - `w_correct_jad_prayer`
+  - `w_wrong_jad_prayer`
+  - `w_idle`
+- modern shaping terms exist that did not exist in `v1`, so `v1_retro`
+  explicitly zeros them to approximate the earlier recipe
+
+Why this run still has value:
+- it answers a fun and useful question:
+  - how does the original `v1` optimizer / reward style behave on the
+    modern pruned backend?
+- it gives a clean reference point for how much of the old early success
+  came from:
+  - the old reward mix
+  - the old trainer settings
+  - versus the old backend / old obs contract
+
+Config / training changes from the then-current `v18.3` reference:
+- change run type:
+  - corrected continuation sweep -> isolated scratch train
+- remove warm-start:
+  - `load_model_path: xm6i52ta/... -> null`
+- remove sweep:
+  - no `[sweep]` section used
+  - run as a normal `train`, not a `sweep`
+- change timestep budget:
+  - `400M -> 500M`
+- restore the documented `v1` PPO settings:
+  - `learning_rate: 0.0002 -> 0.0003`
+  - `clip_coef: 0.10 -> 0.20`
+  - `ent_coef: 0.005 -> 0.01`
+  - `num_buffers: 1 -> 2`
+- keep the rest of the core trainer shape the same as `v1`:
+  - `gamma = 0.999`
+  - `gae_lambda = 0.95`
+  - `vf_coef = 0.5`
+  - `max_grad_norm = 0.5`
+  - `horizon = 256`
+  - `minibatch_size = 4096`
+  - `total_agents = 4096`
+  - `hidden_size = 256`
+  - `num_layers = 2`
+- restore `v1`-style exposed reward weights where they still exist:
+  - `w_damage_dealt = 0.5`
+  - `w_damage_taken = -0.5`
+  - `w_npc_kill = 3.0`
+  - `w_wave_clear = 10.0`
+  - `w_jad_damage = 2.0`
+  - `w_jad_kill = 50.0`
+  - `w_player_death = -20.0`
+  - `w_cave_complete = 100.0`
+  - `w_invalid_action = -0.1`
+  - `w_tick_penalty = -0.005`
+- explicitly disable most later-added shaping to make the run behave more
+  like an early sparse-reward recipe:
+  - no food/pot waste shaping
+  - no general correct/wrong prayer shaping
+  - no NPC-specific prayer bonus
+  - no melee-range penalty
+  - no wasted-attack penalty
+  - no stall penalty
+  - no not-attacking penalty
+  - no kiting reward
+  - no unnecessary-prayer penalty
+- keep current backend / obs unchanged:
+  - policy obs remains **106**
+  - reward features remain **19**
+  - RL-facing obs remains **142**
+  - current no-telegraph Jad logic remains
+  - current invalid-action signal remains live
+
+`v1_retro` config block:
+
+```ini
+[base]
+env_name = fight_caves
+checkpoint_interval = 50
+
+[env]
+w_damage_dealt = 0.5
+w_damage_taken = -0.5
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = -0.05
+w_food_used_well = 0.0
+w_prayer_pot_used = -0.05
+w_correct_jad_prayer = 5.0
+w_wrong_jad_prayer = -10.0
+w_correct_danger_prayer = 0.0
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = -0.01
+w_tick_penalty = -0.005
+shape_food_full_waste_penalty = 0.0
+shape_food_waste_scale = 0.0
+shape_food_safe_hp_threshold = 1.0
+shape_food_no_threat_penalty = 0.0
+shape_pot_full_waste_penalty = 0.0
+shape_pot_waste_scale = 0.0
+shape_pot_safe_prayer_threshold = 1.0
+shape_pot_no_threat_penalty = 0.0
+shape_wrong_prayer_penalty = 0.0
+shape_npc_specific_prayer_bonus = 0.0
+shape_npc_melee_penalty = 0.0
+shape_wasted_attack_penalty = 0.0
+shape_wave_stall_start = 500
+shape_wave_stall_base_penalty = 0.0
+shape_wave_stall_ramp_interval = 50
+shape_wave_stall_cap = 0.0
+shape_not_attacking_grace_ticks = 2
+shape_not_attacking_penalty = 0.0
+shape_kiting_reward = 0.0
+shape_kiting_min_dist = 5
+shape_kiting_max_dist = 7
+shape_unnecessary_prayer_penalty = 0.0
+shape_resource_threat_window = 2
+curriculum_wave = 0
+curriculum_pct = 0.0
+curriculum_wave_2 = 0
+curriculum_pct_2 = 0.0
+curriculum_wave_3 = 0
+curriculum_pct_3 = 0.0
+disable_movement = 0
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 500_000_000
+learning_rate = 0.0003
+anneal_lr = 0
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+Hyperparameters:
+- fixed:
+  - `total_timesteps = 500M`
+  - `learning_rate = 0.0003`
+  - `anneal_lr = 0`
+  - `gamma = 0.999`
+  - `gae_lambda = 0.95`
+  - `clip_coef = 0.2`
+  - `vf_coef = 0.5`
+  - `ent_coef = 0.01`
+  - `max_grad_norm = 0.5`
+  - `horizon = 256`
+  - `minibatch_size = 4096`
+  - `total_agents = 4096`
+  - `num_buffers = 2`
+  - `hidden_size = 256`
+  - `num_layers = 2`
+  - no checkpoint
+  - no curriculum
+  - no sweep
+
+What `v1_retro` is actually testing:
+- whether the original `v1` training recipe still climbs quickly on the
+  modern stack
+- whether the old wave-27 shelf was mostly:
+  - optimizer / reward recipe,
+  - or old backend / old obs specific
+
+What `v1_retro` is **not** testing:
+- not a pure historical reproduction
+- no old obs contract
+- no old Jad telegraph backend
+- no exact old reward semantics for legacy/inactive weights
+
+Success criteria:
+- reproduce the old “fast early climb” flavor on the current stack
+- see whether the run still naturally finds the old `~27` shelf
+- use the result as a fun sanity reference, not as the main branch for
+  future tuning
+
+Operational notes:
+- this run was isolated from the then-live `v18.3` sweep setup
+- the current active config is now `v19` in `config/fight_caves.ini`
+
+Pre-run expectation:
+- likely outcome is not a full return to the exact old `v1` behavior,
+  because the backend and obs are materially different now
+- the most informative result would be:
+  - whether the old low-pressure reward recipe still climbs fast and then
+    stalls
+  - or whether the modern stack changes that trajectory completely
+
+Results (`yjxqnott`, W&B `snowy-paper-94`):
+- completed normally
+- state: `finished`
+- final trainer step: `499,122,176 / 500,000,000`
+- runtime: `253.34s`
+- throughput: `2.26M SPS`
+
+Final metrics:
+- `episode_return = 4662.17`
+- `wave_reached = 30.10`
+- `max_wave = 34`
+- `correct_prayer = 1144.0`
+- `wrong_prayer_hits = 210.5`
+- `no_prayer_hits = 89.5`
+- `prayer_switches = 2286.5`
+- `damage_blocked = 29157.0`
+- `dmg_taken_avg = 4286.5`
+- `tokxil_melee_ticks = 62.0`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 0.5`
+
+Trajectory:
+- `65M` steps:
+  - `wave_reached = 25.15`
+  - `max_wave = 27.83`
+  - `reached_wave_30 = 0.434`
+  - `cleared_wave_30 = 0.152`
+- `189M` steps:
+  - `wave_reached = 30.10`
+  - `max_wave = 32`
+  - `reached_wave_30 = 0.996`
+- `313M` steps:
+  - `wave_reached = 29.96`
+  - `max_wave = 32`
+- `438M` steps:
+  - `wave_reached = 30.02`
+  - `max_wave = 32`
+- `499M` steps:
+  - `wave_reached = 30.10`
+  - `max_wave = 34`
+  - `cleared_wave_30 = 0.5`
+
+Comparison to the documented original `v1`:
+- original `v1` (doc only, no local JSON retained):
+  - `wave_reached = 27.6`
+  - `episode_return = 554.3`
+  - `max shelf = ~27-28`
+- `v1_retro` on the modern stack:
+  - `wave_reached = 30.10`
+  - `episode_return = 4662.17`
+  - `max_wave = 34`
+
+This means:
+- the old recipe did **not** merely survive on the modern stack
+- it got materially stronger on the modern stack
+- so the current backend / obs improvements are not the problem
+- the mainline regression is coming from the newer training recipe, not
+  from the current environment itself
+
+Comparison to the strong scratch baselines:
+- vs `v18` at final (`lxttb7uo`, 1.5B):
+  - `wave_reached: 30.10 vs 29.20`
+  - `max_wave: 34 vs 31`
+  - `damage_blocked: 29157 vs 24912`
+  - `reached_wave_30: 1.00 vs 0.35`
+  - `episode_return: 4662 vs 4956`
+- vs `v18.1` at final (`xm6i52ta`, 10B):
+  - `wave_reached: 30.10 vs 29.24`
+  - `max_wave: 34 vs 34`
+  - `damage_blocked: 29157 vs 34385`
+  - `episode_return: 4662 vs 5535`
+
+The striking part is not just the final value. It is the speed:
+- `v1_retro` reached `wave_reached ~30` by **~189M** steps
+- `v18` did not reach `wave_reached ~27` until **~940M** steps
+- `v18` did not reach its `~29` plateau until **~1.31B-1.50B**
+
+Interpretation:
+- `v1_retro` is dramatically faster at converting early competence into
+  late-wave depth
+- but it does so with a much sloppier, higher-risk policy
+
+What is clearly working in `v1_retro`:
+
+1. Lower-pressure PPO settings
+- `learning_rate = 0.0003` and `ent_coef = 0.01` appear to be much better
+  for fast depth-building on the current stack than the `v18` scratch
+  settings of `0.001 / 0.02`
+- clipfrac stayed in a healthy learning band:
+  - `0.028 -> 0.058`
+- unlike the continuation family, this run learned aggressively without
+  collapsing or freezing
+
+2. Sparse, objective-heavy reward mix
+- the recipe shifts emphasis away from “clean combat” shaping and toward
+  actual progress:
+  - lower `w_damage_dealt`
+  - higher `w_npc_kill`
+  - much harsher `w_tick_penalty`
+  - most extra shaping disabled
+- this appears to force the policy to prioritize:
+  - killing things
+  - clearing waves
+  - moving forward
+  over looking tidy on auxiliary metrics
+
+3. Reduced punishment for risky progress
+- `w_damage_taken = -0.5` is materially softer than the current `-0.75`
+- `v1_retro` clearly accepts more damage in exchange for more progress
+- that trade appears to be favorable for reaching late waves quickly
+
+4. Removing prayer-side over-optimization
+- `w_correct_danger_prayer = 0.0`
+- no wrong-prayer shaping
+- no NPC-specific prayer bonus
+- the result is not “better prayer discipline”
+- the result is a policy that is willing to keep moving and attacking,
+  while switching prayers a huge amount
+- this looks ugly, but it appears to unlock depth much sooner
+
+5. Stronger time pressure
+- `w_tick_penalty = -0.005` vs the modern `-0.001`
+- this is a big difference
+- even with no explicit stall penalty, the harsher living cost strongly
+  rewards making progress quickly
+
+6. `num_buffers = 2`
+- this is not proven to be the main driver, but it is one of the few
+  structural differences from the later successful scratch runs
+- it may be helping with rollout freshness/diversity early in training
+
+What `v1_retro` is missing / where it is clearly worse:
+
+1. It is much sloppier defensively
+- `wrong_prayer_hits = 210.5`
+- `no_prayer_hits = 89.5`
+- `dmg_taken_avg = 4286.5`
+- `tokxil_melee_ticks = 62.0`
+- compared to `v18`, this is a much messier policy
+
+2. It seems to brute-force depth rather than stabilize it
+- prayer switches exploded:
+  - `532.9 -> 2286.5`
+- blocked damage is high, but so are mistakes and total damage taken
+- this looks like hyperactive adaptation, not calm mastery
+
+3. It likely sacrifices long-run cleanliness for short-run progress
+- `v1_retro` reaches deep waves much faster
+- but the policy looks more chaotic and may be harder to extend cleanly to
+  Jad without some later refinement
+
+Main conclusion:
+- the modern stack is capable of fast late-wave learning
+- the **current mainline reward / PPO recipe is probably over-constrained**
+- the biggest thing missing from the current configs is not more state
+  information; it is **permission to play more aggressively and optimize the
+  real objective sooner**
+
+What `v1_retro` suggests the current configs are doing wrong:
+- too much emphasis on clean prayer-side behavior early
+- too much punishment for taking damage while progressing
+- too many auxiliary shaping terms competing with the real goal
+- too little time pressure
+- possibly too much entropy / too much learning-rate noise for this
+  particular modern stack
+
+Best synthesis for future runs:
+- do **not** adopt `v1_retro` wholesale as the new mainline
+- it is too sloppy defensively
+- but the next mainline scratch run should borrow from it
+
+Most plausible ingredients to steal for `v19`:
+- `learning_rate = 0.0003`
+- `clip_coef = 0.2`
+- `ent_coef = 0.01`
+- consider `num_buffers = 2`
+- reduce `w_damage_taken` from `-0.75` toward `-0.5` or `-0.6`
+- increase objective pressure:
+  - `w_npc_kill` toward `3.0`
+  - stronger tick pressure than `-0.001`
+- drastically simplify or reduce the extra shaping stack instead of adding
+  more
+
+Most important takeaway:
+- the fast progress in `v1_retro` strongly argues that the current mainline
+  recipe is teaching the agent to be **clean before competent**
+- `v1_retro` succeeds because it does the opposite:
+  - it becomes competent first
+  - cleanliness comes later, if at all
+
+---
+
+## v18.3 (2026-04-08, first completed trial `tae450qe`)
 
 Changes from `v18.2`:
 
@@ -714,6 +1359,177 @@ Pre-run expectation:
   - checkpoint selection by fixed eval before more continuation tuning,
     or
   - a return to scratch-based improvements instead of continuation
+
+First completed trial:
+- W&B run `tae450qe` (`wild-puddle-93`)
+- state: `finished`
+- this trial completed normally to budget; it did **not** crash and did
+  **not** early-stop
+- final trainer step: `399,507,456 / 400,000,000`
+- sampled hyperparameters for this trial:
+  - `learning_rate = 0.0002626368403335551`
+  - `clip_coef = 0.11023490528350335`
+  - `ent_coef = 0.004868108593398205`
+
+Results:
+- `wave_reached = 17.92`
+- `max_wave = 24`
+- `episode_return = 1305.30`
+- `correct_prayer = 252.58`
+- `wrong_prayer_hits = 34.35`
+- `no_prayer_hits = 127.45`
+- `prayer_switches = 105.56`
+- `damage_blocked = 1712.60`
+- `dmg_taken_avg = 2796.51`
+- `tokxil_melee_ticks = 7.12`
+- `reached_wave_30 = 0.0`
+- `cleared_wave_30 = 0.0`
+- throughput remained normal:
+  - `SPS = 1.99M`
+  - `GPU util = 66%` final, with most of the run in the mid-80s
+  - `VRAM = ~2.13 GB`
+  - `runtime = 200.29s`
+
+Learning dynamics:
+- entropy fell from `7.62 -> 6.35`
+- clipfrac rose from `0.076 -> 0.179`
+- return improved early then faded:
+  - `1183.9 -> 1330.6 -> 1429.4 -> 1334.9 -> 1305.3`
+- wave reached peaked mid-run then regressed:
+  - `18.77 -> 18.64 -> 18.94 -> 18.33 -> 17.92`
+- max wave never moved beyond `24`
+- prayer-switch frequency collapsed over training:
+  - `250.6 -> 161.9 -> 171.9 -> 109.6 -> 105.6`
+- prayer correctness improved while switching decreased:
+  - `correct_prayer: 179.1 -> 252.6`
+  - `wrong_prayer_hits: 76.9 -> 34.3`
+  - `damage_blocked: 1533.0 -> 1712.6`
+- damage taken did **not** improve meaningfully:
+  - `2777.3 -> 2796.5`
+
+Interpretation:
+- The **sweep fix worked**. Unlike `v18.2`, this was a real varied trial,
+  not one of many duplicated defaults.
+- Operationally, `v18.3` is healthy:
+  - no sweep parser failure
+  - no GP crash
+  - no NaNs
+  - no throughput anomaly
+- Behaviorally, this trial still **regressed hard** relative to the
+  `v18/v18.1` frontier and did **not** preserve the strength of the
+  `xm6i52ta` warm-start checkpoint.
+
+What improved relative to the `v18.3_control` sanity run `wh0ef384`:
+- `episode_return: 1260.75 -> 1305.30`
+- `correct_prayer: 212.67 -> 252.58`
+- `wrong_prayer_hits: 65.76 -> 34.35`
+- `damage_blocked: 1058.92 -> 1712.60`
+- `tokxil_melee_ticks: 7.36 -> 7.12`
+
+What did **not** improve:
+- `wave_reached: 18.31 -> 17.92`
+- `max_wave: 25 -> 24`
+- `no_prayer_hits: 98.19 -> 127.45`
+- `dmg_taken_avg: 2747.68 -> 2796.51`
+- `prayer_switches: 133.26 -> 105.56`
+
+This is the key pattern:
+- the sampled `v18.3` point produced a policy that was **cleaner on paper**
+  in prayer correctness and blocked damage
+- but it did **not** convert that into deeper progression
+- instead it looks like a more conservative / less active continuation that
+  gives up too much offensive tempo or late-wave adaptability
+
+Comparison to the continuation families:
+- vs `v18.2` representative trial `bbqcayi3`
+  - `tae450qe` is cleaner and more stable operationally
+  - it avoids curriculum contamination
+  - it has much better prayer correctness and higher return
+  - but that does **not** rescue continuation as a strategy; it is still far
+    below the scratch frontier
+- vs `v18.3_control` `wh0ef384`
+  - `tae450qe` is not a disaster relative to the control
+  - it is roughly the same weak continuation regime, just with slightly
+    better blocking / prayer hygiene and slightly worse depth
+
+Comparison to the scratch frontier:
+- vs `v18` `lxttb7uo`
+  - `wave_reached: 17.92 vs 29.20`
+  - `episode_return: 1305.30 vs 4955.67`
+  - `correct_prayer: 252.58 vs 1720.20`
+  - `damage_blocked: 1712.60 vs 24912.17`
+- vs `v18.1` `xm6i52ta`
+  - `wave_reached: 17.92 vs 29.24`
+  - `max_wave: 24 vs 34`
+  - `correct_prayer: 252.58 vs 2407.14`
+  - `damage_blocked: 1712.60 vs 34385.50`
+
+The gap is too large to explain away as normal continuation noise.
+The main conclusion is:
+- **continuation is still failing to preserve frontier competence**
+- the gentler `v18.3` band is safer than `v18.2`, but it is still not a
+  good path to progress
+
+Why this likely happened:
+- the checkpoint was chosen from training history, not fixed eval
+- the continuation recipe still pushes the policy away from the strong
+  frontier behavior instead of consolidating it
+- lower entropy / lower clip / lower LR improved defensive neatness but seem
+  to have reduced the aggressive switching / tempo needed to actually
+  progress deeper
+- the current reward mix still appears more effective for **scratch
+  learning** than for **checkpoint continuation**
+
+Current `v18.3` verdict:
+- sweep infrastructure: **fixed**
+- continuation strategy: **still not validated**
+- first completed trial: **regression**
+- recommendation: **do not promote continuation as the main path forward**
+
+What this means for the next run:
+- The evidence now favors returning to a **scratch** run family rather than
+  spending more time on checkpoint continuation.
+- If continuation is revisited later, it should be after:
+  - accelerated replay / checkpoint ranking exists
+  - fixed-eval checkpoint selection exists
+  - the continuation objective is better aligned with preserving frontier
+    competence
+
+Recommended next direction after this result:
+- make `v19` a **no-sweep, no-checkpoint scratch run**
+- start from the `v18` / `v18.1` recipe, not the continuation recipe
+- keep the current backend / obs contract unchanged
+- test only small, explicit late-wave changes rather than another broad
+  search
+
+Best current `v19` shape:
+- scratch run
+- no curriculum for the first pass
+- no checkpoint warm-start
+- keep the strong `v18` PPO base:
+  - `learning_rate = 0.001`
+  - `clip_coef = 0.2`
+  - `ent_coef = 0.02`
+- modify only a **small** number of shaping terms aimed at late-wave tempo
+  rather than more prayer-side continuation tuning
+
+Most likely useful `v19` experiment:
+- preserve the `v18` reward backbone
+- make the agent slightly more assertive about actually clearing waves:
+  - slightly stronger `shape_wasted_attack_penalty`
+  - slightly stronger `shape_not_attacking_penalty`
+  - optionally a small increase to `w_npc_kill` or `w_wave_clear`, but not
+    both aggressively
+- do **not** make another large prayer-shaping jump like `v17`
+
+Reason for this `v19` recommendation:
+- the scratch family already learns the task
+- the plateau appears more like a late-wave execution / tempo bottleneck
+  than a missing prayer-signal bottleneck
+- `tae450qe` specifically showed that making the policy “cleaner” on prayer
+  alone did **not** buy more depth
+- the next controlled change should therefore bias toward turning competent
+  defense into faster, cleaner clears
 
 ---
 

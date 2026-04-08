@@ -104,7 +104,7 @@
 /* --- Policy observation total --- */
 #define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 106 */
 
-/* --- Reward features (18 floats) --- */
+/* --- Reward features (19 floats) --- */
 /*
  * These are packed AFTER policy observations in the same buffer.
  * The trainer reads them for reward shaping and logging.
@@ -130,10 +130,11 @@
 #define FC_RWD_TICK_PENALTY     15  /* fires every tick (time discount) */
 #define FC_RWD_CORRECT_DANGER_PRAY 16
 #define FC_RWD_WRONG_DANGER_PRAY   17
-#define FC_REWARD_FEATURES      18
+#define FC_RWD_ATTACK_ATTEMPT   18  /* valid attack cycle launched this tick */
+#define FC_REWARD_FEATURES      19
 
 /* --- Total observation (policy obs + reward features) --- */
-#define FC_TOTAL_OBS            (FC_POLICY_OBS_SIZE + FC_REWARD_FEATURES)  /* 124 */
+#define FC_TOTAL_OBS            (FC_POLICY_OBS_SIZE + FC_REWARD_FEATURES)  /* 125 */
 
 /* ======================================================================== */
 /* Action space — 5 independent heads                                        */

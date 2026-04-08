@@ -458,6 +458,7 @@ void fc_write_reward_features(const FcState* state, float* out) {
     out[FC_RWD_TICK_PENALTY]     = 1.0f;  /* always fires */
     out[FC_RWD_CORRECT_DANGER_PRAY] = (float)state->correct_danger_prayer;
     out[FC_RWD_WRONG_DANGER_PRAY]   = (float)state->wrong_danger_prayer;
+    out[FC_RWD_ATTACK_ATTEMPT]      = (float)state->attack_attempt_this_tick;
 }
 
 int fc_action_attempt_is_invalid(const FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {

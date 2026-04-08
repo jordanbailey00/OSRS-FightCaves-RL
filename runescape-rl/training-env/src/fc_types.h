@@ -351,6 +351,7 @@ typedef struct {
     int wrong_jad_prayer;
     int correct_danger_prayer;
     int wrong_danger_prayer;
+    int attack_attempt_this_tick;
     int invalid_action_this_tick;
     int movement_this_tick;
     int idle_this_tick;
@@ -379,6 +380,8 @@ typedef struct {
     int ep_pots_overrestored;   /* doses that over-restored (wasted prayer) */
     int ep_tokxil_melee_ticks;  /* ticks with any Tok-Xil at melee distance */
     int ep_ketzek_melee_ticks;  /* ticks with any Ket-Zek at melee distance */
+    int ep_attack_ready_ticks;  /* ticks where attack cooldown was ready */
+    int ep_attack_attempt_ticks;/* ready ticks where a real attack fired */
     int ep_reached_wave_30;     /* 1 if episode reached wave 30 */
     int ep_cleared_wave_30;     /* 1 if episode cleared wave 30 */
     int ep_reached_wave_31;     /* 1 if episode reached wave 31 */

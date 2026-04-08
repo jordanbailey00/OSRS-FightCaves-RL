@@ -59,6 +59,7 @@ float g_sum_no_prayer_hits = 0;
 float g_sum_prayer_switches = 0;
 float g_sum_damage_blocked = 0;
 float g_sum_damage_taken = 0;
+float g_sum_attack_when_ready = 0;
 float g_sum_pots_used = 0;
 float g_sum_avg_prayer_on_pot = 0;
 float g_sum_food_eaten = 0;
@@ -111,6 +112,7 @@ typedef struct FightCaves {
 
     /* Reward shaping weights (from config) */
     float w_damage_dealt;
+    float w_attack_attempt;
     float w_damage_taken;
     float w_npc_kill;
     float w_wave_clear;
@@ -303,6 +305,7 @@ static float fc_puffer_compute_reward(FightCaves* env) {
 
     float reward = 0.0f;
     reward += rwd[FC_RWD_DAMAGE_DEALT]     * env->w_damage_dealt;
+    reward += rwd[FC_RWD_ATTACK_ATTEMPT]   * env->w_attack_attempt;
     /* Damage taken penalty scales quadratically — big hits hurt way more.
      * 1 HP (0.014): -0.75 × 0.014² × 70 = -0.00015 (tiny)
      * 10 HP (0.143): -0.75 × 0.143² × 70 = -1.07 (moderate)
@@ -446,15 +449,19 @@ static float fc_puffer_compute_reward(FightCaves* env) {
     reward += rwd[FC_RWD_IDLE]             * env->w_idle;
     reward += rwd[FC_RWD_TICK_PENALTY]     * env->w_tick_penalty;
 
-    /* Punish not attacking — if agent hasn't dealt damage in 2+ ticks
-     * and there are NPCs alive, penalize. Forces combat engagement. */
-    if (rwd[FC_RWD_DAMAGE_DEALT] > 0.0f) {
+    /* Punish not attacking — only count ticks where the weapon cooldown is
+     * ready, so time spent waiting between attacks does not look like
+     * inactivity. A real attack attempt resets the timer even if it later
+     * misses or rolls 0 damage. */
+    if (rwd[FC_RWD_ATTACK_ATTEMPT] > 0.0f) {
         env->ticks_since_attack = 0;
-    } else if (env->state.npcs_remaining > 0) {
+    } else if (env->state.npcs_remaining > 0 && env->state.player.attack_timer <= 0) {
         env->ticks_since_attack++;
         if (env->ticks_since_attack >= env->shape_not_attacking_grace_ticks) {
             reward += env->shape_not_attacking_penalty;
         }
+    } else if (env->state.npcs_remaining <= 0) {
+        env->ticks_since_attack = 0;
     }
 
     /* Kiting reward — attack from preferred distance band. */
@@ -549,6 +556,9 @@ void c_step(FightCaves* env) {
         g_sum_prayer_switches += (float)env->state.ep_prayer_switches;
         g_sum_damage_blocked += (float)env->state.ep_damage_blocked;
         g_sum_damage_taken += (float)env->state.player.total_damage_taken;
+        g_sum_attack_when_ready += (env->state.ep_attack_ready_ticks > 0)
+            ? (float)env->state.ep_attack_attempt_ticks / (float)env->state.ep_attack_ready_ticks
+            : 0.0f;
         g_sum_pots_used += (float)env->state.ep_pots_used;
         g_sum_avg_prayer_on_pot += (env->state.ep_pots_used > 0 && env->state.player.max_prayer > 0)
             ? ((float)env->state.ep_pot_pre_prayer_sum /

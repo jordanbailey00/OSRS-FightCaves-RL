@@ -41,6 +41,7 @@ static void clear_per_tick_flags(FcState* state) {
     state->wrong_jad_prayer = 0;
     state->correct_danger_prayer = 0;
     state->wrong_danger_prayer = 0;
+    state->attack_attempt_this_tick = 0;
     state->invalid_action_this_tick = 0;
     state->movement_this_tick = 0;
     state->idle_this_tick = 0;
@@ -106,6 +107,7 @@ static int npc_slot_to_index(const FcState* state, int slot) {
 
 static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     FcPlayer* p = &state->player;
+    int was_attack_ready = (p->attack_timer <= 0 && state->npcs_remaining > 0);
 
     int act_move     = actions[0];
     int act_attack   = actions[1];
@@ -314,10 +316,18 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                                      FC_MAX_PENDING_HITS,
                                      damage, delay, ATTACK_RANGED, -1, 0);
 
+                state->attack_attempt_this_tick = 1;
                 p->attack_timer = 5;
                 p->ammo_count--;
                 p->hit_landed_this_tick = 1;  /* flag for viewer hitsplat */
             }
+        }
+    }
+
+    if (was_attack_ready) {
+        state->ep_attack_ready_ticks++;
+        if (state->attack_attempt_this_tick) {
+            state->ep_attack_attempt_ticks++;
         }
     }
 }

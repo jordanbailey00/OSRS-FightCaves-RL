@@ -321,7 +321,7 @@ These are not simulation files, but they should still stop drifting.
 | Current File(s) | Target Owner | Action |
 |---|---|---|
 | `runescape-rl/config/fight_caves.ini` + `pufferlib_4/config/fight_caves.ini` | single-source shared config | keep `runescape-rl/config/fight_caves.ini` as canonical; make `pufferlib_4/config/fight_caves.ini` a symlink or remove the duplicate runtime read path |
-| repeated launcher env setup in `train.sh`, `sweep_v18_3.sh`, `train_v18_3_control.sh`, future launchers | shared training support | extract one shared shell helper such as `training-env/fc_launch_common.sh`; source it from all launchers |
+| repeated launcher env setup in `train.sh`, `sweep_v18_3.sh`, and future launchers | shared training support | extract one shared shell helper such as `training-env/fc_launch_common.sh`; source it from all launchers |
 | `training-env/assets/fightcaves.collision` and `demo-env/assets/fightcaves.collision` | single-source asset | keep one asset file only; move to shared location and stop probing multiple wrapper paths |
 
 ### 4.8 Assets and third-party code
@@ -671,7 +671,6 @@ These files must not be symlinked as shared core:
 - `training-env/CMakeLists.txt`
 - `train.sh`
 - `sweep_v18_3.sh`
-- `train_v18_3_control.sh`
 - `demo-env/src/viewer.c`
 - `demo-env/src/fc_debug_overlay.h`
 - `demo-env/src/fc_anim_loader.h`

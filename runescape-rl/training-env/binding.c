@@ -24,6 +24,8 @@ void my_init(Env* env, Dict* kwargs) {
     DictItem* item;
     item = dict_get_unsafe(kwargs, "w_damage_dealt");
     env->w_damage_dealt = item ? (float)item->value : 0.5f;
+    item = dict_get_unsafe(kwargs, "w_attack_attempt");
+    env->w_attack_attempt = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_damage_taken");
     env->w_damage_taken = item ? (float)item->value : -0.75f;
     item = dict_get_unsafe(kwargs, "w_npc_kill");
@@ -143,6 +145,7 @@ void my_log(Log* log, Dict* out) {
     extern float g_sum_correct_blocks;
     extern float g_sum_wrong_prayer_hits, g_sum_no_prayer_hits;
     extern float g_sum_prayer_switches, g_sum_damage_blocked, g_sum_damage_taken;
+    extern float g_sum_attack_when_ready;
     extern float g_sum_pots_used, g_sum_avg_prayer_on_pot;
     extern float g_sum_food_eaten, g_sum_avg_hp_on_food;
     extern float g_sum_food_wasted, g_sum_pots_wasted, g_n_analytics;
@@ -161,6 +164,7 @@ void my_log(Log* log, Dict* out) {
         dict_set(out, "prayer_switches", g_sum_prayer_switches / g_n_analytics);
         dict_set(out, "damage_blocked", g_sum_damage_blocked / g_n_analytics);
         dict_set(out, "dmg_taken_avg", g_sum_damage_taken / g_n_analytics);
+        dict_set(out, "attack_when_ready_rate", g_sum_attack_when_ready / g_n_analytics);
         dict_set(out, "pots_used", g_sum_pots_used / g_n_analytics);
         dict_set(out, "avg_prayer_on_pot", g_sum_avg_prayer_on_pot / g_n_analytics);
         dict_set(out, "food_eaten", g_sum_food_eaten / g_n_analytics);
@@ -177,7 +181,8 @@ void my_log(Log* log, Dict* out) {
         g_sum_correct_blocks = 0;
         g_sum_wrong_prayer_hits = 0; g_sum_no_prayer_hits = 0;
         g_sum_prayer_switches = 0; g_sum_damage_blocked = 0;
-        g_sum_damage_taken = 0; g_sum_pots_used = 0;
+        g_sum_damage_taken = 0; g_sum_attack_when_ready = 0;
+        g_sum_pots_used = 0;
         g_sum_avg_prayer_on_pot = 0; g_sum_food_eaten = 0;
         g_sum_avg_hp_on_food = 0; g_sum_food_wasted = 0;
         g_sum_pots_wasted = 0; g_sum_tokxil_melee_ticks = 0;
