@@ -4,9 +4,9 @@
 
 The current live policy contract is the **pruned v18 contract**:
 - **106 policy floats** (`FC_POLICY_OBS_SIZE`)
-- **18 reward-feature floats** packed behind the policy obs (`FC_TOTAL_OBS = 124`)
+- **19 reward-feature floats** packed behind the policy obs (`FC_TOTAL_OBS = 125`)
 - **36 RL action-mask floats** appended by PufferLib (`FC_PUFFER_OBS_SIZE = 142`)
-- **166 total mask floats** in the full backend buffer when the two viewer-only path heads are included (`124 + 166 = 290`)
+- **166 total mask floats** in the full backend buffer when the two viewer-only path heads are included (`125 + 166 = 291`)
 
 Observations are written in `fc_state.c:fc_write_obs()` after each `fc_tick()` call. The policy never sees reward features. The viewer/eval pipe consumes the same 106 policy floats plus the 36 RL mask floats.
 
@@ -120,106 +120,71 @@ For RL, the appended mask size is **36** (`17 + 9 + 5 + 3 + 2`).
 
 All reward computation happens in `fight_caves.h:fc_puffer_compute_reward()`, called once per tick after `fc_tick()`. Reward features are written to a separate internal buffer by `fc_state.c:fc_write_reward_features()` — the policy network never sees reward features.
 
-Config weights are parsed from `config/fight_caves.ini` in `binding.c:my_init()`. Some rewards are hardcoded directly in the reward function and not configurable via ini. Note: PufferLib 4 CUDA kernel does NOT enforce action masks at the sampling level — masks are observation features the policy learns from, not hard constraints.
+Config weights are parsed from `config/fight_caves.ini` in `binding.c:my_init()`. The exact values vary by run, so the inventory below describes the current **toggle surface**, not one specific run's numbers. Note: PufferLib 4 CUDA kernel does NOT enforce action masks at the sampling level — masks are observation features the policy learns from, not hard constraints.
 
-### Active Signals
+### Active Configurable Reward Weights
 
-**1. damage_dealt** — extrinsic | dense per-hit reward | progress reward | heuristic shaping | **active** (w=1.0)
-- `fight_caves.h:149` — `reward += (damage_dealt_this_tick / 1000) * w_damage_dealt`
-- Linear scaling. Accumulated in `fc_combat.c:288` when player's ranged attacks resolve on NPCs
-- 100 damage this tick = +0.1 reward. Incentivizes the agent to keep attacking
+These are live config keys that currently affect scalar reward when nonzero.
 
-**2. damage_taken** — extrinsic | dense per-hit penalty | safety penalty | heuristic shaping | **active** (w=-0.75, quadratic x70)
-- `fight_caves.h:155-158` — `reward += (dmg_frac)^2 * 70 * w_damage_taken`
-- **Quadratic** scaling with 70x multiplier makes large hits disproportionately painful
-- `dmg_frac = damage_taken_this_tick / max_hp`. Examples: 10 HP = -1.07, 20 HP = -4.28, 50 HP = -26.8
-- Only counts unblocked damage — prayer-blocked hits contribute 0
+- **`w_damage_dealt`** — dense progress reward for landed ranged damage on NPCs.
+- **`w_attack_attempt`** — dense progress reward for a real launched attack cycle, even if the later hit splashes or rolls 0.
+- **`w_damage_taken`** — dense quadratic penalty on unblocked damage taken this tick.
+- **`w_npc_kill`** — sparse per-NPC kill reward.
+- **`w_wave_clear`** — sparse wave-clear reward, multiplied by cleared wave number.
+- **`w_jad_damage`** — extra dense reward for damage dealt specifically to Jad.
+- **`w_jad_kill`** — sparse Jad kill reward.
+- **`w_player_death`** — terminal death penalty.
+- **`w_cave_complete`** — terminal full-cave completion reward.
+- **`w_correct_danger_prayer`** — reward for resolved hits blocked by the correct protection prayer.
+- **`w_invalid_action`** — penalty for invalid RL-facing masked actions. This is now live.
+- **`w_tick_penalty`** — unconditional living / time-cost penalty every tick.
 
-**3. npc_kill** — extrinsic | sparse event reward | subgoal reward | task reward | **active** (w=2.0)
-- `fight_caves.h:159` — `reward += npcs_killed_this_tick * w_npc_kill`
-- Fires when NPC HP reaches 0. Tz-Kek splits count as 1 kill for the parent; the 2 split children are separate kills
+### Active Configurable Shaping Terms
 
-**4. wave_clear** — extrinsic | sparse event reward | subgoal / checkpoint reward | task reward | **active** (w=10.0 x wave_num)
-- `fight_caves.h:166-170` — `reward += w_wave_clear * cleared_wave_number`
-- Scales linearly with wave number. Wave 1 = +10, Wave 15 = +150, Wave 30 = +300, Wave 63 = +630
-- **Primary objective signal.** All other dense signals are kept small so this dominates
+These are live config keys that shape timing, efficiency, safety, or tempo.
 
-**5. jad_damage** — extrinsic | dense per-hit reward | progress reward (boss-specific) | heuristic shaping | **active** (w=2.0)
-- `fight_caves.h:171` — `reward += (jad_damage_this_tick / 1000) * w_jad_damage`
-- Stacks with damage_dealt (both fire for Jad hits)
+- **`shape_food_full_waste_penalty`** — flat penalty for eating at full HP.
+- **`shape_food_waste_scale`** — scaled penalty for overhealing with food.
+- **`shape_food_safe_hp_threshold`** — HP threshold used by food safety / waste logic.
+- **`shape_food_no_threat_penalty`** — extra penalty for eating when no near-term threat exists.
+- **`shape_pot_full_waste_penalty`** — flat penalty for drinking at full prayer.
+- **`shape_pot_waste_scale`** — scaled penalty for over-restoring prayer.
+- **`shape_pot_safe_prayer_threshold`** — prayer threshold used by potion safety / waste logic.
+- **`shape_pot_no_threat_penalty`** — extra penalty for drinking when no near-term threat exists.
+- **`shape_wrong_prayer_penalty`** — penalty for taking a resolved hit under the wrong active prayer.
+- **`shape_npc_specific_prayer_bonus`** — extra reward for correct style-specific prayer blocks against mapped NPC types.
+- **`shape_npc_melee_penalty`** — per-tick penalty for allowing NPCs into melee range.
+- **`shape_wasted_attack_penalty`** — penalty for failing to attack on attack-ready ticks when offensive pressure should be maintained.
+- **`shape_wave_stall_base_penalty`** — base time-pressure penalty once a wave stalls past the configured start threshold.
+- **`shape_wave_stall_cap`** — cap on the escalating wave-stall penalty.
+- **`shape_not_attacking_penalty`** — penalty for attack-ready ticks where the policy still does not launch an attack.
+- **`shape_kiting_reward`** — reward for dealing damage while maintaining target distance in the configured kiting band.
+- **`shape_unnecessary_prayer_penalty`** — per-tick penalty for draining prayer when no current threat justifies it.
+- **`shape_resource_threat_window`** — lookahead window used by food / potion / prayer waste checks.
+- **`shape_kiting_min_dist`** — lower bound of the rewarded kiting distance band.
+- **`shape_kiting_max_dist`** — upper bound of the rewarded kiting distance band.
+- **`shape_wave_stall_start`** — wave tick count where stall penalties begin.
+- **`shape_wave_stall_ramp_interval`** — ticks between stall-penalty ramp increases.
+- **`shape_not_attacking_grace_ticks`** — ready-to-attack grace period before the non-attacking penalty applies.
 
-**6. jad_kill** — extrinsic | sparse event reward | subgoal reward (boss-specific) | task reward | **active** (w=50.0)
-- `fight_caves.h:172` — `reward += jad_killed * w_jad_kill`
-- Stacks with npc_kill (+2.0) and wave_clear (+630 for wave 63)
+### Disabled / Legacy Reward Toggles
 
-**7. player_death** — extrinsic | terminal reward | survival penalty | task reward | **active** (w=-20.0)
-- Terminal penalty when player HP <= 0
+These keys still exist in config parsing, but are currently disabled, legacy, or no-ops in live reward computation.
 
-**8. cave_complete** — extrinsic | terminal reward | success reward | task reward | **active** (w=100.0)
-- Terminal reward when all 63 waves cleared
-
-**9. food_waste** — cost / constraint | dense event penalty | resource-use penalty | heuristic shaping | **active** (hardcoded)
-- Penalty only, no reward for eating. Full HP: -5.0. Otherwise: -(heal_wasted / 200), 0 to -1.0 scaled
-- Uses `pre_eat_hp` (saved before heal) to compute actual waste
-
-**10. pot_waste** — cost / constraint | dense event penalty | resource-use penalty | heuristic shaping | **active** (hardcoded)
-- Penalty only, no reward for drinking. Full prayer: -5.0. Otherwise: -(restore_wasted / 170), 0 to -1.0 scaled
-- Uses `pre_drink_prayer` (saved before restore) to compute actual waste
-
-**11. correct_prayer** — extrinsic | dense per-hit reward | correctness reward | heuristic shaping | **active** (w=1.0)
-- `reward += w_correct_danger_prayer` when a hit resolves and active prayer matches attack style
-- Covers all styles (melee, ranged, magic). PvM prayer = 100% block = 0 damage
-
-**12. wrong_prayer** — cost / constraint | dense per-hit penalty | safety penalty | heuristic shaping | **active** (hardcoded -1.0)
-- Fires when a hit resolves, prayer is active, but prayer does NOT match attack style
-
-**13. npc_specific_prayer** — extrinsic | dense per-hit reward | correctness reward | heuristic shaping | **active** (hardcoded +2.0)
-- Extra reward when correct prayer blocks a hit from a specific NPC while agent has a target. All NPCs mapped: Ket-Zek→magic, Tok-Xil→ranged, MejKot/Tz-Kih/Tz-Kek/Tz-Kek-Sm→melee. Stacks with #11.
-
-**14. npc_melee_range** — cost / constraint | dense per-step penalty | safety penalty | heuristic shaping | **active** (hardcoded -0.5/tick per NPC)
-- Fires per-tick for ANY NPC at distance 1. All NPCs should be kited.
-
-**15. prayer_flick** — **disabled**
-- This reward path is intentionally off in the current live code because earlier runs exploited it.
-
-**16. wasted_attack** — cost / constraint | dense per-step penalty | efficiency penalty | heuristic shaping | **active** (hardcoded -0.3)
-- Fires when attack timer is 0 (ready), agent has a target, but didn't deal damage. Encourages attack-while-kiting.
-
-**17. wave_stall** — cost / constraint | dense per-step penalty | time pressure | heuristic shaping | **active** (hardcoded, escalating after 500 ticks)
-- Fires after 500 ticks in the same wave. -0.75 base, scales by +0.75 every 50 ticks: 500=-0.75, 550=-1.50, 600=-2.25, 650=-3.00, etc. Resets on wave clear.
-
-**18. kiting** — extrinsic | dense per-hit reward | progress reward | heuristic shaping | **active** (hardcoded +1.0)
-- Fires when agent deals damage AND target NPC is at distance 5-7 (near max weapon range of 7)
-
-**19. prayer_waste** — cost / constraint | dense per-step penalty | resource conservation | heuristic shaping | **active** (hardcoded -0.2/tick)
-- Fires when prayer is active but no NPC is within its attack range AND no pending hits in flight
-
-**20. combat_idle** — cost / constraint | dense per-step penalty | engagement forcing | heuristic shaping | **active** (hardcoded -0.5/tick)
-- Fires when `ticks_since_attack >= 2` and `npcs_remaining > 0`. Resets when damage dealt
-
-**21. tick_penalty** — cost / constraint | per-step penalty | living penalty / time cost | heuristic shaping | **active** (w=-0.001)
-- Fires unconditionally every tick. -0.001 per tick = -1.0 per 1000 ticks
-
-### Inactive / Broken Signals
-
-**20. invalid_action** — **broken** (w=-0.1, signal never fires)
-
-**21. correct_jad_prayer** — **inactive** (w=0.0, dead code)
-
-**22. wrong_jad_prayer** — **inactive** (w=0.0, dead code)
-
-**23. wrong_danger_prayer** — **inactive** (w=0.0, dead code)
-
-**24. movement** — **inactive** (w=0.0)
-
-**25. idle** — **inactive** (w=0.0)
-
-**26. w_food_used / w_food_used_well / w_prayer_pot_used** — **inactive** (legacy, parsed but unused)
-- These config weights are still parsed by binding.c but the reward function no longer uses them. Replaced by flat hardcoded food_timing (#9) and pot_timing (#10)
+- **`w_food_used`** — legacy key; parsed but not used by the live reward function.
+- **`w_food_used_well`** — legacy key; parsed but not used by the live reward function.
+- **`w_prayer_pot_used`** — legacy key; parsed but not used by the live reward function.
+- **`w_correct_jad_prayer`** — parsed but no live reward path reads it.
+- **`w_wrong_jad_prayer`** — parsed but no live reward path reads it.
+- **`w_wrong_danger_prayer`** — parsed but no live reward path reads it.
+- **`w_movement`** — parsed but inactive in current reward computation.
+- **`w_idle`** — parsed but inactive in current reward computation.
+- **`prayer_flick` reward path** — intentionally disabled in live code after exploit-like behavior in earlier runs.
 
 ### Audit Notes
 
-- **`invalid_action_this_tick` never set** — Field declared and cleared but never assigned to 1. Dead signal.
+- **`invalid_action_this_tick` is now live** — Invalid RL-facing masked actions now set the backend flag, so `w_invalid_action` is no longer a dead no-op.
+- **`attack_attempt` / `attack_when_ready_rate` are now live** — A real launched attack cycle sets the reward feature, contributes to scalar reward via `w_attack_attempt`, and contributes to the episode analytic `attack_when_ready_rate`.
 - **`w_correct_jad_prayer` / `w_wrong_jad_prayer` / `w_wrong_danger_prayer` never applied** — Weights parsed from config but reward function has no code path that reads them.
 - **Multi-hit overwrite in `hit_style_this_tick`** (Medium) — If 2+ hits resolve in one tick, only last hit's style is tracked. Correct/wrong prayer reward may be inaccurate for multi-hit ticks.
 - **PufferLib 4 does not enforce action masks** — Masks are observation features only. The CUDA sampling kernel samples from raw policy logits without masking. The policy must learn to respect masks.
@@ -229,7 +194,13 @@ Config weights are parsed from `config/fight_caves.ini` in `binding.c:my_init()`
 
 ## Hyperparameters
 
-Training hyperparameters configured in `config/fight_caves.ini` under `[train]`, `[vec]`, and `[policy]` sections. These control the PPO algorithm, vectorized environment, and neural network architecture.
+Config toggles are split across `[base]`, `[env]`, `[train]`, `[vec]`, and `[policy]`. `[env]` contains reward / shaping / curriculum knobs; the sections below document the remaining non-reward runtime and PPO controls.
+
+### Base (`[base]`)
+
+- **`env_name`** — Environment entrypoint name used by PufferLib. Should remain `fight_caves` for this project.
+
+- **`checkpoint_interval`** — How often the trainer saves checkpoints during training. Lower values save more frequently; higher values reduce I/O and disk churn.
 
 ### Training (`[train]`)
 
@@ -259,7 +230,7 @@ Training hyperparameters configured in `config/fight_caves.ini` under `[train]`,
 
 - **total_agents** — Number of parallel environment instances. 4096 agents run simultaneously via OpenMP. More agents = more experience per step = higher SPS but more VRAM.
 
-- **num_buffers** — Number of experience buffers. 1 = single buffer (all agents share one rollout buffer). Standard for single-GPU training.
+- **num_buffers** — Number of experience buffers. 1 = single buffer. 2 = double-buffered rollout / training overlap. This is a real performance / learning toggle in recent runs.
 
 ### Policy Network (`[policy]`)
 
@@ -273,13 +244,21 @@ Training hyperparameters configured in `config/fight_caves.ini` under `[train]`,
 
 - **curriculum_pct** — Fraction of episodes (0.0-1.0) that start at `curriculum_wave`. 1.0 = all episodes start there.
 
+- **curriculum_wave_2** — Optional second curriculum bucket with its own wave start.
+
+- **curriculum_pct_2** — Fraction of episodes assigned to `curriculum_wave_2`.
+
+- **curriculum_wave_3** — Optional third curriculum bucket with its own wave start.
+
+- **curriculum_pct_3** — Fraction of episodes assigned to `curriculum_wave_3`.
+
 - **disable_movement** — 1 = force movement action to idle every tick. Agent can't walk/run. Used to isolate combat learning from movement complexity.
 
 ---
 
 ## Analytics Data Points
 
-These are the main logged metrics that appear in training results.
+These are the live logged metrics that appear in the terminal dashboard, local JSON logs, and W&B. There are currently no retired / disabled analytics that are still emitted under old names.
 
 ### Aggregation Rules
 
@@ -355,6 +334,10 @@ These are the main logged metrics that appear in training results.
 - **`dmg_taken_avg`** — Average total damage taken per episode.
   What it measures: `player.total_damage_taken`.
   Why we have it: broad survivability signal; helps separate “deep run but sloppy” from “deep run and clean.”
+
+- **`attack_when_ready_rate`** — Average fraction of attack-ready ticks where a valid attack was actually launched.
+  What it measures: `ep_attack_attempt_ticks / ep_attack_ready_ticks`.
+  Why we have it: tells us whether the policy is taking shots when its weapon cooldown is ready, without incorrectly counting cooldown time between attacks as “not attacking.”
 
 - **`pots_used`** — Average number of prayer potion doses consumed per episode.
   What it measures: `ep_pots_used`.
@@ -443,7 +426,759 @@ Current config is at the top. Older runs below.
 
 ---
 
-## v19 (2026-04-08, staged / not yet started)
+## v19.3 (2026-04-08, completed)
+
+Naming note:
+- this run used the exact wave-0 checkpoint-transfer recipe that had been
+  staged immediately before launch
+- to keep the run-history numbering aligned with the latest discussion, the
+  executed run is recorded here as `v19.3`
+- actual run id:
+  - `hl0yb7qa`
+- warm-start checkpoint used:
+  - [0000000263192576.bin](/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin)
+
+Mainline direction:
+- checkpoint transfer run
+- warm-start from the best early `v19.1` checkpoint window
+- no sweep
+- no curriculum
+- same backend / same current pruned obs / same no-Jad-telegraph logic
+
+Why `v19.3` exists:
+- `v19.1` proved that direct wave-31 exposure can teach real late-wave
+  mechanics very quickly
+- the next question was whether that competence would transfer back to
+  unbiased full-cave play from wave 1
+- `v19.3` is the clean test of that transfer:
+  - keep the exact `v19` reward / PPO recipe
+  - remove curriculum completely
+  - warm-start from the best `v19.1` checkpoint before the curriculum run
+    regressed
+
+Budget:
+- `v19.1`: `2.5B`
+- `v19.3`: `2.5B`
+
+Run / trainer shape:
+- continuation run, not scratch
+- no `[sweep]` section
+- no curriculum buckets
+- same PPO / reward recipe as `v19`
+- warm-start from:
+  - `8u6flr5y/0000000263192576.bin`
+
+What stays the same as `v19`:
+- `learning_rate = 0.0003`
+- `anneal_lr = 0`
+- `clip_coef = 0.2`
+- `ent_coef = 0.01`
+- `num_buffers = 2`
+- same reward weights and shaping
+- same `w_attack_attempt = 0.1`
+- same `2.5B` budget used in `v19.1`
+
+What changes versus `v19.1`:
+- `load_model_path: None -> 8u6flr5y/0000000263192576.bin`
+- `curriculum_wave: 31 -> 0`
+- `curriculum_pct: 1.0 -> 0.0`
+- all curriculum buckets disabled
+
+Results (`hl0yb7qa`):
+- completed normally
+- continuation run confirmed:
+  - `load_model_path = 8u6flr5y/0000000263192576.bin`
+  - no sweep
+  - no curriculum
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1154.2s`
+- throughput: `2.18M SPS`
+
+Final metrics:
+- `episode_return = 5539.23`
+- `episode_length = 4869.51`
+- `wave_reached = 30.66`
+- `max_wave = 33`
+- `most_npcs_slayed = 124`
+- `score = 0.0`
+- `prayer_uptime = 0.896`
+- `prayer_uptime_melee = 0.356`
+- `prayer_uptime_range = 0.540`
+- `prayer_uptime_magic = 0.000001`
+- `correct_prayer = 1785.32`
+- `wrong_prayer_hits = 70.83`
+- `no_prayer_hits = 35.02`
+- `prayer_switches = 600.17`
+- `damage_blocked = 25106.45`
+- `dmg_taken_avg = 2502.86`
+- `attack_when_ready_rate = 0.301`
+- `pots_used = 23.80`
+- `avg_prayer_on_pot = 0.562`
+- `food_eaten = 13.63`
+- `avg_hp_on_food = 0.905`
+- `food_wasted = 12.23`
+- `pots_wasted = 4.57`
+- `tokxil_melee_ticks = 11.99`
+- `ketzek_melee_ticks = 0.56`
+- `reached_wave_30 = 0.991`
+- `cleared_wave_30 = 0.540`
+- `reached_wave_31 = 0.540`
+
+Trajectory:
+- `126M` steps:
+  - `wave_reached = 24.1`
+  - `episode_return = 3225.1`
+- `239M` steps:
+  - `wave_reached = 28.1`
+  - `episode_return = 4533.9`
+- `369M` steps:
+  - `wave_reached = 29.8`
+  - `episode_return = 5085.4`
+- `973M` steps:
+  - `wave_reached = 30.0`
+  - `episode_return = 5358.5`
+- `1.26B` steps:
+  - `wave_reached = 30.0`
+  - `episode_return = 5890.7`
+- `1.89B` steps:
+  - `wave_reached = 30.0`
+  - `episode_return = 7203.7`
+- `2.26B` steps:
+  - `wave_reached = 30.5`
+  - `episode_return = 7413.9`
+  - this was the strongest window
+- final:
+  - `wave_reached = 30.66`
+  - `episode_return = 5539.23`
+
+What went right:
+- this is the best **unbiased full-cave average-wave run so far**
+  on the current stack
+- it is the first run to combine:
+  - `wave_reached > 30.5`
+  - `cleared_wave_30 > 0.5`
+  - much lower food/pot use
+  - much lower no-prayer exposure
+- transfer from the `v19.1` curriculum checkpoint was clearly real
+
+Comparison to `v19` (`12gtkmfc`):
+- `wave_reached: 30.66 vs 29.29`
+- `max_wave: 33 vs 33`
+- `episode_return: 5539 vs 5462`
+- `reached_wave_30: 0.991 vs 0.594`
+- `cleared_wave_30: 0.540 vs 0.0`
+- `reached_wave_31: 0.540 vs 0.0`
+- `dmg_taken_avg: 2503 vs 3016`
+- `pots_used: 23.8 vs 30.4`
+- `food_eaten: 13.6 vs 20.0`
+- `avg_prayer_on_pot: 0.562 vs 0.762`
+- `pots_wasted: 4.57 vs 20.38`
+- `food_wasted: 12.23 vs 19.33`
+- `no_prayer_hits: 35.0 vs 119.6`
+- `wrong_prayer_hits: 70.8 vs 84.0`
+- `damage_blocked: 25106 vs 16176`
+
+Interpretation versus `v19`:
+- the checkpoint transfer worked
+- the biggest gains were not raw late-wave mechanics by themselves
+- the biggest gains were:
+  - much better resource conservation
+  - much lower unprotected damage exposure
+  - much stronger conversion of wave-30 entries into actual wave-31 starts
+- this strongly supports the view that the old `29-30` wall was not just
+  “missing Ket-Zek reps”; it was also a resource / tempo wall
+
+Comparison to `v19.1` (`8u6flr5y`):
+- direct raw depth is not comparable because `v19.1` used forced wave-31
+  curriculum
+- useful side-metric comparisons:
+  - `dmg_taken_avg: 2503 vs 4162`
+  - `pots_used: 23.8 vs 29.2`
+  - `food_eaten: 13.6 vs 19.9`
+  - `avg_prayer_on_pot: 0.562 vs 0.434`
+  - `pots_wasted: 4.57 vs 4.63`
+  - `food_wasted: 12.23 vs 14.83`
+  - `attack_when_ready_rate: 0.301 vs 0.138`
+  - `prayer_uptime_magic: ~0.000 vs 0.483`
+
+Interpretation versus `v19.1`:
+- the curriculum run successfully taught something transferable, but it was
+  **not** mainly durable magic-prayer behavior
+- what transferred best was:
+  - better offensive tempo
+  - better potion/food discipline
+  - lower damage intake
+  - better overall conversion through the `29-30` wall
+- what did **not** transfer cleanly was late-wave magic-prayer usage
+- `prayer_uptime_magic` collapsing back to ~0 is one of the strongest signs
+  that this run did not preserve the full Ket-Zek-specific behavior from
+  `v19.1`
+
+Comparison to `v18.1` (`xm6i52ta`):
+- `wave_reached: 30.66 vs 29.24`
+- `max_wave: 33 vs 34`
+- `episode_return: 5539 vs 5535`
+- `reached_wave_30: 0.991 vs 0.306`
+- `cleared_wave_30: 0.540 vs 0.0`
+- `reached_wave_31: 0.540 vs 0.0`
+- `dmg_taken_avg: 2503 vs 3580`
+- `pots_used: 23.8 vs 31.5`
+- `food_eaten: 13.6 vs 20.0`
+- `avg_prayer_on_pot: 0.562 vs 0.690`
+- `pots_wasted: 4.57 vs 13.3`
+- `food_wasted: 12.23 vs 19.4`
+- `no_prayer_hits: 35.0 vs 77.5`
+- `wrong_prayer_hits: 70.8 vs 143.4`
+- `damage_blocked: 25106 vs 34386`
+
+Interpretation versus `v18.1`:
+- `v19.3` is much more efficient and much more practical on whole-cave metrics
+- it does not match `v18.1` in raw prayer/blocking volume, but it no longer
+  needs to; it is getting deeper while spending far fewer resources
+- the trade is:
+  - less overall blocking activity
+  - much better efficiency and much better milestone conversion
+
+Comparison to `v1_retro` (`yjxqnott`):
+- `wave_reached: 30.66 vs 30.10`
+- `max_wave: 33 vs 34`
+- `episode_return: 5539 vs 4662`
+- `reached_wave_30: 0.991 vs 1.0`
+- `cleared_wave_30: 0.540 vs 0.500`
+- `reached_wave_31: 0.540 vs 0.500`
+- `dmg_taken_avg: 2503 vs 4286`
+- `wrong_prayer_hits: 70.8 vs 210.5`
+- `no_prayer_hits: 35.0 vs 89.5`
+- `pots_used: 23.8 vs 22.5`
+- `food_eaten: 13.6 vs 20.0`
+- `food_wasted: 12.23 vs 18.5`
+- `pots_wasted: 4.57 vs 7.5`
+
+Interpretation versus `v1_retro`:
+- `v19.3` keeps the best part of `v1_retro`:
+  - fast, aggressive progress through the cave
+- but removes much of the chaos:
+  - far lower damage taken
+  - far fewer prayer mistakes
+  - far less waste
+- this is a clear sign that the modern shaping stack can work when seeded from
+  the right policy state
+
+Most important new insight:
+- the `v19.1` checkpoint did **not** mainly transfer “Ket-Zek skill”
+- it transferred a stronger **resource-efficient wave-29/30 policy**
+- evidence:
+  - dramatic improvement in food/pot use and waste
+  - dramatic drop in no-prayer hits
+  - large improvement in wave-30 -> wave-31 conversion
+  - near-zero magic-prayer uptime in the transferred run
+- that means the old bottleneck was more about:
+  - resource preservation
+  - ready-to-attack tempo
+  - range/melee defensive discipline before and around the `29-30` wall
+  than about pure Ket-Zek mechanics
+
+Attack readiness signal:
+- `attack_when_ready_rate = 0.301`
+- this is far better than the late `v19.1` value of `0.138`
+- the run still becomes somewhat more passive over time, but it does **not**
+  collapse into the same severe passivity seen in the late curriculum run
+- this is likely one of the main reasons resource use fell so much
+
+What did not fully transfer:
+- magic prayer
+- explicit late-wave boss handling
+- rare-event tail depth
+  - `max_wave` did not exceed the best rare tails from `v18.1` / `v19.1`
+- so `v19.3` is best understood as:
+  - a very strong full-cave progression run
+  - not yet a full late-game/Jad mastery run
+
+Bottom line:
+- `v19.3` is the strongest whole-cave run yet on average progress and
+  milestone conversion
+- the checkpoint transfer idea is validated
+- the main benefit of the `v19.1` curriculum checkpoint was not direct
+  Ket-Zek mastery; it was improved resource/tempo policy
+- the next improvements should focus on preserving these gains while
+  reintroducing durable magic-prayer / post-wave-30 competence
+
+Best checkpoint window:
+- strongest region appears around `~1.89B-2.26B`
+- if replaying or reusing a checkpoint from this run, start in that window,
+  not from the final checkpoint
+
+## v19.2 (2026-04-08, staged)
+
+Mainline direction:
+- checkpoint transfer run
+- warm-start from `v19.1`
+- no sweep
+- no curriculum
+- same backend / same current pruned obs / same no-Jad-telegraph logic
+
+Why `v19.2` exists:
+- `v19.1` proved the agent can learn late-wave mechanics quickly when exposed:
+  - real magic-prayer usage
+  - real mixed-threat switching
+  - much better potion timing
+  - repeated deep late-wave progress up to `max_wave = 63`
+- that makes `v19.2` the clean transfer test:
+  - keep the same `v19` reward/optimizer recipe
+  - remove curriculum entirely
+  - start from a strong `v19.1` checkpoint
+  - see whether the learned late-wave competence transfers back to full-cave
+    play from wave 1
+
+Budget:
+- `v19.1`: `2.5B`
+- `v19.2`: `2.5B`
+
+Checkpoint choice:
+- warm-start from:
+  - [0000000263192576.bin](/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin)
+- rationale:
+  - this sits in the first strong `v19.1` peak window (`~237M-367M`)
+  - it captures the early late-wave competence before the long-run regression
+  - it is earlier and likely cleaner than later checkpoints from the same run
+
+Run / trainer shape:
+- continuation run, not scratch
+- no `[sweep]` section
+- no curriculum buckets
+- same PPO / reward recipe as `v19`
+- default launch path:
+  - `cd /home/joe/projects/runescape-rl/codex3/runescape-rl && FORCE_BACKEND_REBUILD=1 LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin bash train.sh`
+
+What stays the same as `v19`:
+- `learning_rate = 0.0003`
+- `anneal_lr = 0`
+- `clip_coef = 0.2`
+- `ent_coef = 0.01`
+- `num_buffers = 2`
+- same reward weights and shaping
+- same `w_attack_attempt = 0.1`
+- same `2.5B` late-run budget as `v19.1`
+
+What changes versus `v19.1`:
+- `load_model_path: None -> 8u6flr5y/0000000263192576.bin`
+- `curriculum_wave: 31 -> 0`
+- `curriculum_pct: 1.0 -> 0.0`
+- all late-wave curriculum buckets disabled
+
+Why this is the right next test:
+- if `v19.2` improves full-cave results from wave 1, then late-wave skill
+  transfer is real and the curriculum run taught something reusable
+- if `v19.2` still collapses around the old `29-30` shelf, then the problem is
+  not just missing late-wave competence; it is likely deeper resource/tempo
+  policy quality across the whole cave
+
+What to watch:
+- unbiased full-cave metrics again:
+  - `wave_reached`
+  - `reached_wave_30`
+  - `cleared_wave_30`
+  - `reached_wave_31`
+- whether the `v19.1` improvements transfer:
+  - `prayer_uptime_magic`
+  - `no_prayer_hits`
+  - `avg_prayer_on_pot`
+  - `pots_wasted`
+  - `attack_when_ready_rate`
+- whether the agent arrives late with more resources rather than merely having
+  learned late-wave switching in isolation
+
+Live `v19.2` config block:
+
+```ini
+[base]
+env_name = fight_caves
+checkpoint_interval = 50
+
+[env]
+w_damage_dealt = 0.5
+w_attack_attempt = 0.1
+w_damage_taken = -0.6
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = 0.0
+w_food_used_well = 0.0
+w_prayer_pot_used = 0.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.5
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.005
+shape_food_full_waste_penalty = -6.5
+shape_food_waste_scale = -1.2
+shape_food_safe_hp_threshold = 1.0
+shape_food_no_threat_penalty = 0.0
+shape_pot_full_waste_penalty = -6.5
+shape_pot_waste_scale = -1.2
+shape_pot_safe_prayer_threshold = 1.0
+shape_pot_no_threat_penalty = 0.0
+shape_wrong_prayer_penalty = -1.0
+shape_npc_specific_prayer_bonus = 2.5
+shape_npc_melee_penalty = -0.3
+shape_wasted_attack_penalty = -0.1
+shape_wave_stall_start = 500
+shape_wave_stall_base_penalty = -0.5
+shape_wave_stall_ramp_interval = 50
+shape_wave_stall_cap = -2.0
+shape_not_attacking_grace_ticks = 2
+shape_not_attacking_penalty = -0.01
+shape_kiting_reward = 1.0
+shape_kiting_min_dist = 5
+shape_kiting_max_dist = 7
+shape_unnecessary_prayer_penalty = -0.2
+shape_resource_threat_window = 2
+curriculum_wave = 0
+curriculum_pct = 0.0
+curriculum_wave_2 = 0
+curriculum_pct_2 = 0.0
+curriculum_wave_3 = 0
+curriculum_pct_3 = 0.0
+disable_movement = 0
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 2_500_000_000
+learning_rate = 0.0003
+anneal_lr = 0
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+## v19.1 (2026-04-08, completed)
+
+Mainline direction:
+- scratch run
+- no checkpoint
+- no sweep
+- forced curriculum
+- same backend / same current pruned obs / same no-Jad-telegraph logic
+
+Why `v19.1` exists:
+- `v19` validated the `v1_retro` optimizer base and reached the `~29-30`
+  shelf very quickly
+- but `v19` still failed to convert that shelf into stable wave-31+ progress,
+  and `prayer_uptime_magic = 0.0` strongly suggests weak Ket-Zek / late-wave
+  magic handling
+- `v19.1` is a direct diagnostic run:
+  - always start at wave 31
+  - keep the exact `v19` optimizer and reward recipe
+  - force late-wave Ket-Zek / boss exposure
+  - determine whether late-game mechanics are the wall, or whether the real
+    wall is arriving there in poor shape from earlier waves
+
+Budget:
+- `v19`: `10B`
+- `v19.1`: `2.5B`
+
+Run / trainer shape:
+- scratch run, not continuation
+- no `[sweep]` section
+- curriculum always starts at wave 31:
+  - `curriculum_wave = 31`
+  - `curriculum_pct = 1.0`
+  - all other curriculum buckets disabled
+- default launch path:
+  - `cd /home/joe/projects/runescape-rl/codex3/runescape-rl && bash train.sh`
+
+Key differences from `v19`:
+- same PPO settings
+- same vectorization
+- same policy architecture
+- same reward shaping
+- same `w_attack_attempt = 0.1`
+- only two intentional changes:
+  - `total_timesteps: 10B -> 2.5B`
+  - curriculum forced to wave 31 for 100% of episodes
+
+Why this is worth testing:
+- if `v19.1` quickly learns meaningful magic-prayer uptime, Ket-Zek handling,
+  and late-wave conversion, then the late-game mechanics themselves are likely
+  the missing experience
+- if `v19.1` still fails despite constant wave-31 exposure, then the real wall
+  is probably broader policy quality:
+  - bad early-wave tempo
+  - poor resource state arriving late
+  - insufficient general combat quality rather than insufficient Ket-Zek reps
+
+Analytic expectation:
+- `attack_when_ready_rate` should appear in this run
+- the local launch path now rebuilds the backend automatically when
+  `training-env` sources are newer than the compiled extension, so the next
+  local `train.sh` launch should pick up the new reward/analytic path instead
+  of reusing the stale backend that masked it in `v19`
+
+Live `v19.1` config block:
+
+```ini
+[base]
+env_name = fight_caves
+checkpoint_interval = 50
+
+[env]
+w_damage_dealt = 0.5
+w_attack_attempt = 0.1
+w_damage_taken = -0.6
+w_npc_kill = 3.0
+w_wave_clear = 10.0
+w_jad_damage = 2.0
+w_jad_kill = 50.0
+w_player_death = -20.0
+w_cave_complete = 100.0
+w_food_used = 0.0
+w_food_used_well = 0.0
+w_prayer_pot_used = 0.0
+w_correct_jad_prayer = 0.0
+w_wrong_jad_prayer = 0.0
+w_correct_danger_prayer = 0.5
+w_wrong_danger_prayer = 0.0
+w_invalid_action = -0.1
+w_movement = 0.0
+w_idle = 0.0
+w_tick_penalty = -0.005
+shape_food_full_waste_penalty = -6.5
+shape_food_waste_scale = -1.2
+shape_food_safe_hp_threshold = 1.0
+shape_food_no_threat_penalty = 0.0
+shape_pot_full_waste_penalty = -6.5
+shape_pot_waste_scale = -1.2
+shape_pot_safe_prayer_threshold = 1.0
+shape_pot_no_threat_penalty = 0.0
+shape_wrong_prayer_penalty = -1.0
+shape_npc_specific_prayer_bonus = 2.5
+shape_npc_melee_penalty = -0.3
+shape_wasted_attack_penalty = -0.1
+shape_wave_stall_start = 500
+shape_wave_stall_base_penalty = -0.5
+shape_wave_stall_ramp_interval = 50
+shape_wave_stall_cap = -2.0
+shape_not_attacking_grace_ticks = 2
+shape_not_attacking_penalty = -0.01
+shape_kiting_reward = 1.0
+shape_kiting_min_dist = 5
+shape_kiting_max_dist = 7
+shape_unnecessary_prayer_penalty = -0.2
+shape_resource_threat_window = 2
+curriculum_wave = 31
+curriculum_pct = 1.0
+curriculum_wave_2 = 0
+curriculum_pct_2 = 0.0
+curriculum_wave_3 = 0
+curriculum_pct_3 = 0.0
+disable_movement = 0
+
+[vec]
+total_agents = 4096
+num_buffers = 2
+
+[train]
+total_timesteps = 2_500_000_000
+learning_rate = 0.0003
+anneal_lr = 0
+gamma = 0.999
+gae_lambda = 0.95
+clip_coef = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+max_grad_norm = 0.5
+horizon = 256
+minibatch_size = 4096
+
+[policy]
+hidden_size = 256
+num_layers = 2
+```
+
+Results (`8u6flr5y`):
+- completed normally
+- scratch run confirmed:
+  - `load_model_path = None`
+  - no sweep
+  - curriculum fixed at wave 31 for all episodes
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1166.3s`
+- throughput: `2.11M SPS`
+
+Final metrics:
+- `episode_return = 8175.82`
+- `episode_length = 6547.15`
+- `wave_reached = 44.10`
+- `max_wave = 63`
+- `most_npcs_slayed = 154`
+- `score = 0.0`
+- `prayer_uptime = 0.934`
+- `prayer_uptime_melee = 0.164`
+- `prayer_uptime_range = 0.287`
+- `prayer_uptime_magic = 0.483`
+- `correct_prayer = 3588.02`
+- `wrong_prayer_hits = 186.33`
+- `no_prayer_hits = 19.19`
+- `prayer_switches = 3795.27`
+- `damage_blocked = 294652.41`
+- `dmg_taken_avg = 4161.77`
+- `attack_when_ready_rate = 0.138`
+- `pots_used = 29.22`
+- `avg_prayer_on_pot = 0.434`
+- `food_eaten = 19.91`
+- `avg_hp_on_food = 0.858`
+- `food_wasted = 14.83`
+- `pots_wasted = 4.63`
+- `tokxil_melee_ticks = 7.31`
+- `ketzek_melee_ticks = 14.95`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+
+Critical caveat:
+- raw wave milestones are heavily contaminated by curriculum here
+- `reached_wave_30`, `cleared_wave_30`, and `reached_wave_31` are trivial
+  because every episode starts at wave 31
+- `wave_reached = 44.10` is still meaningful as a late-wave survival / progress
+  measure, but it is **not** comparable to scratch wave-1 averages from
+  `v19`, `v18.1`, or `v1_retro`
+
+Trajectory:
+- `2.1M` steps:
+  - `wave_reached = 31.2`
+  - `episode_return = -31.8`
+  - `attack_when_ready_rate = 0.789`
+- `123.7M` steps:
+  - `wave_reached = 53.6`
+  - `episode_return = 13066.5`
+- `237.0M` steps:
+  - `wave_reached = 57.9`
+  - `episode_return = 17175.7`
+  - this was the strongest late-wave checkpoint window
+- `367.0M` steps:
+  - `wave_reached = 57.4`
+  - `episode_return = 17213.0`
+- `971.0M` steps:
+  - `wave_reached = 54.7`
+  - `episode_return = 15909.1`
+- `1.63B` steps:
+  - `wave_reached = 45.0`
+  - `episode_return = 8406.8`
+- `2.50B` steps:
+  - `wave_reached = 44.1`
+  - `episode_return = 8175.8`
+  - `attack_when_ready_rate = 0.138`
+
+What the run proves:
+- direct wave-31 exposure works
+- the agent very quickly learned real late-wave mechanics:
+  - non-trivial `prayer_uptime_magic = 0.483`
+  - very high `correct_prayer`
+  - very low `no_prayer_hits`
+  - `max_wave = 63`
+- this strongly argues that Ket-Zek itself is **not** the main hard wall
+- if Ket-Zek were the main blocker, the run would not rapidly climb into the
+  mid/upper-50s and repeatedly reach Jad-wave territory
+
+What improved versus `v19`:
+- much better late-wave prayer handling:
+  - `prayer_uptime_magic: 0.483 vs 0.000`
+  - `correct_prayer: 3588 vs 1233`
+  - `damage_blocked: 294652 vs 16176`
+  - `no_prayer_hits: 19.2 vs 119.6`
+  - `prayer_switches: 3795 vs 613`
+- much better potion timing:
+  - `avg_prayer_on_pot: 0.434 vs 0.762`
+  - `pots_wasted: 4.63 vs 20.38`
+- somewhat better food timing:
+  - `avg_hp_on_food: 0.858 vs 0.929`
+  - `food_wasted: 14.83 vs 19.33`
+
+What did not improve enough:
+- total resource consumption is still extremely high:
+  - `pots_used = 29.22`
+  - `food_eaten = 19.91`
+- the agent still burns essentially the whole inventory
+- `dmg_taken_avg = 4161.77` is worse than `v19` and worse than `v18.1`
+- `wrong_prayer_hits = 186.33` is still high in absolute terms
+- `score = 0.0` even though `max_wave = 63`
+
+Most important new insight:
+- the remaining issue is not “the agent never learned magic prayer”
+- the remaining issue looks more like:
+  - high-pressure mixed-threat execution is still too sloppy
+  - the agent survives long enough to see the late game, but takes too much
+    damage and spends too many resources doing it
+  - it reaches Jad territory, but not in a strong enough state to convert
+
+Attack readiness signal:
+- this was the first run where `attack_when_ready_rate` was successfully logged
+- it is extremely informative
+- the metric collapses over training:
+  - `0.789 -> 0.401 -> 0.230 -> 0.181 -> 0.138`
+- interpretation:
+  - the policy becomes increasingly passive on ticks where its weapon is ready
+  - it over-shifts toward survival / prayer maintenance and gives up offense
+  - that likely contributes directly to:
+    - longer episodes
+    - more incoming attacks
+    - more prayer drain
+    - more food use
+    - more resource depletion before a clear is secured
+
+Comparison to `v19`:
+- `v19.1` is **not** directly comparable on raw depth because of curriculum
+- but on late-wave side metrics it is decisively more competent:
+  - it learned magic prayer
+  - it learned switching under dense threat
+  - it learned much better potion timing
+- that means the absence of late-wave reps in full scratch runs was a real
+  weakness
+- however, `v19.1` also shows that late-wave reps alone are not sufficient to
+  solve the cave from wave 1
+
+Comparison to `v18.1`:
+- `v18.1` remained a stronger whole-cave policy in terms of unbiased wave-1
+  average
+- but `v19.1` teaches a different lesson:
+  - the agent can absolutely learn the late-wave mechanics when exposed
+  - the late-game wall is not purely a missing-signal problem anymore
+
+Bottom line:
+- your current read is partly right, but with one important refinement
+- it is **not** mainly “bad potion timing” anymore
+- `v19.1` learned potion timing surprisingly well
+- the bigger remaining problem is:
+  - the agent still takes too much damage in late-wave mixed-threat combat
+  - it still spends nearly the full inventory
+  - it becomes too passive about attacking when ready
+- so the wall looks more like **late-wave tempo + mixed-threat execution +
+  resource burn under pressure**, not a simple inability to use magic prayer or
+  handle Ket-Zek in isolation
+
+Best checkpoint window:
+- if you want replay targets from this run, use the `~237M-367M` region
+- the final checkpoint is clearly worse than the early/mid-run peak
+
+## v19 (2026-04-08, completed)
 
 Mainline direction:
 - scratch run
@@ -658,6 +1393,154 @@ Pre-run expectation:
 - key thing to watch:
   - whether the added shaping keeps the speed while reducing the messiness,
     or whether it overconstrains the policy again
+
+Results (`12gtkmfc`):
+- completed normally
+- scratch run confirmed:
+  - `load_model_path = None`
+  - no sweep
+  - no curriculum
+- final trainer step: `9,999,220,736 / 10,000,000,000`
+- runtime: `4962.0s`
+- throughput: `1.95M SPS`
+
+Final metrics:
+- `episode_return = 5462.44`
+- `wave_reached = 29.29`
+- `max_wave = 33`
+- `reached_wave_30 = 0.594`
+- `cleared_wave_30 = 0.0`
+- `reached_wave_31 = 0.0`
+- `correct_prayer = 1233.13`
+- `wrong_prayer_hits = 84.02`
+- `no_prayer_hits = 119.59`
+- `prayer_switches = 612.80`
+- `damage_blocked = 16176.20`
+- `dmg_taken_avg = 3015.86`
+- `pots_used = 30.42`
+- `pots_wasted = 20.38`
+- `food_eaten = 20.0`
+- `food_wasted = 19.33`
+- `avg_prayer_on_pot = 0.762`
+- `avg_hp_on_food = 0.929`
+- `prayer_uptime = 0.732`
+- `prayer_uptime_range = 0.262`
+- `prayer_uptime_magic = 0.0`
+- `tokxil_melee_ticks = 3.30`
+- `ketzek_melee_ticks = 0.0`
+
+Trajectory:
+- `1.252B` steps:
+  - `wave_reached = 29.18`
+  - `episode_return = 5467.62`
+  - `reached_wave_30 = 0.783`
+- `3.751B` steps:
+  - `wave_reached = 30.0009`
+  - `episode_return = 6389.86`
+  - `reached_wave_30 = 0.977`
+  - this was the best window of the run
+- `6.251B` steps:
+  - `wave_reached = 29.92`
+  - `episode_return = 5870.51`
+  - `reached_wave_30 = 0.893`
+- `8.750B` steps:
+  - `wave_reached = 29.58`
+  - `episode_return = 5704.41`
+  - `reached_wave_30 = 0.600`
+- `10.000B` steps:
+  - `wave_reached = 29.29`
+  - `episode_return = 5462.44`
+  - `reached_wave_30 = 0.594`
+
+Comparison to `v1_retro` (`yjxqnott`, 500M):
+- `v1_retro` was still stronger on depth and conversion:
+  - `wave_reached: 30.10 vs 29.29`
+  - `max_wave: 34 vs 33`
+  - `reached_wave_30: 1.00 vs 0.594`
+  - `cleared_wave_30: 0.50 vs 0.0`
+  - `reached_wave_31: 0.50 vs 0.0`
+- `v19` was much cleaner defensively:
+  - `wrong_prayer_hits: 84.0 vs 210.5`
+  - `dmg_taken_avg: 3015.9 vs 4286.5`
+  - `tokxil_melee_ticks: 3.30 vs 62.0`
+- but `v19` also blocked far less damage and switched far less:
+  - `damage_blocked: 16176 vs 29157`
+  - `prayer_switches: 613 vs 2286`
+- interpretation:
+  - `v19` traded away the messy high-ceiling aggression of `v1_retro`
+  - it became calmer and safer, but that safety did not translate into
+    better late-wave conversion
+
+Comparison to `v18.1` (`xm6i52ta`, 10B):
+- final performance was very similar, with `v19` only marginally better on
+  average depth:
+  - `wave_reached: 29.29 vs 29.24`
+  - `episode_return: 5462 vs 5535`
+  - `max_wave: 33 vs 34`
+- the real improvement was sample efficiency:
+  - `v19` was already at `29.18` by `1.25B`
+  - `v18.1` was only at `26.28` at the same point
+  - `v19` peaked by `3.75B`, while `v18.1` did not peak until `~6.26B`
+- defensive profile versus `v18.1` was mixed:
+  - better:
+    - `wrong_prayer_hits: 84.0 vs 143.4`
+    - `dmg_taken_avg: 3015.9 vs 3580.0`
+  - worse:
+    - `no_prayer_hits: 119.6 vs 77.5`
+    - `damage_blocked: 16176 vs 34386`
+    - `prayer_uptime: 0.732 vs 0.835`
+    - `prayer_uptime_magic: 0.0 vs 0.041`
+- interpretation:
+  - `v19` reached the old shelf much faster
+  - but it underused prayer, especially magic prayer, and never turned that
+    faster climb into stronger deep-wave conversion
+
+What worked:
+- the `v1_retro` PPO base was validated again:
+  - `learning_rate = 0.0003`
+  - `anneal_lr = 0`
+  - `ent_coef = 0.01`
+  - `num_buffers = 2`
+- `v19` shows that this base reaches the `~29-30` shelf far faster than
+  `v18.1`
+- the run was operationally stable for the full `10B` budget
+
+What did not work:
+- stronger food/pot waste shaping did **not** produce better resource
+  behavior:
+  - `pots_wasted` stayed high at `20.38`
+  - `avg_prayer_on_pot = 0.762` was worse than both `v1_retro` and `v18.1`
+  - `food_wasted` stayed essentially unchanged
+- the moderate prayer shaping appears too weak and too static:
+  - very low switching relative to prior strong runs
+  - almost no magic-prayer uptime
+  - much lower blocked damage
+- the run peaked around `3.75B` and then steadily regressed
+
+Most important caveat:
+- `env/attack_when_ready_rate` is absent from the stored metrics for
+  `12gtkmfc`
+- that metric should have been present if the rebuilt backend/logging path was
+  actually loaded
+- so this run likely started from a stale compiled extension before the
+  automatic rebuild fix landed
+- because the same patchset added `w_attack_attempt`, treat the effect of
+  `w_attack_attempt = 0.1` in `v19` as **unverified**
+
+Bottom line:
+- `v19` was a success relative to `v18.1` on sample efficiency
+- `v19` was not a success relative to `v1_retro` on actual deep-wave
+  conversion
+- the reintroduced shaping likely overconstrained the policy again, while not
+  actually improving the resource metrics it was supposed to improve
+
+Best checkpoint window:
+- if you want to replay or inspect the best point from this run, use the
+  `~3.75B` region, not the final checkpoint
+- that was the strongest combination of:
+  - `wave_reached`
+  - `episode_return`
+  - `reached_wave_30`
 
 ## v1_retro (2026-04-08, completed)
 

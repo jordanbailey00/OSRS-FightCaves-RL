@@ -47,9 +47,17 @@ export CXX="${CXX:-g++}"
 
 EXT_SUFFIX="$(python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX') or '')")"
 BACKEND_SO="$PUFFER_DIR/pufferlib/_C${EXT_SUFFIX}"
+BACKEND_REBUILD_REASON=""
 if [ ! -f "$BACKEND_SO" ]; then
-    echo "[train.sh] Missing local PufferLib backend at $BACKEND_SO"
-    echo "[train.sh] Building fight_caves backend..."
+    BACKEND_REBUILD_REASON="missing backend"
+elif find "$SRC_DIR/training-env" "$PUFFER_DIR/src/vecenv.h" -type f -newer "$BACKEND_SO" -print -quit | grep -q .; then
+    BACKEND_REBUILD_REASON="backend sources newer than compiled extension"
+elif [ "${FORCE_BACKEND_REBUILD:-0}" = "1" ]; then
+    BACKEND_REBUILD_REASON="FORCE_BACKEND_REBUILD=1"
+fi
+
+if [ -n "$BACKEND_REBUILD_REASON" ]; then
+    echo "[train.sh] Rebuilding fight_caves backend: $BACKEND_REBUILD_REASON"
     bash "$PUFFER_DIR/build.sh" fight_caves
 fi
 
