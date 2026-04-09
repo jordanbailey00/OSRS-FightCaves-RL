@@ -1913,8 +1913,8 @@ static void draw_panel(ViewerState* v) {
         }
     }
 
-    /* ---- Manual TPS preset buttons (below movement/loadout controls) ---- */
-    if (!v->policy_pipe) {
+    /* ---- TPS preset buttons (manual and replay modes) ---- */
+    {
         int box_x = px + 8;
         int box_w = PANEL_WIDTH - 16;
         int box_y = controls_y;
@@ -1928,7 +1928,8 @@ static void draw_panel(ViewerState* v) {
 
         DrawRectangle(box_x, box_y, box_w, box_h, CLITERAL(Color){20, 18, 14, 220});
         DrawRectangleLines(box_x, box_y, box_w, box_h, COL_PANEL_BORDER);
-        text_s("TPS Presets", box_x + 6, label_y, 9, COL_TEXT_DIM);
+        text_s(v->policy_pipe ? "Replay TPS" : "TPS Presets",
+               box_x + 6, label_y, 9, COL_TEXT_DIM);
 
         for (int i = 0; i < NUM_MANUAL_TPS_PRESETS; i++) {
             int row = i / btn_cols;

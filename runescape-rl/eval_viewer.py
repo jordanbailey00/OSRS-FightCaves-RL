@@ -11,7 +11,7 @@ Usage:
 
 Controls (in viewer window):
     Space       — pause/resume
-    1/2/4/0     — replay speed presets
+    Side panel  — replay TPS presets
     Up/Down     — cycle replay speed presets
     Right-drag  — orbit camera
     Scroll      — zoom
@@ -230,7 +230,7 @@ def main():
     parser.add_argument("--start-wave", type=int, default=0,
                         help="Start at this wave (0 = wave 1)")
     parser.add_argument("--speed", type=int, choices=[1, 2, 4, 10], default=1,
-                        help="Initial replay speed multiplier")
+                        help="Initial replay speed multiplier (buttons can switch to TPS presets)")
     parser.add_argument("--episodes", type=int, default=0,
                         help="Stop after this many replay episodes (0 = unlimited)")
     args = parser.parse_args()
@@ -268,15 +268,20 @@ def main():
 
         try:
             import torch
-            from pufferlib import _C
+            import pufferlib.models
             from pufferlib.pufferl import load_config
 
             eval_args = load_config("fight_caves")
-            # Create a vec to get obs_size/act_sizes for model construction
-            vec = _C.create_vec(eval_args, 0)
-            from pufferlib.torch_pufferl import load_policy
-            policy = load_policy(eval_args, vec)
-            vec.close()
+            policy_kwargs = eval_args["policy"]
+            network_cls = getattr(pufferlib.models, eval_args["torch"]["network"])
+            encoder_cls = getattr(pufferlib.models, eval_args["torch"]["encoder"])
+            decoder_cls = getattr(pufferlib.models, eval_args["torch"]["decoder"])
+
+            network = network_cls(**policy_kwargs)
+            encoder = encoder_cls(total_line_floats, policy_kwargs["hidden_size"])
+            decoder = decoder_cls(act_dims, policy_kwargs["hidden_size"])
+            policy = pufferlib.models.Policy(encoder, decoder, network)
+            policy = policy.cpu()
 
             # Load raw .bin weights into the PyTorch model.
             # The CUDA trainer saves a flat float32 buffer in this order:
@@ -353,11 +358,7 @@ def main():
 
         except Exception as e:
             print(f"[eval] Cannot load policy: {e}", file=sys.stderr)
-            print(
-                "[eval] This usually means the checkpoint was trained on a different "
-                "observation contract than the current viewer.",
-                file=sys.stderr,
-            )
+            print("[eval] Checkpoint loading failed before replay started.", file=sys.stderr)
             print("[eval] Falling back to random actions", file=sys.stderr)
             args.random = True
 
