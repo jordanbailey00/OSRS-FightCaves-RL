@@ -1,158 +1,115 @@
-================================================================================
-DAILY PLAN — 2026-04-04
-================================================================================
+# Today Plan — 2026-04-09
 
-STATUS: v6.1 agent survives 200K ticks but never dies and never clears waves.
-The agent learned that survival (at -0.001/tick) dominates dying (at -20).
-Today's focus: build observability tooling, then diagnose and fix the reward
-structure so the agent actually fights.
+This file reflects the current next work. The shared-backend refactor and replay-speed controls are done.
 
---------------------------------------------------------------------------------
-0. DESIGN.md — Architecture & Lessons-Learned Document
---------------------------------------------------------------------------------
+## 1. Revisit Prayer Timing Changes
 
-Write a comprehensive DESIGN.md at the project root covering:
+Primary objective:
+- revisit the prayer-lock timing change before deciding whether to keep it
+- compare the prayer-only snapshot directly against the pre-prayer baseline
 
-  A. Current Architecture (technical spec):
-     - Frontend: Raylib debug viewer (viewer.c), how it consumes FcState/
-       FcRenderEntity, camera system, UI panels, debug overlays
-     - Backend: fc_*.c/h simulation (tick loop, combat, NPC AI, pathfinding,
-       prayer, wave system, observation/reward extraction)
-     - Training: PufferLib 4.0 integration (fight_caves.h wrapper, binding.c,
-       build.sh, vecenv.h interface)
-     - Cache pipeline: b237 OSRS cache → Python export scripts → binary assets
-       (terrain, objects, atlas, NPC models) → C loader headers
-     - File-by-file breakdown with purpose, key functions, data flow
+What changed:
+- non-Jad incoming hits no longer check live prayer on impact
+- non-Jad hits snapshot prayer on the attack tick
+- Jad melee snapshots on the attack tick
+- Jad ranged / magic snapshots shortly after the tell (`N+1`)
+- pending hits carry the locked prayer state used later at resolve time
 
-  B. How We Got Here (decisions, references, lessons):
-     - What worked: C single-backend architecture, Raylib for viewer, PufferLib
-       4.0 ocean pattern, binary asset pipeline, Void RSPS as porting reference
-     - What didn't work: Kotlin/JVM approach (too slow for RL throughput),
-       runtime cache decoding in C (too complex — preprocess in Python instead),
-       early collision map issues, NPC size/pathfinding bugs
-     - References used: Void RSPS (Kotlin), RSMod rev 233, b237 OSRS cache from
-       openrs2, RuneLite loaders, PufferLib 4.0 ocean examples (snake, convert,
-       template)
-     - Dependencies: Raylib 5.5, PufferLib 4.0, PyTorch, wandb, Python 3.11+
+Where that code lives now:
+- active worktree:
+  - `/home/joe/projects/runescape-rl/codex3/run_post_prayer_pre_obs`
+- saved snapshot:
+  - branch: `snapshot/post-prayer-pre-obs-2026-04-08`
+  - tag: `post-prayer-pre-obs-2026-04-08`
+  - commit: `c232f09b`
+- main core files:
+  - `fc-core/include/fc_types.h`
+  - `fc-core/src/fc_combat.c`
+  - `fc-core/src/fc_npc.c`
 
-  C. Reproduction Guide:
-     - How to set up the same architecture for a different boss/zone
-     - Cache extraction and asset export pipeline steps
-     - Backend porting workflow (RSPS reference → fc_*.c)
-     - PufferLib integration checklist
+Questions to resolve:
+- keep or revert the prayer timing change?
+- if we keep it, is the Jad timing exactly right?
+- is `v_tmp2` (`fkhhysfd`) clearly better than `v_tmp3` (`fg029tll`) once we weigh both progress and stability?
 
-  This is a reference document, not a living plan. Update only on major changes
-  or significant new lessons. Be explicit — reference exact file names, function
-  names, variable names, struct fields. No filler.
+## 2. Revisit Obs / Reward Follow-Up Changes
 
---------------------------------------------------------------------------------
-1. Policy Replay in Debug Viewer
---------------------------------------------------------------------------------
+Primary objective:
+- revisit the post-prayer obs / reward follow-up that regressed `v_tmp1`
+- separate the obs change from the reward-path change instead of bundling them
 
-Goal: Watch the trained v6.1 policy play in the full debug viewer with all
-overlays, so we can diagnose what the agent is actually doing.
+What changed:
+- added `npc_type` back into policy obs
+- policy / puffer contract changed from `106 / 142` to `114 / 150`
+- resolved-hit prayer rewards started using the locked prayer snapshot instead of live prayer at landing
+- debug overlay / docs were updated to match
 
-  PRELIMINARY: Audit PufferLib 4.0 for built-in replay/eval support.
-  The creator has stated replay is part of the framework's functionality, but
-  it's unclear what exactly our side needs to provide. Do a focused audit of:
-    - pufferlib_4/pufferlib/pufferl.py eval path
-    - pufferlib_4/src/vecenv.h c_render() hook
-    - Any existing ocean env that implements visual eval
-  Determine what work is actually needed vs what PufferLib handles natively.
+Where that code lives now:
+- saved snapshot:
+  - branch: `snapshot/post-obs-post-prayer-2026-04-08`
+  - tag: `post-obs-post-prayer-2026-04-08`
+  - commit: `58768c5b8fd4bd4a3a16c97a7f8db5c752bfa8ee`
+- no active worktree right now
+- main files:
+  - `fc-core/include/fc_contracts.h`
+  - `fc-core/include/fc_types.h`
+  - `fc-core/src/fc_state.c`
+  - `fc-core/src/fc_tick.c`
+  - `fc-core/src/fc_combat.c`
+  - `training-env/fight_caves.h`
+  - `demo-env/src/fc_debug_overlay.h`
 
-  VIEWER CHANGES — Add --policy-pipe mode to viewer.c (~30 lines):
-    - When flag is set, viewer reads 5 action ints from stdin each tick
-    - Viewer writes observation floats (policy obs + action mask) to stdout
-      each tick
-    - Replaces build_human_actions() with piped actions
-    - All existing rendering, overlays, event log, camera controls unchanged
-    - Human can still pause (Space), toggle debug (O), inspect state
+Questions to resolve:
+- did `npc_type` obs itself hurt training?
+- did the resolved-hit reward-path change hurt training?
+- reintroduce changes one at a time, not together
 
-  EVAL SCRIPT — Write eval_viewer.py:
-    - Loads PufferLib checkpoint (.bin), reconstructs policy network
-    - Launches viewer subprocess: ./fc_viewer --policy-pipe
-    - Each tick: read obs from viewer stdout → policy forward pass → write
-      5 action ints to viewer stdin
-    - Apply action mask before sampling
-    - Usage: python eval_viewer.py --checkpoint <path_to_.bin>
+## 3. Training-Env Performance Refactor
 
-  This is purely a viewing/piping layer — no backend changes, no fc_*.c
-  modifications.
+Primary objective:
+- refactor `training-env` specifically for performance improvements
+- use gprof
+- use bash build.sh ENV_NAME --profile
 
-  DEPENDENCY: All subsequent items (2-5) require this to be working first.
+## 4. RL Tuning Follow-Up After Refactor
 
---------------------------------------------------------------------------------
-2. Observe Agent Behavior at Wave 30
---------------------------------------------------------------------------------
+Baseline to tune from:
+- `v19` through `v19.3`
+- treat the current `v19` line as the active continuation baseline
+- select the best continuation checkpoint from `v19` through `v19.3` before the next run
 
-With policy replay working, watch the v6.1 agent play with debug overlays
-(O key). Identify what the agent is doing (or not doing):
+Primary recommendation:
+- run a late-wave fine-tune from the best `v19` / `v19.3` checkpoint rather than redesigning the obs/reward stack again
 
-  - Is it safespotting? (LOS overlay will show)
-  - Is it praying? (prayer icon overhead, prayer panel)
-  - Is it attacking? (event log will show combat rolls)
-  - Is it moving? (path overlay, position changes)
-  - Is it eating/drinking? (inventory tab, consumable counts)
-  - Are NPCs stuck? (possible pathfinding bug if NPCs don't reach player)
-  - Is it just idling? (no actions, standing still)
+Recommended first config to try:
+- `total_timesteps = 1_000_000_000`
+- `learning_rate = 0.0003`
+- `clip_coef = 0.15`
+- `ent_coef = 0.01`
+- `checkpoint_interval = 50`
+- `curriculum_wave = 30`
+- `curriculum_pct = 0.05`
+- `curriculum_wave_2 = 31`
+- `curriculum_pct_2 = 0.02`
+- `curriculum_wave_3 = 0`
+- `curriculum_pct_3 = 0.0`
+- keep the rest of the current `v19.3` reward structure unchanged
 
-Document findings before making any changes.
+Reason:
+- the current `v19` / `v19.3` line already proved the current backend/obs can learn
+- the next problem is breaking past the late-wave plateau, not rebuilding early competence
 
---------------------------------------------------------------------------------
-3. Diagnose and Fix Based on Observations
---------------------------------------------------------------------------------
+Secondary control if needed:
+- rerun the exact `v19.3` recipe longer, around `2.5B` total steps, with no curriculum changes
 
-Depending on what we observe in step 2:
+Only-if-needed follow-up:
+- if late Jad switching still looks like the real bottleneck after fine-tuning, try a very small Jad-specific reward adjustment rather than another broad reward rewrite
 
-  - If safespotting indefinitely: impressive emergent behavior, but need to
-    incentivize actually killing NPCs (wave stall penalty)
-  - If idle with prayer on: reward structure lets the agent stall forever —
-    fix the tick/idle penalty balance
-  - If NPCs stuck behind walls: game logic bug, fix pathfinding or spawn
-    positions
-  - If agent can't figure out prayer switching on Jad: may need observation
-    changes (clearer telegraph signal) or curriculum (start at wave 62)
-  - If agent attacks but dies immediately: reward may be too punishing for
-    taking damage, making it overly passive in earlier training
+## 5. Guardrails
 
---------------------------------------------------------------------------------
-4. Fix Reward Structure for v7
---------------------------------------------------------------------------------
-
-The core problem: surviving at -0.001/tick is a better strategy than risking
-death at -20. The agent maximizes reward by doing nothing.
-
-Options to fix:
-
-  A. Wave stall penalty: if wave doesn't advance within N ticks, apply a heavy
-     per-tick penalty (e.g., -0.1/tick after 500 ticks on same wave). Forces
-     the agent to engage.
-
-  B. Reduce death penalty: -5 instead of -20 so the agent takes more risks.
-     Combined with positive kill/wave rewards, fighting becomes dominant.
-
-  C. Per-wave timeout: instead of a global tick cap, each wave gets a timeout
-     (e.g., 500 ticks). Failing to clear the wave = terminal. Directly
-     punishes stalling without touching the reward function.
-
-  D. Revert tick cap to 30K: once rewards incentivize fighting, the agent
-     shouldn't survive 200K ticks doing nothing. Shorter episodes = faster
-     training iterations.
-
-  Likely approach: combine A + B + D. Wave stall penalty forces engagement,
-  lower death penalty reduces passivity, shorter tick cap speeds training.
-
---------------------------------------------------------------------------------
-5. Train v7 and Iterate
---------------------------------------------------------------------------------
-
-Run training with the fixed reward structure. After ~500M steps:
-
-  - Use policy replay to observe v7 agent behavior
-  - Check wandb metrics: wave_reached distribution, episode_length, reward
-  - If agent pushes past wave 30: success, continue training
-  - If new degenerate behavior emerges: diagnose with step 2-3, fix, retrain
-  - Tune reward weights based on observed behavior
-
-Goal: agent that actively fights, progresses through waves, and learns
-prayer switching on Jad.
+Do not do these tomorrow unless a new finding forces it:
+- do not prune or expand observations again
+- do not reintroduce Jad telegraph obs
+- do not bring back the heavy `v17` resource penalties
+- do not mix a large PPO change, large reward change, and curriculum change in one experiment
+- do not treat the final checkpoint as automatically best; evaluate the best `v19` / `v19.3` plateau checkpoint first

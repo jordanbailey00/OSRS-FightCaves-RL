@@ -6,34 +6,137 @@ Uses PufferLib's CUDA backend for policy inference, pipes actions to the
 standalone viewer (fc_viewer --policy-pipe) via stdin/stdout.
 
 Usage:
-    python eval_viewer.py --checkpoint <path_to_.bin>
-    python eval_viewer.py --checkpoint latest
+    python eval_viewer.py --ckpt <path_to_.bin>
+    python eval_viewer.py --ckpt latest
 
 Controls (in viewer window):
     Space       — pause/resume
-    Up/Down     — tick speed
+    Side panel  — replay TPS presets
+    Up/Down     — cycle replay speed presets
     Right-drag  — orbit camera
     Scroll      — zoom
-    4/5         — camera presets
+    Shift+4/5   — camera presets
     O           — debug overlays
     Q/Esc       — quit
 """
 
 import argparse
+import ast
 import glob
 import os
+import re
 import subprocess
 import sys
-import struct
 
 import numpy as np
 
-# Observation/action dimensions (must match fc_contracts.h)
-POLICY_OBS_SIZE = 152  # 22 player + 8*15 NPC + 10 meta
-MASK_5HEAD_SIZE = 36   # 17 + 9 + 5 + 3 + 2
-TOTAL_LINE_FLOATS = POLICY_OBS_SIZE + MASK_5HEAD_SIZE  # 188
-NUM_ACTIONS = 5
-ACT_DIMS = [17, 9, 5, 3, 2]
+
+def ensure_local_pufferlib_on_path():
+    repo = os.path.dirname(os.path.abspath(__file__))
+    default_puffer_dir = os.path.join(os.path.dirname(repo), "pufferlib_4")
+    puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer_dir)
+    if os.path.isdir(puffer_dir) and puffer_dir not in sys.path:
+        sys.path.insert(0, puffer_dir)
+    return puffer_dir
+
+
+def _safe_eval_macro(expr, raw_defs, values):
+    node = ast.parse(expr, mode="eval")
+
+    def eval_node(n):
+        if isinstance(n, ast.Expression):
+            return eval_node(n.body)
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+            return int(n.value)
+        if isinstance(n, ast.Name):
+            return resolve_macro(n.id, raw_defs, values)
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)):
+            val = eval_node(n.operand)
+            return val if isinstance(n.op, ast.UAdd) else -val
+        if isinstance(n, ast.BinOp) and isinstance(
+            n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod)
+        ):
+            left = eval_node(n.left)
+            right = eval_node(n.right)
+            if isinstance(n.op, ast.Add):
+                return left + right
+            if isinstance(n.op, ast.Sub):
+                return left - right
+            if isinstance(n.op, ast.Mult):
+                return left * right
+            if isinstance(n.op, (ast.Div, ast.FloorDiv)):
+                return left // right
+            return left % right
+        raise RuntimeError(f"Unsupported macro expression: {expr}")
+
+    return int(eval_node(node))
+
+
+def resolve_macro(name, raw_defs, values):
+    if name in values:
+        return values[name]
+    if name not in raw_defs:
+        raise RuntimeError(f"Missing macro definition: {name}")
+    values[name] = _safe_eval_macro(raw_defs[name], raw_defs, values)
+    return values[name]
+
+
+def parse_header_constants(path, names, base_values=None):
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    raw_defs = {}
+    define_re = re.compile(r"^\s*#define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+?)\s*$")
+    for line in lines:
+        match = define_re.match(line)
+        if not match:
+            continue
+        name, body = match.groups()
+        body = re.sub(r"/\*.*?\*/", "", body).split("//", 1)[0].strip()
+        if body:
+            raw_defs[name] = body
+
+    values = dict(base_values or {})
+    for name in names:
+        values[name] = resolve_macro(name, raw_defs, values)
+    return values
+
+
+def load_contract_dims():
+    repo = os.path.dirname(os.path.abspath(__file__))
+    shared_header = os.path.join(repo, "fc-core", "include", "fc_contracts.h")
+    fight_caves_header = os.path.join(repo, "training-env", "fight_caves.h")
+
+    names = [
+        "FC_POLICY_OBS_SIZE",
+        "FC_MOVE_DIM",
+        "FC_ATTACK_DIM",
+        "FC_PRAYER_DIM",
+        "FC_EAT_DIM",
+        "FC_DRINK_DIM",
+    ]
+    training_dims = parse_header_constants(shared_header, names)
+
+    puffer_dims = parse_header_constants(
+        fight_caves_header, ["FC_PUFFER_OBS_SIZE"], base_values=training_dims
+    )
+    act_dims = [
+        training_dims["FC_MOVE_DIM"],
+        training_dims["FC_ATTACK_DIM"],
+        training_dims["FC_PRAYER_DIM"],
+        training_dims["FC_EAT_DIM"],
+        training_dims["FC_DRINK_DIM"],
+    ]
+    mask_5head_size = sum(act_dims)
+    total_line_floats = training_dims["FC_POLICY_OBS_SIZE"] + mask_5head_size
+
+    if total_line_floats != puffer_dims["FC_PUFFER_OBS_SIZE"]:
+        raise RuntimeError(
+            f"Puffer obs mismatch: viewer line has {total_line_floats} floats, "
+            f"training header expects {puffer_dims['FC_PUFFER_OBS_SIZE']}"
+        )
+
+    return training_dims["FC_POLICY_OBS_SIZE"], act_dims, mask_5head_size, total_line_floats
 
 
 def find_viewer():
@@ -58,8 +161,8 @@ def find_viewer():
 def find_latest_checkpoint(env_name="fight_caves"):
     """Find the most recent .bin checkpoint."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_puffer = os.path.normpath(os.path.join(script_dir, "..", "pufferlib_4"))
-    puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer)
+    default_puffer_dir = os.path.join(os.path.dirname(script_dir), "pufferlib_4")
+    puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer_dir)
     pattern = os.path.join(puffer_dir, "checkpoints", env_name, "**", "*.bin")
     candidates = glob.glob(pattern, recursive=True)
     if not candidates:
@@ -67,14 +170,14 @@ def find_latest_checkpoint(env_name="fight_caves"):
     return max(candidates, key=os.path.getctime)
 
 
-def read_obs_line(proc):
+def read_obs_line(proc, total_line_floats):
     """Read one line of space-separated floats from viewer stdout."""
     line = proc.stdout.readline()
     if not line:
         return None
     values = line.strip().split()
-    if len(values) != TOTAL_LINE_FLOATS:
-        print(f"[eval] Warning: expected {TOTAL_LINE_FLOATS} floats, got {len(values)}",
+    if len(values) != total_line_floats:
+        print(f"[eval] Warning: expected {total_line_floats} floats, got {len(values)}",
               file=sys.stderr)
         return None
     return np.array([float(v) for v in values], dtype=np.float32)
@@ -87,11 +190,11 @@ def send_actions(proc, actions):
     proc.stdin.flush()
 
 
-def sample_masked(logits_list, mask, deterministic=False):
+def sample_masked(logits_list, mask, act_dims, deterministic=False):
     """Sample actions from logits with mask applied."""
     actions = []
     mask_offset = 0
-    for head_idx, (logits, dim) in enumerate(zip(logits_list, ACT_DIMS)):
+    for head_idx, (logits, dim) in enumerate(zip(logits_list, act_dims)):
         head_mask = mask[mask_offset:mask_offset + dim]
         mask_offset += dim
 
@@ -126,9 +229,16 @@ def main():
                         help="Use random valid actions (no checkpoint needed)")
     parser.add_argument("--start-wave", type=int, default=0,
                         help="Start at this wave (0 = wave 1)")
+    parser.add_argument("--speed", type=int, choices=[1, 2, 4, 10], default=1,
+                        help="Initial replay speed multiplier (buttons can switch to TPS presets)")
+    parser.add_argument("--episodes", type=int, default=0,
+                        help="Stop after this many replay episodes (0 = unlimited)")
     args = parser.parse_args()
     # Clear sys.argv so PufferLib doesn't see our flags
     sys.argv = [sys.argv[0]]
+    ensure_local_pufferlib_on_path()
+
+    policy_obs_size, act_dims, mask_5head_size, total_line_floats = load_contract_dims()
 
     # Find viewer binary
     viewer_path = find_viewer()
@@ -137,6 +247,13 @@ def main():
               file=sys.stderr)
         sys.exit(1)
     print(f"[eval] Viewer: {viewer_path}", file=sys.stderr)
+    print(f"[eval] Replay speed: {args.speed}x", file=sys.stderr)
+    if args.episodes > 0:
+        print(f"[eval] Episode limit: {args.episodes}", file=sys.stderr)
+    print(
+        f"[eval] Contract: policy_obs={policy_obs_size} mask5={mask_5head_size} total={total_line_floats}",
+        file=sys.stderr,
+    )
 
     # Load checkpoint (unless --random)
     policy = None
@@ -151,31 +268,27 @@ def main():
 
         try:
             import torch
-            from pufferlib import _C
+            import pufferlib.models
             from pufferlib.pufferl import load_config
 
             eval_args = load_config("fight_caves")
-            # Create a vec to get obs_size/act_sizes for model construction
-            vec = _C.create_vec(eval_args, 0)
-            from pufferlib.torch_pufferl import load_policy
-            policy = load_policy(eval_args, vec)
-            vec.close()
+            policy_kwargs = eval_args["policy"]
+            network_cls = getattr(pufferlib.models, eval_args["torch"]["network"])
+            encoder_cls = getattr(pufferlib.models, eval_args["torch"]["encoder"])
+            decoder_cls = getattr(pufferlib.models, eval_args["torch"]["decoder"])
+
+            network = network_cls(**policy_kwargs)
+            encoder = encoder_cls(total_line_floats, policy_kwargs["hidden_size"])
+            decoder = decoder_cls(act_dims, policy_kwargs["hidden_size"])
+            policy = pufferlib.models.Policy(encoder, decoder, network)
+            policy = policy.cpu()
 
             # Load raw .bin weights into the PyTorch model.
-            # CUDA kernel stores weights with NO biases, in order:
-            #   encoder.weight → network.layers.0..N → decoder.weight → value.weight
-            # PyTorch state_dict has biases (set to zero) and different key order.
+            # The CUDA trainer saves a flat float32 buffer in this order:
+            #   encoder.weight → fused decoder.weight(+value row) → network.layers.0..N
+            # PyTorch splits the decoder into separate action/value heads and includes biases.
             weights = np.fromfile(checkpoint_path, dtype=np.float32)
             print(f"[eval] Checkpoint: {len(weights)} floats", file=sys.stderr)
-
-            # Explicit weight mapping in CUDA kernel order (weights only, no biases)
-            cuda_order = [
-                "encoder.encoder.weight",
-                *[f"network.layers.{i}.weight" for i in range(
-                    len([k for k in policy.state_dict() if k.startswith("network.layers.")]))],
-                "decoder.decoder.weight",
-                "decoder.value_function.weight",
-            ]
 
             sd = policy.state_dict()
             # Zero all biases first
@@ -184,37 +297,76 @@ def main():
                     sd[key] = torch.zeros_like(sd[key])
 
             offset = 0
-            for key in cuda_order:
+
+            def load_tensor(key):
+                nonlocal offset
                 if key not in sd:
-                    print(f"[eval] Warning: {key} not in model", file=sys.stderr)
-                    continue
+                    raise KeyError(f"{key} not in model state_dict")
                 numel = sd[key].numel()
                 if offset + numel > len(weights):
-                    print(f"[eval] Warning: weights exhausted at {key}", file=sys.stderr)
-                    break
+                    raise RuntimeError(f"weights exhausted at {key}")
                 sd[key] = torch.from_numpy(
                     weights[offset:offset+numel].reshape(sd[key].shape).copy())
                 offset += numel
                 print(f"  loaded {key}: {list(sd[key].shape)} ({numel})", file=sys.stderr)
 
+            load_tensor("encoder.encoder.weight")
+
+            decoder_key = "decoder.decoder.weight"
+            value_key = "decoder.value_function.weight"
+            if decoder_key not in sd or value_key not in sd:
+                raise KeyError("decoder weights missing from model state_dict")
+
+            decoder_rows = sd[decoder_key].shape[0]
+            hidden_size = sd[decoder_key].shape[1]
+            value_rows = sd[value_key].shape[0]
+            fused_rows = decoder_rows + value_rows
+            fused_numel = fused_rows * hidden_size
+            if offset + fused_numel > len(weights):
+                raise RuntimeError("weights exhausted at fused decoder")
+
+            fused_decoder = weights[offset:offset+fused_numel].reshape(fused_rows, hidden_size).copy()
+            sd[decoder_key] = torch.from_numpy(fused_decoder[:decoder_rows])
+            sd[value_key] = torch.from_numpy(fused_decoder[decoder_rows:])
+            offset += fused_numel
+            print(
+                f"  loaded fused decoder: {list(fused_decoder.shape)} "
+                f"-> {list(sd[decoder_key].shape)} + {list(sd[value_key].shape)}",
+                file=sys.stderr,
+            )
+
+            network_keys = sorted(
+                [k for k in sd if k.startswith("network.layers.") and k.endswith(".weight")],
+                key=lambda k: int(k.split(".")[2]),
+            )
+            for key in network_keys:
+                load_tensor(key)
+
             policy.load_state_dict(sd)
-            print(f"[eval] Loaded {offset}/{len(weights)} weights", file=sys.stderr)
+            if offset != len(weights):
+                print(
+                    f"[eval] Warning: loaded {offset}/{len(weights)} floats; "
+                    f"{len(weights) - offset} unused",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"[eval] Loaded {offset}/{len(weights)} weights", file=sys.stderr)
 
             policy = policy.cpu()
             policy.eval()
             print("[eval] Policy ready (CPU)", file=sys.stderr)
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             print(f"[eval] Cannot load policy: {e}", file=sys.stderr)
+            print("[eval] Checkpoint loading failed before replay started.", file=sys.stderr)
             print("[eval] Falling back to random actions", file=sys.stderr)
             args.random = True
 
     # Launch viewer subprocess
     print("[eval] Launching viewer...", file=sys.stderr)
     proc = subprocess.Popen(
-        [viewer_path, "--policy-pipe"] +
+        [viewer_path, "--policy-pipe", "--speed", str(args.speed)] +
+            (["--episodes", str(args.episodes)] if args.episodes > 0 else []) +
             (["--start-wave", str(args.start_wave)] if args.start_wave > 0 else []),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -233,20 +385,20 @@ def main():
         tick = 0
         while True:
             # Read observation from viewer
-            obs_data = read_obs_line(proc)
+            obs_data = read_obs_line(proc, total_line_floats)
             if obs_data is None:
                 print("[eval] Viewer closed or read error", file=sys.stderr)
                 break
 
-            obs = obs_data[:POLICY_OBS_SIZE]
-            mask = obs_data[POLICY_OBS_SIZE:]
+            obs = obs_data[:policy_obs_size]
+            mask = obs_data[policy_obs_size:]
 
             if args.random or policy is None:
                 # Random valid actions
                 actions = sample_masked(
-                    [np.zeros(d) for d in ACT_DIMS], mask, deterministic=False)
+                    [np.zeros(d) for d in act_dims], mask, act_dims, deterministic=False)
             else:
-                # Policy inference — feed full obs+mask (171 floats)
+                # Policy inference — feed full puffer observation (policy obs + 5-head mask)
                 import torch
                 with torch.no_grad():
                     full_input = torch.from_numpy(obs_data).unsqueeze(0)
@@ -262,11 +414,11 @@ def main():
                         lr = logits_raw.squeeze(0).numpy()
                         logits_list = []
                         off = 0
-                        for d in ACT_DIMS:
+                        for d in act_dims:
                             logits_list.append(lr[off:off+d])
                             off += d
 
-                actions = sample_masked(logits_list, mask, args.deterministic)
+                actions = sample_masked(logits_list, mask, act_dims, args.deterministic)
 
             # Send actions to viewer
             send_actions(proc, actions)

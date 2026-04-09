@@ -19,6 +19,7 @@ int main(void) {
 
     /* Default reward weights */
     env.w_damage_dealt = 0.5f;
+    env.w_attack_attempt = 0.0f;
     env.w_damage_taken = -0.5f;
     env.w_npc_kill = 3.0f;
     env.w_wave_clear = 10.0f;

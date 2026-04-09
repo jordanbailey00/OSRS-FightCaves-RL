@@ -6,12 +6,16 @@
  * Controls:
  *   WASD        — move (N/W/S/E)            Space    — pause/resume
  *   1/2/3       — protect melee/range/magic  Right    — single-step tick
- *   F           — eat shark                  Up/Down  — tick speed
+ *   F           — eat shark                  Side panel — TPS buttons
  *   P           — drink prayer potion        R        — reset episode
  *   Tab         — cycle attack target        A        — toggle auto/manual
- *   D           — toggle debug overlay       G        — grid  C — collision
+ *   O or D*     — toggle debug overlay       G        — grid  C — collision
  *   4/5         — camera presets             Q/Esc    — quit
  *   Scroll      — zoom                       Right-drag — orbit camera
+ *
+ *   * D only toggles the overlay when not being used for east movement.
+ *   Policy replay mode (`--policy-pipe`) also adds 1/2/4/0 playback presets.
+ *   In replay mode, use Shift+4 / 5 for camera presets.
  */
 
 #include "raylib.h"
@@ -38,9 +42,12 @@
 #define HEADER_HEIGHT   40
 #define WINDOW_W        (FC_ARENA_WIDTH * TILE_SIZE + PANEL_WIDTH)
 #define WINDOW_H        (FC_ARENA_HEIGHT * TILE_SIZE + HEADER_HEIGHT)
-#define MAX_TPS         30
-#define MIN_TPS         1
+#define MAX_TPS         30.0f
+#define MIN_TPS         0.25f
+#define HALF_TPS        0.50f
+#define NORMAL_TPS      (5.0f / 3.0f)
 #define MAX_HITSPLATS   32
+#define POLICY_REPLAY_BASE_TPS 2
 
 /* Player animation sequence IDs (from osrs-dumps seq.sym) */
 #define PLAYER_ANIM_IDLE   4591  /* xbows_human_ready */
@@ -142,7 +149,8 @@ typedef struct {
     FcState state;
     FcRenderEntity entities[FC_MAX_RENDER_ENTITIES];
     int entity_count;
-    int paused, step_once, tps;
+    int paused, step_once;
+    float tps;
     float tick_acc;
     int show_debug, show_grid, show_collision;
     int auto_mode;       /* 1 = random actions, 0 = human control */
@@ -205,6 +213,8 @@ typedef struct {
     int godmode;        /* 1 = player can't die */
     int debug_spawn;    /* NPC type to spawn (0 = off, 1-8 = type) */
     int policy_pipe;    /* 1 = read actions from stdin, write obs to stdout */
+    int policy_episode_limit; /* 0 = unlimited auto-reset, >0 = stop after N episodes */
+    int policy_episode_count; /* number of completed policy-pipe episodes */
     int start_wave;     /* 0 = wave 1 (default), >0 = skip to this wave on reset */
     int disable_movement; /* 1 = force idle movement */
     /* Smooth movement interpolation — stored by stable slot (player + NPC array index) */
@@ -222,6 +232,191 @@ static int process_tab_click(ViewerState* v, float mx, float my);
 static void text_s(const char* t, int x, int y, int sz, Color c) {
     DrawText(t, x+1, y+1, sz, COL_TEXT_SHADOW);
     DrawText(t, x, y, sz, c);
+}
+
+static const char* fc_terminal_name(int terminal) {
+    switch (terminal) {
+        case TERMINAL_PLAYER_DEATH: return "player_death";
+        case TERMINAL_CAVE_COMPLETE: return "cave_complete";
+        case TERMINAL_TICK_CAP: return "tick_cap";
+        default: return "none";
+    }
+}
+
+static int float_near(float a, float b) {
+    return fabsf(a - b) < 0.0001f;
+}
+
+static const float MANUAL_TPS_PRESETS[] = {0.25f, 0.50f, NORMAL_TPS, 4.0f, 10.0f, 15.0f};
+static const char* MANUAL_TPS_LABELS[] = {"0.25", "0.5", "1.67", "4", "10", "15"};
+#define NUM_MANUAL_TPS_PRESETS ((int)(sizeof(MANUAL_TPS_PRESETS) / sizeof(MANUAL_TPS_PRESETS[0])))
+
+static float policy_replay_multiplier_to_tps(int multiplier) {
+    switch (multiplier) {
+        case 1: return (float)POLICY_REPLAY_BASE_TPS;
+        case 2: return (float)(POLICY_REPLAY_BASE_TPS * 2);
+        case 4: return (float)(POLICY_REPLAY_BASE_TPS * 4);
+        case 10: return (float)(POLICY_REPLAY_BASE_TPS * 10);
+        default: return (float)POLICY_REPLAY_BASE_TPS;
+    }
+}
+
+static int policy_replay_tps_to_multiplier(float tps) {
+    if (float_near(tps, (float)POLICY_REPLAY_BASE_TPS)) return 1;
+    if (float_near(tps, (float)(POLICY_REPLAY_BASE_TPS * 2))) return 2;
+    if (float_near(tps, (float)(POLICY_REPLAY_BASE_TPS * 4))) return 4;
+    if (float_near(tps, (float)(POLICY_REPLAY_BASE_TPS * 10))) return 10;
+    return 0;
+}
+
+static int policy_replay_normalize_multiplier(int multiplier) {
+    switch (multiplier) {
+        case 1:
+        case 2:
+        case 4:
+        case 10:
+            return multiplier;
+        default:
+            return 1;
+    }
+}
+
+static void set_policy_replay_speed(ViewerState* v, int multiplier) {
+    int normalized = policy_replay_normalize_multiplier(multiplier);
+    v->tps = policy_replay_multiplier_to_tps(normalized);
+    fprintf(stderr, "[policy-pipe] Replay speed set to %dx (%.0f TPS)\n", normalized, v->tps);
+}
+
+static void cycle_policy_replay_speed(ViewerState* v, int direction) {
+    static const int presets[] = {1, 2, 4, 10};
+    int current = policy_replay_tps_to_multiplier(v->tps);
+    int idx = 0;
+
+    for (int i = 0; i < 4; i++) {
+        if (presets[i] == current) {
+            idx = i;
+            break;
+        }
+    }
+
+    idx += direction;
+    if (idx < 0) idx = 0;
+    if (idx > 3) idx = 3;
+    set_policy_replay_speed(v, presets[idx]);
+}
+
+static void set_manual_speed(ViewerState* v, float tps) {
+    float best = MANUAL_TPS_PRESETS[0];
+    float best_diff = fabsf(tps - best);
+    for (int i = 1; i < NUM_MANUAL_TPS_PRESETS; i++) {
+        float diff = fabsf(tps - MANUAL_TPS_PRESETS[i]);
+        if (diff < best_diff) {
+            best = MANUAL_TPS_PRESETS[i];
+            best_diff = diff;
+        }
+    }
+    v->tps = best;
+}
+
+static void format_speed_label(const ViewerState* v, char* buf, size_t buf_size) {
+    if (v->policy_pipe) {
+        int multiplier = policy_replay_tps_to_multiplier(v->tps);
+        if (multiplier > 0) {
+            snprintf(buf, buf_size, "Replay:%dx", multiplier);
+        } else {
+            snprintf(buf, buf_size, "Replay:%.2f TPS", v->tps);
+        }
+        return;
+    }
+    if (float_near(v->tps, roundf(v->tps))) {
+        snprintf(buf, buf_size, "TPS:%.0f", v->tps);
+    } else {
+        snprintf(buf, buf_size, "TPS:%.2f", v->tps);
+    }
+}
+
+static void print_policy_episode_summary(const ViewerState* v) {
+    const FcState* s = &v->state;
+    const FcPlayer* p = &s->player;
+    int episode_length = s->tick;
+    float prayer_uptime = (episode_length > 0)
+        ? (float)s->ep_ticks_praying / (float)episode_length : 0.0f;
+    float prayer_uptime_melee = (episode_length > 0)
+        ? (float)s->ep_ticks_pray_melee / (float)episode_length : 0.0f;
+    float prayer_uptime_range = (episode_length > 0)
+        ? (float)s->ep_ticks_pray_range / (float)episode_length : 0.0f;
+    float prayer_uptime_magic = (episode_length > 0)
+        ? (float)s->ep_ticks_pray_magic / (float)episode_length : 0.0f;
+    float attack_when_ready_rate = (s->ep_attack_ready_ticks > 0)
+        ? (float)s->ep_attack_attempt_ticks / (float)s->ep_attack_ready_ticks : 0.0f;
+    float avg_prayer_on_pot = (s->ep_pots_used > 0 && p->max_prayer > 0)
+        ? (float)s->ep_pot_pre_prayer_sum / ((float)s->ep_pots_used * (float)p->max_prayer) : 0.0f;
+    float avg_hp_on_food = (s->ep_food_eaten > 0 && p->max_hp > 0)
+        ? (float)s->ep_food_pre_hp_sum / ((float)s->ep_food_eaten * (float)p->max_hp) : 0.0f;
+    float score = (s->terminal == TERMINAL_CAVE_COMPLETE) ? 1.0f : 0.0f;
+
+    fprintf(stderr,
+        "[policy-pipe] episode_summary "
+        "{\"episode\":%d,\"seed\":%u,\"terminal\":\"%s\","
+        "\"env/score\":%.1f,"
+        "\"env/episode_return\":null,"
+        "\"env/episode_length\":%d,"
+        "\"env/wave_reached\":%d,"
+        "\"env/max_wave\":%d,"
+        "\"env/most_npcs_slayed\":%d,"
+        "\"env/prayer_uptime\":%.6f,"
+        "\"env/prayer_uptime_melee\":%.6f,"
+        "\"env/prayer_uptime_range\":%.6f,"
+        "\"env/prayer_uptime_magic\":%.6f,"
+        "\"env/correct_prayer\":%d,"
+        "\"env/wrong_prayer_hits\":%d,"
+        "\"env/no_prayer_hits\":%d,"
+        "\"env/prayer_switches\":%d,"
+        "\"env/damage_blocked\":%d,"
+        "\"env/dmg_taken_avg\":%d,"
+        "\"env/attack_when_ready_rate\":%.6f,"
+        "\"env/pots_used\":%d,"
+        "\"env/avg_prayer_on_pot\":%.6f,"
+        "\"env/food_eaten\":%d,"
+        "\"env/avg_hp_on_food\":%.6f,"
+        "\"env/food_wasted\":%d,"
+        "\"env/pots_wasted\":%d,"
+        "\"env/tokxil_melee_ticks\":%d,"
+        "\"env/ketzek_melee_ticks\":%d,"
+        "\"env/reached_wave_30\":%d,"
+        "\"env/cleared_wave_30\":%d,"
+        "\"env/reached_wave_31\":%d,"
+        "\"env/n\":1.0}\n",
+        v->policy_episode_count + 1,
+        v->seed,
+        fc_terminal_name(s->terminal),
+        score,
+        episode_length,
+        s->current_wave,
+        s->current_wave,
+        s->total_npcs_killed,
+        prayer_uptime,
+        prayer_uptime_melee,
+        prayer_uptime_range,
+        prayer_uptime_magic,
+        s->ep_correct_blocks,
+        s->ep_wrong_prayer_hits,
+        s->ep_no_prayer_hits,
+        s->ep_prayer_switches,
+        s->ep_damage_blocked,
+        p->total_damage_taken,
+        attack_when_ready_rate,
+        s->ep_pots_used,
+        avg_prayer_on_pot,
+        s->ep_food_eaten,
+        avg_hp_on_food,
+        s->ep_food_overhealed,
+        s->ep_pots_overrestored,
+        s->ep_tokxil_melee_ticks,
+        s->ep_ketzek_melee_ticks,
+        s->ep_reached_wave_30,
+        s->ep_cleared_wave_30,
+        s->ep_reached_wave_31);
 }
 
 static void reset_ep(ViewerState* v) {
@@ -322,8 +517,9 @@ static TerrainMesh* load_terrain(ViewerState* v) {
 /* Load collision map for use during object height compression */
 static int load_collision_for_objects(uint8_t coll[64][64]) {
     const char* paths[] = {
-        "demo-env/assets/fightcaves.collision",
-        "../demo-env/assets/fightcaves.collision",
+        "fc-core/assets/fightcaves.collision",
+        "../fc-core/assets/fightcaves.collision",
+        "../../fc-core/assets/fightcaves.collision",
         "assets/fightcaves.collision", NULL };
     for (int i = 0; paths[i]; i++) {
         FILE* f = fopen(paths[i], "rb");
@@ -695,7 +891,7 @@ static int read_policy_actions(ViewerState* v) {
 }
 
 static void write_obs_to_pipe(ViewerState* v) {
-    /* Write policy obs (135) + 5-head action mask (36) = 171 floats */
+    /* Write policy obs + 5-head action mask = FC_POLICY_OBS_SIZE + 36 floats */
     float obs_buf[FC_OBS_SIZE];
     fc_write_obs(&v->state, obs_buf);
     float mask_buf[FC_ACTION_MASK_SIZE];
@@ -996,11 +1192,14 @@ static void draw_scene(ViewerState* v) {
 static void draw_header(ViewerState* v) {
     DrawRectangle(0,0,WINDOW_W,HEADER_HEIGHT,COL_HEADER);
     char b[128];
+    char speed_label[32];
+    const char* mode = v->policy_pipe ? "REPLAY" : (v->auto_mode ? "AUTO" : "PLAY");
+    format_speed_label(v, speed_label, sizeof(speed_label));
     snprintf(b,sizeof(b),"Fight Caves — Wave %d/%d  [%s]",
-        v->state.current_wave, FC_NUM_WAVES, v->auto_mode ? "AUTO" : "PLAY");
+        v->state.current_wave, FC_NUM_WAVES, mode);
     text_s(b,10,4,16,COL_TEXT_YELLOW);
-    snprintf(b,sizeof(b),"Ep:%d Seed:%u Tick:%d TPS:%d",
-        v->episode_count, v->seed, v->state.tick, v->tps);
+    snprintf(b,sizeof(b),"Ep:%d Seed:%u Tick:%d %s",
+        v->episode_count, v->seed, v->state.tick, speed_label);
     text_s(b,10,22,10,COL_TEXT_DIM);
     FcPlayer* p=&v->state.player;
     snprintf(b,sizeof(b),"HP %d/%d  Pray %d/%d",
@@ -1553,76 +1752,12 @@ static void draw_panel(ViewerState* v) {
         v->dbg_tab_y = 0;
     }
 
-    /* ---- Loadout dropdown (below movement toggle) ---- */
-    {
-        int ly = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 108;
-        static int loadout_open = 0;
-        char lbuf[48];
-        snprintf(lbuf, sizeof(lbuf), "Loadout: %s", FC_LOADOUTS[v->active_loadout].name);
-        Rectangle lbtn = { (float)(px + 8), (float)ly, (float)(PANEL_WIDTH - 16), 20.0f };
-        int lhover = CheckCollisionPointRec(GetMousePosition(), lbtn);
-        DrawRectangleRec(lbtn, lhover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
-        DrawRectangleLinesEx(lbtn, 1, COL_PANEL_BORDER);
-        DrawText(lbuf, px + 14, ly + 4, 9, COL_TEXT_YELLOW);
-        DrawText("v", px + PANEL_WIDTH - 22, ly + 4, 10, COL_TEXT_DIM);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && lhover)
-            loadout_open = !loadout_open;
-        if (loadout_open) {
-            int item_h = 18;
-            int list_y = ly + 22;  /* open downward below the button */
-            DrawRectangle(px + 8, list_y, PANEL_WIDTH - 16, FC_NUM_LOADOUTS * item_h,
-                          CLITERAL(Color){20, 18, 14, 240});
-            DrawRectangleLinesEx(
-                (Rectangle){(float)(px+8), (float)list_y, (float)(PANEL_WIDTH-16),
-                            (float)(FC_NUM_LOADOUTS * item_h)}, 1, COL_PANEL_BORDER);
-            for (int li = 0; li < FC_NUM_LOADOUTS; li++) {
-                int iy = list_y + li * item_h;
-                Rectangle ir = { (float)(px + 9), (float)iy, (float)(PANEL_WIDTH - 18), (float)item_h };
-                int ih = CheckCollisionPointRec(GetMousePosition(), ir);
-                int cur = (li == v->active_loadout);
-                if (cur) DrawRectangleRec(ir, CLITERAL(Color){60, 80, 40, 255});
-                else if (ih) DrawRectangleRec(ir, COL_TAB_HOVER);
-                DrawText(FC_LOADOUTS[li].name, px + 14, iy + 3, 9,
-                         cur ? COL_TEXT_YELLOW : COL_TEXT_WHITE);
-                if (ih && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    v->active_loadout = li;
-                    const FcLoadout* lo = &FC_LOADOUTS[li];
-                    FcPlayer* p = &v->state.player;
-                    p->max_hp = lo->max_hp; p->current_hp = lo->max_hp;
-                    p->max_prayer = lo->max_prayer; p->current_prayer = lo->max_prayer;
-                    p->attack_level = lo->attack_lvl; p->strength_level = lo->strength_lvl;
-                    p->defence_level = lo->defence_lvl; p->ranged_level = lo->ranged_lvl;
-                    p->prayer_level = lo->prayer_lvl; p->magic_level = lo->magic_lvl;
-                    p->ranged_attack_bonus = lo->ranged_atk; p->ranged_strength_bonus = lo->ranged_str;
-                    p->defence_stab = lo->def_stab; p->defence_slash = lo->def_slash;
-                    p->defence_crush = lo->def_crush; p->defence_magic = lo->def_magic;
-                    p->defence_ranged = lo->def_ranged; p->prayer_bonus = lo->prayer_bonus;
-                    p->ammo_count = lo->ammo;
-                    p->sharks_remaining = FC_MAX_SHARKS;
-                    p->prayer_doses_remaining = FC_MAX_PRAYER_DOSES;
-                    loadout_open = 0;
-                }
-            }
-        }
-    }
+    int controls_y = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 34;
+    static int loadout_open = 0;
 
-    /* ---- Disable movement toggle (below loadout) ---- */
+    /* ---- Wave jump dropdown ---- */
     {
-        int toggle_y = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 84;
-        Rectangle tog_r = { (float)(px + 8), (float)toggle_y, (float)(PANEL_WIDTH - 16), 18.0f };
-        int tog_hover = CheckCollisionPointRec(GetMousePosition(), tog_r);
-        DrawRectangleRec(tog_r, tog_hover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
-        DrawRectangleLinesEx(tog_r, 1, COL_PANEL_BORDER);
-        const char* tog_label = v->disable_movement ? "Movement: OFF" : "Movement: ON";
-        Color tog_col = v->disable_movement ? CLITERAL(Color){255,80,80,255} : COL_TEXT_GREEN;
-        DrawText(tog_label, px + 14, toggle_y + 4, 10, tog_col);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && tog_hover)
-            v->disable_movement = !v->disable_movement;
-    }
-
-    /* ---- Wave jump dropdown (below NPC bars / debug) ---- */
-    {
-        int wy = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 34;
+        int wy = controls_y;
         static int dropdown_open = 0;
 
         /* Button: "Jump to Wave: N  v" */
@@ -1705,15 +1840,129 @@ static void draw_panel(ViewerState* v) {
                 }
             }
         }
+        controls_y = wy + 26;
+    }
+
+    /* ---- Disable movement toggle ---- */
+    {
+        int toggle_y = controls_y;
+        Rectangle tog_r = { (float)(px + 8), (float)toggle_y, (float)(PANEL_WIDTH - 16), 18.0f };
+        int tog_hover = CheckCollisionPointRec(GetMousePosition(), tog_r);
+        DrawRectangleRec(tog_r, tog_hover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleLinesEx(tog_r, 1, COL_PANEL_BORDER);
+        const char* tog_label = v->disable_movement ? "Movement: OFF" : "Movement: ON";
+        Color tog_col = v->disable_movement ? CLITERAL(Color){255,80,80,255} : COL_TEXT_GREEN;
+        DrawText(tog_label, px + 14, toggle_y + 4, 10, tog_col);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && tog_hover)
+            v->disable_movement = !v->disable_movement;
+        controls_y = toggle_y + 24;
+    }
+
+    /* ---- Loadout dropdown ---- */
+    {
+        int ly = controls_y;
+        char lbuf[48];
+        snprintf(lbuf, sizeof(lbuf), "Loadout: %s", FC_LOADOUTS[v->active_loadout].name);
+        Rectangle lbtn = { (float)(px + 8), (float)ly, (float)(PANEL_WIDTH - 16), 20.0f };
+        int lhover = CheckCollisionPointRec(GetMousePosition(), lbtn);
+        DrawRectangleRec(lbtn, lhover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+        DrawRectangleLinesEx(lbtn, 1, COL_PANEL_BORDER);
+        DrawText(lbuf, px + 14, ly + 4, 9, COL_TEXT_YELLOW);
+        DrawText("v", px + PANEL_WIDTH - 22, ly + 4, 10, COL_TEXT_DIM);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && lhover)
+            loadout_open = !loadout_open;
+        if (loadout_open) {
+            int item_h = 18;
+            int list_y = ly + 22;  /* open downward below the button */
+            DrawRectangle(px + 8, list_y, PANEL_WIDTH - 16, FC_NUM_LOADOUTS * item_h,
+                          CLITERAL(Color){20, 18, 14, 240});
+            DrawRectangleLinesEx(
+                (Rectangle){(float)(px+8), (float)list_y, (float)(PANEL_WIDTH-16),
+                            (float)(FC_NUM_LOADOUTS * item_h)}, 1, COL_PANEL_BORDER);
+            for (int li = 0; li < FC_NUM_LOADOUTS; li++) {
+                int iy = list_y + li * item_h;
+                Rectangle ir = { (float)(px + 9), (float)iy, (float)(PANEL_WIDTH - 18), (float)item_h };
+                int ih = CheckCollisionPointRec(GetMousePosition(), ir);
+                int cur = (li == v->active_loadout);
+                if (cur) DrawRectangleRec(ir, CLITERAL(Color){60, 80, 40, 255});
+                else if (ih) DrawRectangleRec(ir, COL_TAB_HOVER);
+                DrawText(FC_LOADOUTS[li].name, px + 14, iy + 3, 9,
+                         cur ? COL_TEXT_YELLOW : COL_TEXT_WHITE);
+                if (ih && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    v->active_loadout = li;
+                    const FcLoadout* lo = &FC_LOADOUTS[li];
+                    FcPlayer* p = &v->state.player;
+                    p->max_hp = lo->max_hp; p->current_hp = lo->max_hp;
+                    p->max_prayer = lo->max_prayer; p->current_prayer = lo->max_prayer;
+                    p->attack_level = lo->attack_lvl; p->strength_level = lo->strength_lvl;
+                    p->defence_level = lo->defence_lvl; p->ranged_level = lo->ranged_lvl;
+                    p->prayer_level = lo->prayer_lvl; p->magic_level = lo->magic_lvl;
+                    p->ranged_attack_bonus = lo->ranged_atk; p->ranged_strength_bonus = lo->ranged_str;
+                    p->defence_stab = lo->def_stab; p->defence_slash = lo->def_slash;
+                    p->defence_crush = lo->def_crush; p->defence_magic = lo->def_magic;
+                    p->defence_ranged = lo->def_ranged; p->prayer_bonus = lo->prayer_bonus;
+                    p->ammo_count = lo->ammo;
+                    p->sharks_remaining = FC_MAX_SHARKS;
+                    p->prayer_doses_remaining = FC_MAX_PRAYER_DOSES;
+                    loadout_open = 0;
+                }
+            }
+            controls_y = list_y + FC_NUM_LOADOUTS * item_h + 10;
+        } else {
+            controls_y = ly + 26;
+        }
+    }
+
+    /* ---- TPS preset buttons (manual and replay modes) ---- */
+    {
+        int box_x = px + 8;
+        int box_w = PANEL_WIDTH - 16;
+        int box_y = controls_y;
+        int box_h = 74;
+        int label_y = box_y + 6;
+        int btn_y = box_y + 24;
+        int btn_gap = 6;
+        int btn_cols = 3;
+        int btn_w = (box_w - btn_gap * (btn_cols - 1)) / btn_cols;
+        int btn_h = 18;
+
+        DrawRectangle(box_x, box_y, box_w, box_h, CLITERAL(Color){20, 18, 14, 220});
+        DrawRectangleLines(box_x, box_y, box_w, box_h, COL_PANEL_BORDER);
+        text_s(v->policy_pipe ? "Replay TPS" : "TPS Presets",
+               box_x + 6, label_y, 9, COL_TEXT_DIM);
+
+        for (int i = 0; i < NUM_MANUAL_TPS_PRESETS; i++) {
+            int row = i / btn_cols;
+            int col = i % btn_cols;
+            int bx = box_x + col * (btn_w + btn_gap);
+            int by_btn = btn_y + row * (btn_h + 6);
+            Rectangle br = { (float)bx, (float)by_btn, (float)btn_w, (float)btn_h };
+            int hovered = CheckCollisionPointRec(GetMousePosition(), br);
+            int selected = float_near(v->tps, MANUAL_TPS_PRESETS[i]);
+            Color bg = selected ? COL_TAB_ACTIVE : (hovered ? COL_TAB_HOVER : COL_TAB_INACTIVE);
+            Color tc = selected ? COL_TEXT_YELLOW : COL_TEXT_WHITE;
+
+            DrawRectangleRec(br, bg);
+            DrawRectangleLinesEx(br, 1, COL_PANEL_BORDER);
+            DrawText(MANUAL_TPS_LABELS[i],
+                     bx + (btn_w - MeasureText(MANUAL_TPS_LABELS[i], 9)) / 2,
+                     by_btn + 5, 9, tc);
+
+            if (hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                set_manual_speed(v, MANUAL_TPS_PRESETS[i]);
+            }
+        }
     }
 }
 
 static void draw_debug(ViewerState* v) {
     if (!v->show_debug) return;
     int x=10, y=HEADER_HEIGHT+6; char b[256];
+    char speed_label[32];
+    format_speed_label(v, speed_label, sizeof(speed_label));
     DrawRectangle(5,y-2,500,70,CLITERAL(Color){0,0,0,200});
-    snprintf(b,sizeof(b),"%s | TPS:%d | CAM p=%.2f d=%.1f",
-        v->paused ? "PAUSED" : "RUNNING", v->tps, v->cam_pitch, v->cam_dist);
+    snprintf(b,sizeof(b),"%s | %s | CAM p=%.2f d=%.1f",
+        v->paused ? "PAUSED" : "RUNNING", speed_label, v->cam_pitch, v->cam_dist);
     text_s(b,x,y,10,COL_TEXT_GREEN); y+=14;
     snprintf(b,sizeof(b),"Hash:0x%08x Player:(%d,%d) Entities:%d",
         v->last_hash, v->state.player.x, v->state.player.y, v->entity_count);
@@ -1739,6 +1988,8 @@ int main(int argc, char** argv) {
     int screenshot_mode = 0;
     const char* screenshot_path = NULL;
     int policy_pipe_flag = 0;
+    int policy_speed_flag = 1;
+    int policy_episode_limit_flag = 0;
     int start_wave_flag = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--screenshot") == 0 && i+1 < argc) {
@@ -1746,6 +1997,10 @@ int main(int argc, char** argv) {
             screenshot_path = argv[++i];
         } else if (strcmp(argv[i], "--policy-pipe") == 0) {
             policy_pipe_flag = 1;
+        } else if (strcmp(argv[i], "--speed") == 0 && i+1 < argc) {
+            policy_speed_flag = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--episodes") == 0 && i+1 < argc) {
+            policy_episode_limit_flag = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--start-wave") == 0 && i+1 < argc) {
             start_wave_flag = atoi(argv[++i]);
         }
@@ -1761,7 +2016,7 @@ int main(int argc, char** argv) {
 
     ViewerState v; memset(&v, 0, sizeof(v));
     fc_init(&v.state);
-    v.paused = 1; v.tps = 2; v.show_debug = 1; v.auto_mode = 0;
+    v.paused = 1; v.tps = NORMAL_TPS; v.show_debug = 1; v.auto_mode = 0;
     v.attack_target = -1;
     v.cam_yaw = 0; v.cam_pitch = 0.8f; v.cam_dist = 30;
     v.camera.up = (Vector3){0,1,0}; v.camera.fovy = 32;
@@ -1857,6 +2112,7 @@ int main(int argc, char** argv) {
     /* Load prayer overhead icon textures */
     {
         const char* pray_dirs[] = {"demo-env/assets/", "../demo-env/assets/", "assets/", NULL};
+        int loaded = 0;
         for (int i = 0; pray_dirs[i]; i++) {
             char path[256];
             snprintf(path, sizeof(path), "%spray_melee.png", pray_dirs[i]);
@@ -1867,14 +2123,18 @@ int main(int argc, char** argv) {
                 snprintf(path, sizeof(path), "%spray_magic.png", pray_dirs[i]);
                 v.pray_magic_tex = LoadTexture(path);
                 fprintf(stderr, "Prayer icons loaded from %s\n", pray_dirs[i]);
+                loaded = 1;
                 break;
             }
         }
+        if (!loaded)
+            fprintf(stderr, "warning: prayer icons not found in demo-env/assets or assets\n");
     }
 
     /* Load tab/inventory sprites (Phase 8h) */
     {
         const char* spr_dirs[] = {"demo-env/assets/sprites/", "../demo-env/assets/sprites/", "assets/sprites/", NULL};
+        int loaded = 0;
         for (int i = 0; spr_dirs[i]; i++) {
             char path[256];
             snprintf(path, sizeof(path), "%sprayer_potion.png", spr_dirs[i]);
@@ -1901,14 +2161,20 @@ int main(int argc, char** argv) {
                 snprintf(path, sizeof(path), "%stab_prayer.png", spr_dirs[i]);
                 v.tex_tab_prayer = LoadTexture(path);
                 fprintf(stderr, "Tab sprites loaded from %s\n", spr_dirs[i]);
+                loaded = 1;
                 break;
             }
         }
+        if (!loaded)
+            fprintf(stderr, "warning: tab/inventory sprites not found in demo-env/assets/sprites or assets/sprites\n");
     }
 
     v.combat_style = 1;  /* Rapid default */
     v.policy_pipe = policy_pipe_flag;
+    v.policy_episode_limit = policy_episode_limit_flag;
     v.start_wave = start_wave_flag;
+    if (v.policy_pipe)
+        set_policy_replay_speed(&v, policy_speed_flag);
 
     reset_ep(&v);
 
@@ -1923,6 +2189,7 @@ int main(int argc, char** argv) {
     int frame_count = 0;
 
     while (!WindowShouldClose()) {
+        int quit_after_tick = 0;
         /* Screenshot mode */
         if (screenshot_mode && frame_count == 5) {
             TakeScreenshot(screenshot_path);
@@ -1935,12 +2202,16 @@ int main(int argc, char** argv) {
         if (IsKeyPressed(KEY_Q)) break;
         if (IsKeyPressed(KEY_SPACE)) v.paused = !v.paused;
         if (IsKeyPressed(KEY_RIGHT)) v.step_once = 1;
-        if (IsKeyPressed(KEY_UP) && v.tps < MAX_TPS) v.tps++;
-        if (IsKeyPressed(KEY_DOWN) && v.tps > MIN_TPS) v.tps--;
-        if (IsKeyPressed(KEY_R)) reset_ep(&v);
-        if (IsKeyPressed(KEY_KP_ADD) || (IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_EQUAL))) {
-            if (v.tps < MAX_TPS) v.tps++;
+        if (v.policy_pipe) {
+            if (IsKeyPressed(KEY_ONE)) set_policy_replay_speed(&v, 1);
+            if (IsKeyPressed(KEY_TWO)) set_policy_replay_speed(&v, 2);
+            if (!IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT) &&
+                IsKeyPressed(KEY_FOUR)) set_policy_replay_speed(&v, 4);
+            if (IsKeyPressed(KEY_ZERO)) set_policy_replay_speed(&v, 10);
+            if (IsKeyPressed(KEY_UP)) cycle_policy_replay_speed(&v, +1);
+            if (IsKeyPressed(KEY_DOWN)) cycle_policy_replay_speed(&v, -1);
         }
+        if (IsKeyPressed(KEY_R)) reset_ep(&v);
 
         /* Toggle keys */
         /* Auto mode removed — was too easy to accidentally toggle with 'A' key.
@@ -1962,15 +2233,25 @@ int main(int argc, char** argv) {
                 v.dbg_flags = v.dbg_flags ? 0 : DBG_ALL;
             }
         }
-        /* D: only toggle debug when not pressing WASD */
+        /* D: match the on-screen controls without interfering with east movement */
         if (IsKeyPressed(KEY_D) && !IsKeyDown(KEY_W) && !IsKeyDown(KEY_A) && !IsKeyDown(KEY_S)) {
-            /* D is also used for East movement — only toggle debug if no movement keys held */
+            v.dbg_flags = v.dbg_flags ? 0 : DBG_ALL;
         }
         if (IsKeyPressed(KEY_GRAVE)) v.show_debug = !v.show_debug;
 
         /* Camera presets */
-        if (IsKeyPressed(KEY_FOUR))  { v.cam_yaw=0; v.cam_pitch=1.35f; v.cam_dist=120; }
-        if (IsKeyPressed(KEY_FIVE))  { v.cam_yaw=0; v.cam_pitch=0.6f; v.cam_dist=50; }
+        if ((!v.policy_pipe && IsKeyPressed(KEY_FOUR)) ||
+            (v.policy_pipe &&
+             (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) &&
+             IsKeyPressed(KEY_FOUR))) {
+            v.cam_yaw=0; v.cam_pitch=1.35f; v.cam_dist=120;
+        }
+        if ((!v.policy_pipe && IsKeyPressed(KEY_FIVE)) ||
+            (v.policy_pipe &&
+             (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) &&
+             IsKeyPressed(KEY_FIVE))) {
+            v.cam_yaw=0; v.cam_pitch=0.6f; v.cam_dist=50;
+        }
 
         /* Camera orbit + zoom */
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
@@ -2075,8 +2356,11 @@ int main(int argc, char** argv) {
                 float p3z = -((float)v.state.player.y + 0.5f);
                 float tick_sec = (v.tps > 0) ? (1.0f / (float)v.tps) : 0.5f;
 
-                /* Player damage taken — hitsplat */
-                if (v.state.player.damage_taken_this_tick > 0 || v.state.player.hit_landed_this_tick) {
+                /* Player hitsplat: only show when an incoming NPC hit resolved.
+                 * hit_landed_this_tick is overloaded in the core and also flips
+                 * when the player fires their own ranged attack, which would
+                 * otherwise create false blue 0 splats on the player. */
+                if (v.state.player.hit_source_npc_type != NPC_NONE) {
                     spawn_hitsplat(&v, p3x, gy_p + 2.5f, p3z,
                                    v.state.player.damage_taken_this_tick);
                 }
@@ -2158,15 +2442,27 @@ int main(int argc, char** argv) {
 
             if (v.state.terminal != TERMINAL_NONE) {
                 if (v.policy_pipe) {
-                    /* Write terminal obs, then auto-reset */
+                    print_policy_episode_summary(&v);
+                    v.policy_episode_count++;
+                    /* Write terminal obs, then auto-reset unless a fixed episode limit was requested. */
                     write_obs_to_pipe(&v);
-                    reset_ep(&v);
+                    if (v.policy_episode_limit > 0 &&
+                        v.policy_episode_count >= v.policy_episode_limit) {
+                        quit_after_tick = 1;
+                    } else {
+                        reset_ep(&v);
+                    }
                 } else {
                     v.paused = 1;
                 }
             } else if (v.policy_pipe) {
                 write_obs_to_pipe(&v);
             }
+        }
+
+        if (quit_after_tick) {
+            fprintf(stderr, "[policy-pipe] Episode limit reached, exiting viewer.\n");
+            break;
         }
 
         /* Update hitsplat lifetimes */
@@ -2274,8 +2570,12 @@ int main(int argc, char** argv) {
                 NpcModelEntry* nme = fc_npc_model_find(v.npc_models, mid);
                 if (!nme || !nme->loaded || !nme->vertex_skins) continue;
 
-                /* Lazy-create anim state on first use */
-                if (!v.npc_anim_states[ni]) {
+                /* Recreate anim state if this slot now holds a different model size. */
+                if (!v.npc_anim_states[ni] ||
+                    v.npc_anim_states[ni]->vert_count != nme->base_vert_count) {
+                    if (v.npc_anim_states[ni]) {
+                        anim_model_state_free(v.npc_anim_states[ni]);
+                    }
                     v.npc_anim_states[ni] = anim_model_state_create(
                         nme->vertex_skins, nme->base_vert_count);
                     v.npc_anim_seq[ni] = (n->npc_type > 0 && n->npc_type < 9)
@@ -2310,6 +2610,10 @@ int main(int argc, char** argv) {
                     v.npc_anim_timer[ni] = 0;
                 }
 
+                /* Always start from base pose so missing frame data can't leave stale mesh data. */
+                memcpy(v.npc_anim_states[ni]->verts, nme->base_verts,
+                       nme->base_vert_count * 3 * sizeof(int16_t));
+
                 /* Advance frame and apply animation */
                 AnimSequence* seq = anim_get_sequence(v.anim_cache, v.npc_anim_seq[ni]);
                 if (seq && seq->frame_count > 0) {
@@ -2325,18 +2629,21 @@ int main(int argc, char** argv) {
                     AnimFrameBase* fb = anim_get_framebase(v.anim_cache, fd->framebase_id);
                     if (fb) {
                         anim_apply_frame(v.npc_anim_states[ni], nme->base_verts, fd, fb);
-                        float* mv = nme->model.meshes[0].vertices;
-                        anim_update_mesh(mv, v.npc_anim_states[ni],
-                                         nme->face_indices, nme->face_count);
-                        int evc = nme->face_count * 3;
-                        for (int vi = 0; vi < evc; vi++) {
-                            mv[vi*3+0] /=  128.0f;
-                            mv[vi*3+1] /=  128.0f;
-                            mv[vi*3+2] /= -128.0f;
-                        }
-                        UpdateMeshBuffer(nme->model.meshes[0], 0, mv,
-                                         evc * 3 * sizeof(float), 0);
                     }
+                }
+
+                {
+                    float* mv = nme->model.meshes[0].vertices;
+                    anim_update_mesh(mv, v.npc_anim_states[ni],
+                                     nme->face_indices, nme->face_count);
+                    int evc = nme->face_count * 3;
+                    for (int vi = 0; vi < evc; vi++) {
+                        mv[vi*3+0] /=  128.0f;
+                        mv[vi*3+1] /=  128.0f;
+                        mv[vi*3+2] /= -128.0f;
+                    }
+                    UpdateMeshBuffer(nme->model.meshes[0], 0, mv,
+                                     evc * 3 * sizeof(float), 0);
                 }
             }
         }
@@ -2351,9 +2658,9 @@ int main(int argc, char** argv) {
         draw_test_overlay(&v);
 
         /* Status bar */
-        const char* status = v.paused ? "PAUSED — [Space] resume, [Right] step" :
+        const char* status = v.paused ? "PAUSED — [Space] resume, [Right] step, use side-panel TPS buttons" :
                              v.auto_mode ? "AUTO mode — [A] switch to manual" :
-                             "Left-click:move  Click NPC:attack  1/2/3:pray  F:eat  P:pot";
+                             "Left-click:move  Click NPC:attack  1/2/3:pray  F:eat  P:pot  side-panel TPS";
         DrawText(status, 10, WINDOW_H-14, 10, CLITERAL(Color){80,80,90,255});
 
         /* Big centered pause prompt */
