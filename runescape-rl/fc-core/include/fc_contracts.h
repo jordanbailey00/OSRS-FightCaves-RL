@@ -210,7 +210,7 @@ static const int FC_MOVE_DY[17] = {
  *   Correct protection prayer BLOCKS 100% of the matching NPC attack style.
  *   This is NOT the PvP 60% reduction. Full block is standard OSRS PvM behavior.
  *   Only exception: attacking while wrong prayer is active against Jad still takes
- *   full damage. Prayer must be switched to the correct style before the hit resolves.
+ *   full damage. Prayer must be switched before the hit's snapshot/lock tick.
  */
 #define FC_PRAYER_DIM            5
 #define FC_PRAYER_NO_CHANGE      0

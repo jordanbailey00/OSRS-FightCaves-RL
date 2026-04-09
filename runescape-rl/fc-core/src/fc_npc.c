@@ -195,9 +195,17 @@ static void jad_attack(FcState* state, FcNpc* npc, int npc_idx) {
     int damage = hit ? fc_rng_int(state, use_max_hit + 1) : 0;
     int delay = fc_npc_hit_delay(npc->npc_type, use_style, dist);
 
-    fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
-                         FC_MAX_PENDING_HITS,
-                         damage, delay, use_style, npc_idx, 0);
+    if (fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
+                             FC_MAX_PENDING_HITS,
+                             damage, delay, use_style, npc_idx, 0)) {
+        FcPendingHit* queued = &p->pending_hits[p->num_pending_hits - 1];
+        if (use_style == ATTACK_MELEE) {
+            queued->prayer_snapshot = p->prayer;
+        } else {
+            queued->prayer_snapshot = -1;
+            queued->prayer_lock_tick = state->tick + 1;
+        }
+    }
 
     npc->attack_timer = npc->attack_speed;
 }
@@ -341,10 +349,13 @@ static void npc_generic_attack(FcState* state, FcNpc* npc, int npc_idx) {
 
     int delay = fc_npc_hit_delay(npc->npc_type, use_style, dist);
 
-    fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
-                         FC_MAX_PENDING_HITS,
-                         damage, delay, use_style, npc_idx,
-                         stats->prayer_drain);
+    if (fc_queue_pending_hit(p->pending_hits, &p->num_pending_hits,
+                             FC_MAX_PENDING_HITS,
+                             damage, delay, use_style, npc_idx,
+                             stats->prayer_drain)) {
+        FcPendingHit* queued = &p->pending_hits[p->num_pending_hits - 1];
+        queued->prayer_snapshot = p->prayer;
+    }
 
     npc->attack_timer = npc->attack_speed;
 }

@@ -53,7 +53,7 @@ void my_init(Env* env, Dict* kwargs) {
     item = dict_get_unsafe(kwargs, "w_correct_danger_prayer");
     env->w_correct_danger_prayer = item ? (float)item->value : 2.0f;
     item = dict_get_unsafe(kwargs, "w_wrong_danger_prayer");
-    env->w_wrong_danger_prayer = item ? (float)item->value : -2.0f;
+    env->w_wrong_danger_prayer = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_invalid_action");
     env->w_invalid_action = item ? (float)item->value : -0.1f;
     item = dict_get_unsafe(kwargs, "w_movement");

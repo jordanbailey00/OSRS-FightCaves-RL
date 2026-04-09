@@ -54,6 +54,8 @@ static void clear_per_tick_flags(FcState* state) {
     p->damage_taken_this_tick = 0;
     p->hit_style_this_tick = 0;
     p->hit_source_npc_type = 0;
+    p->hit_locked_prayer_this_tick = 0;
+    p->hit_blocked_this_tick = 0;
     p->hit_landed_this_tick = 0;
     p->food_eaten_this_tick = 0;
     p->potion_used_this_tick = 0;

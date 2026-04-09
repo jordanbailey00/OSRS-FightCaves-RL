@@ -135,7 +135,8 @@ These are live config keys that currently affect scalar reward when nonzero.
 - **`w_jad_kill`** — sparse Jad kill reward.
 - **`w_player_death`** — terminal death penalty.
 - **`w_cave_complete`** — terminal full-cave completion reward.
-- **`w_correct_danger_prayer`** — reward for resolved hits blocked by the correct protection prayer.
+- **`w_correct_danger_prayer`** — reward for resolved ranged/magic hits blocked by the backend-locked protection prayer.
+- **`w_wrong_danger_prayer`** — penalty for resolved ranged/magic hits that were not blocked by the backend-locked prayer snapshot.
 - **`w_invalid_action`** — penalty for invalid RL-facing masked actions. This is now live.
 - **`w_tick_penalty`** — unconditional living / time-cost penalty every tick.
 
@@ -151,8 +152,8 @@ These are live config keys that shape timing, efficiency, safety, or tempo.
 - **`shape_pot_waste_scale`** — scaled penalty for over-restoring prayer.
 - **`shape_pot_safe_prayer_threshold`** — prayer threshold used by potion safety / waste logic.
 - **`shape_pot_no_threat_penalty`** — extra penalty for drinking when no near-term threat exists.
-- **`shape_wrong_prayer_penalty`** — penalty for taking a resolved hit under the wrong active prayer.
-- **`shape_npc_specific_prayer_bonus`** — extra reward for correct style-specific prayer blocks against mapped NPC types.
+- **`shape_wrong_prayer_penalty`** — extra penalty layered on the backend wrong-danger hit signal.
+- **`shape_npc_specific_prayer_bonus`** — extra reward for correct mapped prayer blocks using the prayer snapshot that actually blocked the hit.
 - **`shape_npc_melee_penalty`** — per-tick penalty for allowing NPCs into melee range.
 - **`shape_wasted_attack_penalty`** — penalty for failing to attack on attack-ready ticks when offensive pressure should be maintained.
 - **`shape_wave_stall_base_penalty`** — base time-pressure penalty once a wave stalls past the configured start threshold.
@@ -176,7 +177,6 @@ These keys still exist in config parsing, but are currently disabled, legacy, or
 - **`w_prayer_pot_used`** — legacy key; parsed but not used by the live reward function.
 - **`w_correct_jad_prayer`** — parsed but no live reward path reads it.
 - **`w_wrong_jad_prayer`** — parsed but no live reward path reads it.
-- **`w_wrong_danger_prayer`** — parsed but no live reward path reads it.
 - **`w_movement`** — parsed but inactive in current reward computation.
 - **`w_idle`** — parsed but inactive in current reward computation.
 - **`prayer_flick` reward path** — intentionally disabled in live code after exploit-like behavior in earlier runs.
@@ -185,7 +185,7 @@ These keys still exist in config parsing, but are currently disabled, legacy, or
 
 - **`invalid_action_this_tick` is now live** — Invalid RL-facing masked actions now set the backend flag, so `w_invalid_action` is no longer a dead no-op.
 - **`attack_attempt` / `attack_when_ready_rate` are now live** — A real launched attack cycle sets the reward feature, contributes to scalar reward via `w_attack_attempt`, and contributes to the episode analytic `attack_when_ready_rate`.
-- **`w_correct_jad_prayer` / `w_wrong_jad_prayer` / `w_wrong_danger_prayer` never applied** — Weights parsed from config but reward function has no code path that reads them.
+- **Danger-prayer reward now follows combat snapshot timing** — `w_correct_danger_prayer`, `w_wrong_danger_prayer`, and `shape_wrong_prayer_penalty` now key off the backend resolved-hit flags, which already use the locked prayer snapshot rather than the live prayer on the impact tick.
 - **Multi-hit overwrite in `hit_style_this_tick`** (Medium) — If 2+ hits resolve in one tick, only last hit's style is tracked. Correct/wrong prayer reward may be inaccurate for multi-hit ticks.
 - **PufferLib 4 does not enforce action masks** — Masks are observation features only. The CUDA sampling kernel samples from raw policy logits without masking. The policy must learn to respect masks.
 - **Contract source of truth is `fc_contracts.h`** — the live sizes and field groupings in this document now match the pruned v18 contract.
@@ -423,6 +423,160 @@ These are the live logged metrics that appear in the terminal dashboard, local J
 
 Tracks every training config change with results and reasoning.
 Current config is at the top. Older runs below.
+
+---
+
+## v_tmp2.1 (2026-04-09, completed)
+
+Actual run id:
+- `j63y66ed`
+- W&B run name:
+  - `fallen-water-102`
+- local run log:
+  - [j63y66ed.json](/home/joe/projects/runescape-rl/codex3/v_tmp2/pufferlib_4/logs/fight_caves/j63y66ed.json)
+
+Mainline direction:
+- keep the prayer/combat backend with locked-prayer hit resolution
+- keep reward-path alignment to those backend semantics
+- no curriculum
+- no PPO retune
+- only reduce positive prayer shaping and slightly increase wrong-prayer pressure
+
+Exact changes versus the original `v_tmp2` run (`fkhhysfd`):
+- `w_correct_danger_prayer: 0.5 -> 0.25`
+- `shape_wrong_prayer_penalty: -1.0 -> -1.25`
+- `shape_npc_specific_prayer_bonus: 2.5 -> 1.5`
+
+What stayed the same:
+- no curriculum buckets
+- same PPO/train recipe
+- same damage, kill, wave-clear, Jad, melee-pressure, kiting, and stall terms
+- same `4096` agents and `2.5B` step budget
+
+Why this run mattered:
+- the first `v_tmp2` run was promising on depth and stability, but clearly bad on
+  prayer correctness
+  - `wrong_prayer_hits = 464.25`
+  - `dmg_taken_avg = 7470.13`
+  - `prayer_uptime = 0.947`
+- `v_tmp2.1` was the first clean test after reward alignment to locked-prayer
+  backend semantics
+
+Backend / config provenance:
+- this run used the `v_tmp2` backend path, not the old pre-prayer baseline
+- evidence:
+  - the local log artifact lives under the `v_tmp2` PufferLib tree:
+    [j63y66ed.json](/home/joe/projects/runescape-rl/codex3/v_tmp2/pufferlib_4/logs/fight_caves/j63y66ed.json)
+  - that artifact records the exact unique `v_tmp2.1` values:
+    - `w_correct_danger_prayer = 0.25`
+    - `shape_wrong_prayer_penalty = -1.25`
+    - `shape_npc_specific_prayer_bonus = 1.5`
+    - `curriculum_wave = 0`
+    - `curriculum_pct = 0.0`
+  - the run was launched with `FORCE_BACKEND_REBUILD=1`, so the trainer backend
+    was rebuilt from the `v_tmp2` source tree before training
+
+Results:
+- completed normally
+- final trainer step:
+  - `2,499,805,184 / 2,500,000,000`
+- runtime:
+  - `1262.9s`
+- throughput:
+  - `1.98M SPS`
+
+Final metrics:
+- `episode_return = 12739.18`
+- `episode_length = 6066.53`
+- `wave_reached = 46.12`
+- `max_wave = 62`
+- `most_npcs_slayed = 270`
+- `prayer_uptime = 0.665`
+- `prayer_uptime_melee = 0.115`
+- `prayer_uptime_range = 0.272`
+- `prayer_uptime_magic = 0.278`
+- `correct_prayer = 1339.86`
+- `wrong_prayer_hits = 191.61`
+- `no_prayer_hits = 26.04`
+- `damage_blocked = 122207.55`
+- `dmg_taken_avg = 5132.12`
+- `attack_when_ready_rate = 0.579`
+- `prayer_switches = 1212.56`
+- `pots_used = 31.94`
+- `avg_prayer_on_pot = 0.768`
+- `pots_wasted = 23.47`
+- `food_eaten = 18.83`
+- `avg_hp_on_food = 0.790`
+- `food_wasted = 10.65`
+- `tokxil_melee_ticks = 7.04`
+- `ketzek_melee_ticks = 9.39`
+
+Key progression points:
+- `reached_wave_30 >= 0.90` by `490.7M`
+- `reached_wave_31 >= 0.90` by `499.1M`
+- first sampled `wave_reached >= 40` by `1.74B`
+- strongest sustained window was around `2.26B-2.36B`
+  - sampled `wave_reached = 52.3`
+  - sampled `episode_return = 16430.2`
+
+Comparison to original `v_tmp2` (`fkhhysfd`):
+- `wave_reached: 46.12 vs 44.72`
+- `max_wave: 62 vs 53`
+- `most_npcs_slayed: 270 vs 222`
+- `reached_wave_31: 0.981 vs 0.965`
+- `first reached_wave_31 >= 0.90: 499M vs 1.01B`
+- `prayer_uptime: 0.665 vs 0.947`
+- `wrong_prayer_hits: 191.6 vs 464.3`
+- `dmg_taken_avg: 5132 vs 7470`
+- `tokxil_melee_ticks: 7.04 vs 12.63`
+- `attack_when_ready_rate: 0.579 vs 0.656`
+- `prayer_switches: 1213 vs 1073`
+- `ketzek_melee_ticks: 9.39 vs 4.71`
+
+Interpretation versus original `v_tmp2`:
+- this broke the old high-prayer, low-correctness local optimum
+- the backend-aligned reward path plus smaller positive prayer rewards materially
+  improved the exact metrics that had regressed
+- the remaining cost is more specific:
+  - higher Ket-Zek melee exposure
+  - earlier prayer-potion use and much more potion waste
+
+Comparison to `v_tmp3` (`fg029tll`):
+- `wave_reached: 46.12 vs 41.17`
+- `max_wave: 62 vs 60`
+- `most_npcs_slayed: 270 vs 263`
+- `reached_wave_31: 0.981 vs 0.944`
+- `attack_when_ready_rate: 0.579 vs 0.349`
+- `prayer_switches: 1213 vs 2238`
+- `tokxil_melee_ticks: 7.04 vs 17.81`
+- `food_wasted: 10.65 vs 18.07`
+- `wrong_prayer_hits: 191.6 vs 155.1`
+- `dmg_taken_avg: 5132 vs 3727`
+- `first reached_wave_31 >= 0.90: 499M vs 218M`
+
+Interpretation versus `v_tmp3`:
+- `v_tmp3` still learns deep play faster and remains cleaner on prayer/damage
+- `v_tmp2.1` now wins on final depth, late-run stability, and rare-event tail
+- this is the first version of the locked-prayer backend that looks strictly
+  viable as the forward path rather than an interesting regression branch
+
+Most important new insight:
+- the old `v_tmp2` failure mode was mostly reward-shaping around prayer, not an
+  observation-space problem
+- after aligning reward to the backend snapshot semantics and reducing generic
+  prayer incentive, the same backend improved on:
+  - `wrong_prayer_hits`
+  - `dmg_taken_avg`
+  - late-wave milestone timing
+  - max-wave / tail depth
+
+Bottom line:
+- `v_tmp2.1` is the run that justified merging the locked-prayer backend into
+  mainline code
+- follow-up tuning should now focus narrowly on:
+  - Ket-Zek positioning / melee leakage
+  - prayer-potion timing
+  - late-run stability
 
 ---
 

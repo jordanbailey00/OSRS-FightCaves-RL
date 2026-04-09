@@ -101,7 +101,7 @@ FILE MAP (18 gameplay files mirrored between training and demo):
     fc_reset(): memset(0), seed RNG, random rotation 0-14, setup arena,
       init player, spawn wave 1.
     fc_write_obs(): player features (17) + 8 NPC slots sorted by distance (80)
-      + meta (9) + reward features (18) = 124 floats.
+      + meta (9) + reward features (19) = 125 floats.
     fc_write_mask(): 166 floats, 1.0=valid, masks invalid movement directions,
       unavailable NPC slots, food/potion cooldowns, HP/prayer caps.
 
@@ -151,8 +151,8 @@ FILE MAP (18 gameplay files mirrored between training and demo):
       Jad ranged: fixed 5 ticks (no projectile)
 
     Pending hit queue: fc_queue_pending_hit() adds to per-entity queue.
-    fc_resolve_player_pending_hits(): decrements ticks_remaining, checks
-      active prayer at RESOLVE time (not fire time), applies damage, handles
+    fc_resolve_player_pending_hits(): decrements ticks_remaining, uses the
+      hit's locked prayer snapshot when resolving damage, applies damage, handles
       Tz-Kih prayer drain, auto-retaliate.
     fc_resolve_npc_pending_hits(): handles death, Tz-Kek split, Jad kill,
       healer distraction.
@@ -675,9 +675,9 @@ REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
 
   PRAYER:
     w_correct_danger_prayer  Reward for correct prayer blocking a ranged/magic
-                        hit at resolve time. Positive reinforcement only.
-    w_wrong_danger_prayer    Penalty for wrong prayer when hit. Set to 0 in v9+
-                        (damage_taken handles this implicitly).
+                        hit using the backend locked-prayer snapshot.
+    w_wrong_danger_prayer    Penalty for an unblocked ranged/magic hit under
+                        wrong/no locked prayer. Often left at 0 in current runs.
     w_correct_jad_prayer     Jad-specific prayer reward (disabled since v5).
     w_wrong_jad_prayer       Jad-specific prayer penalty (disabled since v5).
 
@@ -689,8 +689,8 @@ REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
 
   CONFIGURABLE SHAPING (in fight_caves.h, parsed from ini):
     food/pot waste      shape_food_* / shape_pot_* terms
-    wrong prayer        shape_wrong_prayer_penalty
-    NPC-specific block  shape_npc_specific_prayer_bonus
+    wrong prayer        shape_wrong_prayer_penalty (backend wrong-danger flag)
+    NPC-specific block  shape_npc_specific_prayer_bonus (locked-prayer block)
     melee pressure      shape_npc_melee_penalty
     wasted attack       shape_wasted_attack_penalty
     wave stall          shape_wave_stall_*
@@ -755,11 +755,11 @@ COUNTER-BASED PRAYER DRAIN:
   Not a simple per-tick rate. Accumulate drain each tick, drain 1 point when
   counter exceeds resistance. Matches OSRS exactly (verified against RSMod).
 
-PRAYER CHECK AT RESOLVE TIME:
-  Pending hits check the player's active prayer when the hit resolves (lands),
-  not when the attack fires. This remains critical for Jad, but the agent now
-  reacts through the same queued pending-hit signals used elsewhere rather than
-  through a special Jad telegraph observation.
+PRAYER SNAPSHOT / LOCK TIMING:
+  Pending hits resolve against the prayer snapshot locked into that hit, not
+  the player's live prayer on the impact tick. This remains critical for Jad,
+  but the agent now reacts through the same queued pending-hit signals used
+  elsewhere rather than through a special Jad telegraph observation.
 
 --------------------------------------------------------------------------------
 2.2 What Worked

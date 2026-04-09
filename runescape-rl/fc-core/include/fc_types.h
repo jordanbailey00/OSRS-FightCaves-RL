@@ -111,7 +111,12 @@ typedef enum {
 
 /*
  * Attacks queue a PendingHit with a tick delay before damage applies.
- * At resolve time, the ACTIVE prayer is checked — not the prayer at fire time.
+ * Prayer blocking is locked into the pending hit before impact:
+ *   - normal Fight Caves NPCs snapshot prayer on the attack tick
+ *   - Jad special-cases ranged/magic to snapshot shortly after the tell
+ * The projectile/hitsplat can still land later, but prayer no longer re-checks
+ * the live player prayer on impact.
+ *
  * This models OSRS projectile flight:
  *   Melee:  0 tick delay (instant)
  *   Ranged: 1 + floor((3 + distance) / 6) ticks
@@ -128,6 +133,8 @@ typedef struct {
     int attack_style;     /* FcAttackStyle of the incoming hit */
     int source_npc_idx;   /* index into FcState.npcs[] of the attacker */
     int prayer_drain;     /* prayer points drained on hit (Tz-Kih) */
+    int prayer_snapshot;  /* prayer locked for this hit; -1 = snapshot pending */
+    int prayer_lock_tick; /* first tick on which prayer_snapshot should be filled */
 } FcPendingHit;
 
 /* ======================================================================== */
@@ -212,6 +219,8 @@ typedef struct {
     int damage_taken_this_tick;
     int hit_style_this_tick;    /* FcAttackStyle of the last hit that resolved this tick */
     int hit_source_npc_type;    /* FcNpcType of the NPC that landed the last hit this tick */
+    int hit_locked_prayer_this_tick; /* FcPrayer snapshot used for the last resolved hit */
+    int hit_blocked_this_tick;  /* 1 if the last resolved hit this tick was prayer-blocked */
     int hit_landed_this_tick;
     int food_eaten_this_tick;
     int potion_used_this_tick;

@@ -378,27 +378,21 @@ static float fc_puffer_compute_reward(FightCaves* env) {
         }
     }
 
-    /* Prayer correctness for resolved hits. */
-    {
-        int style = env->state.player.hit_style_this_tick;
-        int prayer = env->state.player.prayer;
-        if (style != ATTACK_NONE && prayer != PRAYER_NONE) {
-            if (fc_prayer_blocks_style(prayer, style)) {
-                reward += env->w_correct_danger_prayer;
-            } else {
-                reward += env->shape_wrong_prayer_penalty;
-            }
-        }
-    }
+    /* Prayer correctness for resolved ranged/magic hits.
+     * These backend flags already reflect the locked prayer snapshot used by
+     * combat resolution, so reward stays aligned with queued-hit semantics. */
+    reward += rwd[FC_RWD_CORRECT_DANGER_PRAY] * env->w_correct_danger_prayer;
+    reward += rwd[FC_RWD_WRONG_DANGER_PRAY]   * env->w_wrong_danger_prayer;
+    reward += rwd[FC_RWD_WRONG_DANGER_PRAY]   * env->shape_wrong_prayer_penalty;
 
-    /* NPC-specific prayer mapping bonus. */
+    /* NPC-specific prayer mapping bonus.
+     * Uses the prayer snapshot that actually blocked the resolved hit. */
     {
-        int style = env->state.player.hit_style_this_tick;
-        int prayer = env->state.player.prayer;
+        int prayer = env->state.player.hit_locked_prayer_this_tick;
         int src_type = env->state.player.hit_source_npc_type;
-        if (style != ATTACK_NONE && prayer != PRAYER_NONE &&
-            fc_prayer_blocks_style(prayer, style) &&
-            env->state.player.attack_target_idx >= 0) {
+        if (env->state.player.hit_landed_this_tick &&
+            env->state.player.hit_blocked_this_tick &&
+            prayer != PRAYER_NONE) {
             if (src_type == NPC_KET_ZEK && prayer == PRAYER_PROTECT_MAGIC)
                 reward += env->shape_npc_specific_prayer_bonus;
             else if (src_type == NPC_TOK_XIL && prayer == PRAYER_PROTECT_RANGE)

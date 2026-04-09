@@ -357,6 +357,10 @@ static void anim_apply_frame(
                 pivot_x = sum_x / count + dx;
                 pivot_y = sum_y / count + dy;
                 pivot_z = sum_z / count + dz;
+            } else {
+                pivot_x = dx;
+                pivot_y = dy;
+                pivot_z = dz;
             }
         } else if (type == 1) {
             /* translate: add dx/dy/dz to all vertices in referenced groups */
@@ -405,8 +409,8 @@ static void anim_apply_frame(
                     vy = ry; vz = rz;
 
                     /* Y rotation */
-                    rx = (vx * cos_y - vz * sin_y) >> 16;
-                    rz = (vx * sin_y + vz * cos_y) >> 16;
+                    rx = (vz * sin_y + vx * cos_y) >> 16;
+                    rz = (vz * cos_y - vx * sin_y) >> 16;
                     vx = rx; vz = rz;
 
                     state->verts[v * 3]     = (int16_t)(vx + pivot_x);
@@ -473,6 +477,10 @@ static void anim_apply_single_transform(
             *pivot_x = sx / count + dx;
             *pivot_y = sy / count + dy;
             *pivot_z = sz / count + dz;
+        } else {
+            *pivot_x = dx;
+            *pivot_y = dy;
+            *pivot_z = dz;
         }
     } else if (type == 1) {
         for (int m = 0; m < map_len; m++) {
@@ -502,8 +510,8 @@ static void anim_apply_single_transform(
                 ry = (vy * cos_x - vz * sin_x) >> 16;
                 int rz = (vy * sin_x + vz * cos_x) >> 16;
                 vy = ry; vz = rz;
-                rx = (vx * cos_y - vz * sin_y) >> 16;
-                rz = (vx * sin_y + vz * cos_y) >> 16;
+                rx = (vz * sin_y + vx * cos_y) >> 16;
+                rz = (vz * cos_y - vx * sin_y) >> 16;
                 state->verts[v * 3]     = (int16_t)(rx + *pivot_x);
                 state->verts[v * 3 + 1] = (int16_t)(vy + *pivot_y);
                 state->verts[v * 3 + 2] = (int16_t)(rz + *pivot_z);

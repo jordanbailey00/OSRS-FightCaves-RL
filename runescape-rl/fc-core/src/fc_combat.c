@@ -198,6 +198,8 @@ int fc_queue_pending_hit(FcPendingHit hits[], int* num_hits, int max_hits,
     h->attack_style = style;
     h->source_npc_idx = source_idx;
     h->prayer_drain = prayer_drain;
+    h->prayer_snapshot = PRAYER_NONE;
+    h->prayer_lock_tick = -1;
     (*num_hits)++;
     return 1;
 }
@@ -214,10 +216,15 @@ void fc_resolve_player_pending_hits(FcState* state) {
         FcPendingHit* h = &p->pending_hits[i];
         if (!h->active) continue;
 
+        if (h->prayer_snapshot < 0 && state->tick >= h->prayer_lock_tick) {
+            h->prayer_snapshot = p->prayer;
+        }
+
         h->ticks_remaining--;
         if (h->ticks_remaining <= 0) {
-            /* Hit resolves now — check prayer at resolution time */
-            int blocked = fc_prayer_blocks_style(p->prayer, h->attack_style);
+            /* Hit resolves now — use the prayer locked into this hit. */
+            int locked_prayer = (h->prayer_snapshot >= 0) ? h->prayer_snapshot : p->prayer;
+            int blocked = fc_prayer_blocks_style(locked_prayer, h->attack_style);
             int final_damage = blocked ? 0 : h->damage;
 
             /* Apply damage */
@@ -227,6 +234,8 @@ void fc_resolve_player_pending_hits(FcState* state) {
             p->damage_taken_this_tick += final_damage;
             p->hit_style_this_tick = h->attack_style;
             p->hit_source_npc_type = state->npcs[h->source_npc_idx].npc_type;
+            p->hit_locked_prayer_this_tick = locked_prayer;
+            p->hit_blocked_this_tick = blocked;
             state->damage_taken_this_tick += final_damage;
             p->total_damage_taken += final_damage;
             p->hit_landed_this_tick = 1;
@@ -263,7 +272,7 @@ void fc_resolve_player_pending_hits(FcState* state) {
 
             /* Episode-level hit analytics */
             state->ep_hits_total++;
-            if (p->prayer != PRAYER_NONE) {
+            if (locked_prayer != PRAYER_NONE) {
                 if (blocked) {
                     state->ep_correct_blocks++;
                     state->ep_damage_blocked += h->damage;
