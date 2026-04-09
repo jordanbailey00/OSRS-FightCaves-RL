@@ -426,6 +426,279 @@ Current config is at the top. Older runs below.
 
 ---
 
+## Temporary Comparison Summary (2026-04-08)
+
+These three scratch runs were designed to isolate the impact of the prayer timing fix and the later obs / reward follow-up changes, while holding the training recipe constant.
+
+Final ranking by real late-wave progress:
+- `v_tmp2` (`fkhhysfd`, prayer fix only) — strongest final performer
+- `v_tmp3` (`fg029tll`, pre-prayer baseline) — also very strong, but less stable / less disciplined than `v_tmp2`
+- `v_tmp1` (`qyekq4z3`, prayer fix + obs / reward follow-up) — clear regression
+
+What changed:
+- `v_tmp1 -> v_tmp2`:
+  - removing the later obs / reward follow-up changes while keeping the prayer timing fix produced a massive recovery
+  - this is the strongest evidence in the set that the regression came from the obs / reward follow-up work, not from the prayer timing change itself
+- `v_tmp3 -> v_tmp2`:
+  - adding the prayer timing fix improved stability and discipline without sacrificing late-wave performance
+  - `v_tmp2` took far less damage, switched prayers much less, and had lower Tok-Xil melee exposure than `v_tmp3`
+  - `v_tmp3` still showed some upside in ceiling metrics (`max_wave = 60` vs `53`, `most_npcs_slayed = 263` vs `222`), but its overall behavior was noisier and more wasteful
+- versus `v19.3`:
+  - both `v_tmp2` and `v_tmp3` converted wave-30 entries into wave-31+ much more consistently than `v19.3`
+  - `v19.3` remained much cleaner on damage taken, wrong-prayer hits, switching rate, and resource use
+
+Current interpretation:
+- the prayer timing fix looks directionally correct and beneficial
+- the later `npc_type` obs addition and/or resolved-hit prayer reward follow-up in `v_tmp1` likely caused the collapse
+- the next clean path is to treat `v_tmp2` as the strongest current branch and reintroduce follow-up changes one at a time instead of bundling them
+
+---
+
+## v_tmp1 (2026-04-08, completed)
+
+Temporary comparison run:
+- actual run id:
+  - `qyekq4z3`
+- code snapshot:
+  - `post-obs-post-prayer-2026-04-08`
+  - commit `58768c5b8fd4bd4a3a16c97a7f8db5c752bfa8ee`
+
+Config:
+- scratch run
+- no checkpoint load
+- no curriculum
+- `2.5B` budget
+- same PPO / reward recipe as the `v19.3` family
+- same current end-game loadout
+
+Backend differences:
+- versus `v_tmp2`:
+  - adds early prayer-lock timing
+  - adds `npc_type` back into policy obs
+  - policy contract changes from `106 / 142` to `114 / 150`
+  - resolved-hit prayer rewards use the locked prayer snapshot
+- versus `v_tmp3`:
+  - includes the prayer timing fix
+  - includes the obs / reward follow-up changes above
+
+Results (`qyekq4z3`):
+- completed normally
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1175.7s`
+- throughput: `2.13M SPS`
+
+Final metrics:
+- `episode_return = 7205.14`
+- `episode_length = 5601.45`
+- `wave_reached = 28.94`
+- `max_wave = 34`
+- `most_npcs_slayed = 125`
+- `score = 0.0`
+- `prayer_uptime = 0.982`
+- `prayer_uptime_melee = 0.503`
+- `prayer_uptime_range = 0.473`
+- `prayer_uptime_magic = 0.006386`
+- `correct_prayer = 2819.28`
+- `wrong_prayer_hits = 152.87`
+- `no_prayer_hits = 37.81`
+- `prayer_switches = 1854.04`
+- `damage_blocked = 54995.54`
+- `dmg_taken_avg = 3395.16`
+- `attack_when_ready_rate = 0.315`
+- `pots_used = 27.20`
+- `avg_prayer_on_pot = 0.514`
+- `food_eaten = 20.00`
+- `avg_hp_on_food = 0.923`
+- `food_wasted = 19.35`
+- `pots_wasted = 4.17`
+- `tokxil_melee_ticks = 25.32`
+- `ketzek_melee_ticks = 0.0`
+- `reached_wave_30 = 0.0457`
+- `cleared_wave_30 = 0.0051`
+- `reached_wave_31 = 0.0051`
+
+Analysis:
+- this run underperformed `v19.3` badly on actual cave progress
+- final `wave_reached` dropped from `30.66` to `28.94`
+- `reached_wave_30` fell from `99.15%` to `4.57%`
+- `cleared_wave_30 / reached_wave_31` fell from `54.04%` to `0.51%`
+- the run looked more defensive than competent:
+  - much higher prayer switching
+  - much more blocked damage
+  - but also much higher damage taken and more food use
+- it looked best around the mid-run window, then regressed hard late instead of converting wave-30 reaches into stable clears
+
+---
+
+## v_tmp2 (2026-04-08, completed)
+
+Temporary comparison run:
+- actual run id:
+  - `fkhhysfd`
+- code snapshot:
+  - `post-prayer-pre-obs-2026-04-08`
+  - commit `c232f09b`
+
+Config:
+- scratch run
+- no checkpoint load
+- no curriculum
+- `2.5B` budget
+- same PPO / reward recipe as the `v19.3` family
+- same current end-game loadout
+
+Backend differences:
+- versus `v_tmp1`:
+  - keeps the prayer timing fix
+  - removes the `npc_type` obs addition
+  - restores the old `106 / 142` policy contract
+  - restores the pre-follow-up resolved-hit prayer reward path
+- versus `v_tmp3`:
+  - adds the prayer timing fix only
+
+Results:
+- completed normally
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1231.0s`
+- throughput: `1.95M SPS`
+
+Final metrics:
+- `episode_return = 14745.91`
+- `episode_length = 5678.44`
+- `wave_reached = 44.72`
+- `max_wave = 53`
+- `most_npcs_slayed = 222`
+- `score = 0.0`
+- `prayer_uptime = 0.947`
+- `prayer_uptime_melee = 0.264`
+- `prayer_uptime_range = 0.238`
+- `prayer_uptime_magic = 0.445`
+- `correct_prayer = 1861.91`
+- `wrong_prayer_hits = 464.25`
+- `no_prayer_hits = 18.26`
+- `prayer_switches = 1073.48`
+- `damage_blocked = 132200.91`
+- `dmg_taken_avg = 7470.13`
+- `attack_when_ready_rate = 0.656`
+- `pots_used = 30.32`
+- `avg_prayer_on_pot = 0.607`
+- `food_eaten = 19.36`
+- `avg_hp_on_food = 0.650`
+- `food_wasted = 4.32`
+- `pots_wasted = 10.09`
+- `tokxil_melee_ticks = 12.63`
+- `ketzek_melee_ticks = 4.71`
+- `reached_wave_30 = 0.9653`
+- `cleared_wave_30 = 0.9653`
+- `reached_wave_31 = 0.9653`
+
+Analysis:
+- this run was massively stronger than `v_tmp1` on real cave progress
+- final `wave_reached` jumped from `28.94` to `44.72`
+- `reached_wave_30` jumped from `4.57%` to `96.53%`
+- `cleared_wave_30 / reached_wave_31` jumped from `0.51%` to `96.53%`
+- `max_wave` jumped from `34` to `53`
+- compared with `v19.3`, this run still reached wave 30 slightly less often (`96.53%` vs `99.15%`), but once it got there it converted vastly better (`96.53%` wave 31 vs `54.04%`)
+- the tradeoff is that it was much sloppier and more brute-force:
+  - much higher `wrong_prayer_hits`
+  - much higher `dmg_taken_avg`
+  - much higher prayer switching
+  - heavier potion usage
+- it also attacked far more consistently than both `v_tmp1` and `v19.3`
+- Tok-Xil melee exposure improved sharply versus `v_tmp1` (`12.63` vs `25.32`), which points to the prayer-only snapshot retaining much stronger handling of mid/late cave spacing
+- unlike `v_tmp1`, this run improved hard after the midpoint and held the gains through the finish instead of regressing late
+- provisional takeaway:
+  - the prayer timing change itself looks strongly positive
+  - the later obs / reward follow-up changes in `v_tmp1` likely caused the regression
+  - this snapshot is currently the strongest late-wave performer of the temporary comparison set, even though it is much less clean in damage and resource discipline than `v19.3`
+
+---
+
+## v_tmp3 (2026-04-08, completed)
+
+Temporary comparison run:
+- actual run id:
+  - `fg029tll`
+- code snapshot:
+  - `pre-prayer-fix-2026-04-08`
+  - commit `7c77cf93`
+
+Config:
+- scratch run
+- no checkpoint load
+- no curriculum
+- `2.5B` budget
+- same PPO / reward recipe as the `v19.3` family
+- same current end-game loadout
+
+Backend differences:
+- versus `v_tmp2`:
+  - removes the prayer timing fix
+  - keeps the older pre-follow-up obs / reward path
+- versus `v_tmp1`:
+  - removes both the prayer timing fix and the later obs / reward follow-up changes
+  - represents the last committed pre-prayer baseline for this comparison set
+
+Results:
+- completed normally
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1206.6s`
+- throughput: `2.05M SPS`
+
+Final metrics:
+- `episode_return = 12958.40`
+- `episode_length = 6141.61`
+- `wave_reached = 41.17`
+- `max_wave = 60`
+- `most_npcs_slayed = 263`
+- `score = 0.0`
+- `prayer_uptime = 0.794`
+- `prayer_uptime_melee = 0.401`
+- `prayer_uptime_range = 0.259`
+- `prayer_uptime_magic = 0.133`
+- `correct_prayer = 2706.46`
+- `wrong_prayer_hits = 155.09`
+- `no_prayer_hits = 32.17`
+- `prayer_switches = 2238.11`
+- `damage_blocked = 118229.65`
+- `dmg_taken_avg = 3726.61`
+- `attack_when_ready_rate = 0.349`
+- `pots_used = 31.42`
+- `avg_prayer_on_pot = 0.625`
+- `food_eaten = 20.0`
+- `avg_hp_on_food = 0.913`
+- `food_wasted = 18.07`
+- `pots_wasted = 11.53`
+- `tokxil_melee_ticks = 17.81`
+- `ketzek_melee_ticks = 6.52`
+- `reached_wave_30 = 0.9641`
+- `cleared_wave_30 = 0.9436`
+- `reached_wave_31 = 0.9436`
+
+Analysis:
+- this pre-prayer baseline was far stronger than `v_tmp1` and only modestly weaker than `v_tmp2`
+- versus `v_tmp1`:
+  - `wave_reached` jumped from `28.94` to `41.17`
+  - `reached_wave_30` jumped from `4.57%` to `96.41%`
+  - `reached_wave_31` jumped from `0.51%` to `94.36%`
+  - `max_wave` jumped from `34` to `60`
+- versus `v_tmp2`:
+  - slightly worse final late-wave conversion (`94.36%` wave 31 vs `96.53%`)
+  - lower final `wave_reached` (`41.17` vs `44.72`)
+  - much higher prayer switching (`2238` vs `1073`)
+  - much higher Tok-Xil melee exposure (`17.81` vs `12.63`)
+  - lower damage taken (`3726.61`) than `v_tmp2` (`7470.13`), but still higher than `v19.3`
+- the run shape was strong early and peaked very high mid-run:
+  - by ~`0.94B` it was already at `99.72%` wave-30 reach and `99.55%` wave-31 reach
+  - it peaked near `49.87` wave average around ~`1.56B`
+  - then regressed somewhat by the finish, but still ended as a very strong late-wave policy
+- interpretation:
+  - the pre-prayer baseline already had excellent ceiling and late-wave competence
+  - the prayer timing fix in `v_tmp2` appears to have traded some ceiling for much better stability and much cleaner tactical behavior
+  - the collapse in `v_tmp1` was therefore not caused by removing the old pre-prayer behavior alone; it points much more strongly at the later obs / reward follow-up changes
+
+---
+
 ## v19.3 (2026-04-08, completed)
 
 Naming note:

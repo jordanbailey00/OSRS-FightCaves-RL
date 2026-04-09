@@ -1,115 +1,75 @@
-# Tomorrow Plan — 2026-04-08
+# Today Plan — 2026-04-09
 
-This file replaces the old stale daily plan. It reflects the next actual work to do after `v19.3`.
+This file reflects the current next work. The shared-backend refactor and replay-speed controls are done.
 
-## 1. Shared Backend Refactor
-
-Primary objective:
-- remove duplicated Fight Caves backend files between `training-env` and `demo-env`
-- make parity structural instead of procedural
-- do this as a file/layout refactor first, not a behavior change
-- also remove obvious copy/sync operational drift points that are already
-  causing local maintenance problems
-
-Execution document:
-- [component_symlink.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/component_symlink.md)
-
-Running cleanup candidates for later follow-up:
-- `training-env/fc_render.h`
-  - legacy in-wrapper Raylib render path; appears unused in the current headless training and external eval-viewer workflow, so it is a likely remove-or-relocate candidate
-
-Rules:
-- do not change gameplay logic intentionally
-- do not change the obs contract intentionally
-- do not move trainer-only logic into shared core
-- do not move viewer-only logic into shared core
-- do not leave copy-synced config files in place once a safe single source
-  of truth exists
-- do not leave duplicated launch/bootstrap shell logic in multiple scripts if
-  it can be sourced from one shared helper
-- validate after each phase, not only at the end
-
-Explicit non-code drift items to fold into the same work:
-- unify the active training config path:
-  - `runescape-rl/config/fight_caves.ini`
-  - `pufferlib_4/config/fight_caves.ini`
-  - goal: one source of truth, not copy/sync before launch
-- after config unification, remove the `cp ... fight_caves.ini` sync step from:
-  - `train.sh`
-  - `sweep_v18_3.sh`
-  - any other train/sweep helper that still copies config into `pufferlib_4`
-- centralize duplicated shell runtime setup shared by train/sweep launchers:
-  - `.venv` activation
-  - `PUFFER_DIR`
-  - `FC_COLLISION_PATH`
-  - W&B dirs
-  - cuDNN/lib path exports
-  - backend existence/build check
-  - goal: one shared shell helper, not repeated blocks across multiple launch scripts
-- keep the collision asset single-sourced:
-  - `training-env/assets/fightcaves.collision` today
-  - or `fc-core/assets/fightcaves.collision` after refactor
-  - do not create parallel copies
-- keep detailed ownership/file mapping in `component_symlink.md`
-  and keep `today_plan.md` as the short execution pointer only
-
-Required validation:
-- `cmake --build build`
-- `training-env` build path still works
-- `demo-env` viewer still works
-- `test_headless` still works
-- `eval_viewer.py` still resolves the contract correctly
-- same seed + same action sequence still produces matching behavior/hash
-
-## 2. Eval Viewer Playback Speed Controls
+## 1. Revisit Prayer Timing Changes
 
 Primary objective:
-- make policy replay faster to inspect without changing the actual simulation
-- keep `1x` identical to current replay behavior
-- add simple preset playback speeds: `1x`, `2x`, `4x`, `10x`
+- revisit the prayer-lock timing change before deciding whether to keep it
+- compare the prayer-only snapshot directly against the pre-prayer baseline
 
-Current repo state:
-- `demo-env/src/viewer.c` already drives replay speed through `v.tps`
-- `eval_viewer.py` just launches `fc_viewer --policy-pipe` and feeds actions
-- so this should be a small viewer-side change, not a new replay system
+What changed:
+- non-Jad incoming hits no longer check live prayer on impact
+- non-Jad hits snapshot prayer on the attack tick
+- Jad melee snapshots on the attack tick
+- Jad ranged / magic snapshots shortly after the tell (`N+1`)
+- pending hits carry the locked prayer state used later at resolve time
 
-Implementation plan:
-- treat the current default policy replay rate as `1x`
-- map fixed replay presets onto the existing viewer tick-rate control
-- add hotkeys for `1x`, `2x`, `4x`, and `10x` in `--policy-pipe` replay mode
-- keep the existing manual viewer controls usable; do not break prayer keys for human play
-- show the active playback multiplier on screen
-- optionally add an `eval_viewer.py` arg to set the initial replay speed when launching
+Where that code lives now:
+- active worktree:
+  - `/home/joe/projects/runescape-rl/codex3/run_post_prayer_pre_obs`
+- saved snapshot:
+  - branch: `snapshot/post-prayer-pre-obs-2026-04-08`
+  - tag: `post-prayer-pre-obs-2026-04-08`
+  - commit: `c232f09b`
+- main core files:
+  - `fc-core/include/fc_types.h`
+  - `fc-core/src/fc_combat.c`
+  - `fc-core/src/fc_npc.c`
 
-Rules:
-- do not change backend mechanics
-- do not change action timing semantics
-- do not change policy inference inputs/outputs
-- only change wall-clock replay speed
-- keep manual debug viewer behavior unchanged at normal speed
+Questions to resolve:
+- keep or revert the prayer timing change?
+- if we keep it, is the Jad timing exactly right?
+- is `v_tmp2` (`fkhhysfd`) clearly better than `v_tmp3` (`fg029tll`) once we weigh both progress and stability?
 
-Checkpoint-selection follow-up:
-- after playback presets work, add a small replay-metrics export path
-- current replay path does not yet emit a clean terminal summary for checkpoint ranking
-- export existing backend-safe metrics at episode end, then use that output to compare candidate checkpoints
+## 2. Revisit Obs / Reward Follow-Up Changes
 
-Desired checkpoint-eval workflow:
-- choose several candidate checkpoints from a prior run
-- replay each checkpoint at accelerated playback speed
-- collect real replay metrics already backed by the existing environment state
-- rank checkpoints from replay results instead of training-log intuition
+Primary objective:
+- revisit the post-prayer obs / reward follow-up that regressed `v_tmp1`
+- separate the obs change from the reward-path change instead of bundling them
 
-Required validation:
-- manual viewer still behaves the same at normal speed
-- eval replay at `1x` matches current behavior exactly
-- faster presets only reduce wall-clock time
-- deterministic replay stays deterministic at every speed
-- on-screen speed indicator is visible and correct
+What changed:
+- added `npc_type` back into policy obs
+- policy / puffer contract changed from `106 / 142` to `114 / 150`
+- resolved-hit prayer rewards started using the locked prayer snapshot instead of live prayer at landing
+- debug overlay / docs were updated to match
+
+Where that code lives now:
+- saved snapshot:
+  - branch: `snapshot/post-obs-post-prayer-2026-04-08`
+  - tag: `post-obs-post-prayer-2026-04-08`
+  - commit: `58768c5b8fd4bd4a3a16c97a7f8db5c752bfa8ee`
+- no active worktree right now
+- main files:
+  - `fc-core/include/fc_contracts.h`
+  - `fc-core/include/fc_types.h`
+  - `fc-core/src/fc_state.c`
+  - `fc-core/src/fc_tick.c`
+  - `fc-core/src/fc_combat.c`
+  - `training-env/fight_caves.h`
+  - `demo-env/src/fc_debug_overlay.h`
+
+Questions to resolve:
+- did `npc_type` obs itself hurt training?
+- did the resolved-hit reward-path change hurt training?
+- reintroduce changes one at a time, not together
 
 ## 3. Training-Env Performance Refactor
 
 Primary objective:
 - refactor `training-env` specifically for performance improvements
+- use gprof
+- use bash build.sh ENV_NAME --profile
 
 ## 4. RL Tuning Follow-Up After Refactor
 
