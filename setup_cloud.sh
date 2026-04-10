@@ -31,7 +31,7 @@ source runescape-rl/.venv/bin/activate
 # 3. Python packages
 echo "[3/5] Installing Python packages..."
 pip install --quiet --upgrade pip
-pip install --quiet torch numpy pybind11 wandb rich
+pip install --quiet torch numpy pybind11 wandb rich rich-argparse
 
 # 4. Build training backend
 echo "[4/5] Building training backend..."
