@@ -52,11 +52,12 @@ print(f'  torch: {torch.__version__}')
 print(f'  CUDA: {torch.cuda.is_available()} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"})')
 "
 
+# 6. W&B auto-login
+echo "[6/6] Configuring W&B..."
+WANDB_API_KEY="${WANDB_API_KEY:-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}"
+python3 -c "import wandb; wandb.login(key='$WANDB_API_KEY', relogin=True)" 2>/dev/null && echo "  W&B: logged in" || echo "  W&B: login failed (training will still work without logging)"
+
 echo ""
 echo "=== Setup complete ==="
 echo "To start training:"
-echo "  cd runescape-rl && bash train.sh"
-echo ""
-echo "To start training with W&B logging:"
-echo "  wandb login"
 echo "  cd runescape-rl && bash train.sh"
