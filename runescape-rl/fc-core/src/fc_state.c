@@ -151,6 +151,9 @@ void fc_reset(FcState* state, uint32_t seed) {
     state->current_wave = 1;
     state->next_spawn_index = 0;
     fc_wave_spawn(state, 1);
+
+    /* Initialize sorted NPC cache for first tick */
+    fc_cache_sorted_npcs(state);
 }
 
 void fc_step(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
@@ -200,6 +203,20 @@ static void sort_npc_indices(int* indices, int count, const FcState* state) {
     }
 }
 
+/* Build sorted NPC index cache — call once per tick after positions finalize.
+ * Consumers (fc_write_obs, fc_write_mask, fc_action_attempt_is_invalid) read
+ * from state->sorted_npc_indices instead of re-sorting. */
+void fc_cache_sorted_npcs(FcState* state) {
+    state->sorted_npc_count = 0;
+    for (int i = 0; i < FC_MAX_NPCS; i++) {
+        if (state->npcs[i].active && !state->npcs[i].is_dead)
+            state->sorted_npc_indices[state->sorted_npc_count++] = i;
+    }
+    sort_npc_indices(state->sorted_npc_indices, state->sorted_npc_count, state);
+    state->visible_npc_count = (state->sorted_npc_count < FC_VISIBLE_NPCS)
+        ? state->sorted_npc_count : FC_VISIBLE_NPCS;
+}
+
 static int move_action_valid(const FcState* state, int action) {
     const FcPlayer* p = &state->player;
     int dest_x;
@@ -222,23 +239,10 @@ static int move_action_valid(const FcState* state, int action) {
 }
 
 static int attack_action_valid(const FcState* state, int action) {
-    int active_indices[FC_MAX_NPCS];
-    int active_count = 0;
-    int visible;
-    int slot;
-
     if (action < 0 || action >= FC_ATTACK_DIM) return 0;
     if (action == FC_ATTACK_NONE) return 1;
-
-    for (int i = 0; i < FC_MAX_NPCS; i++) {
-        if (state->npcs[i].active && !state->npcs[i].is_dead) {
-            active_indices[active_count++] = i;
-        }
-    }
-    sort_npc_indices(active_indices, active_count, state);
-    visible = (active_count < FC_VISIBLE_NPCS) ? active_count : FC_VISIBLE_NPCS;
-    slot = action - 1;
-    return slot >= 0 && slot < visible;
+    int slot = action - 1;
+    return slot >= 0 && slot < state->visible_npc_count;
 }
 
 static int prayer_action_valid(int action) {
@@ -331,7 +335,8 @@ static int npc_effective_style_now(const FcState* state, const FcNpc* npc, float
 }
 
 void fc_write_obs(const FcState* state, float* out) {
-    memset(out, 0, sizeof(float) * FC_TOTAL_OBS);
+    /* No blanket memset — all player/meta fields are written explicitly below.
+     * Only unused NPC slots are zeroed selectively (see after NPC loop). */
 
     const FcPlayer* p = &state->player;
     int incoming_counts[3][3] = {{0}};
@@ -371,17 +376,9 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_IN_MAG_2T] = normalize_incoming_count(incoming_counts[1][2]);
     player[FC_OBS_PLAYER_TARGET]    = 0.0f;  /* filled after NPC slot computation below */
 
-    /* NPC slot selection: gather active NPCs, sort, take first 8 */
-    int active_indices[FC_MAX_NPCS];
-    int active_count = 0;
-    for (int i = 0; i < FC_MAX_NPCS; i++) {
-        if (state->npcs[i].active && !state->npcs[i].is_dead) {
-            active_indices[active_count++] = i;
-        }
-    }
-    sort_npc_indices(active_indices, active_count, state);
-
-    int visible = (active_count < FC_VISIBLE_NPCS) ? active_count : FC_VISIBLE_NPCS;
+    /* NPC slot selection: use cached sorted indices from fc_cache_sorted_npcs */
+    const int* active_indices = state->sorted_npc_indices;
+    int visible = state->visible_npc_count;
     for (int slot = 0; slot < visible; slot++) {
         const FcNpc* n = &state->npcs[active_indices[slot]];
         float* npc_out = out + FC_OBS_NPC_START + slot * FC_OBS_NPC_STRIDE;
@@ -409,7 +406,11 @@ void fc_write_obs(const FcState* state, float* out) {
             }
         }
     }
-    /* Remaining NPC slots already zeroed by memset */
+    /* Zero only the unused NPC slots (beyond visible count) */
+    for (int slot = visible; slot < FC_OBS_NPC_SLOTS; slot++) {
+        float* npc_out = out + FC_OBS_NPC_START + slot * FC_OBS_NPC_STRIDE;
+        for (int f = 0; f < FC_OBS_NPC_STRIDE; f++) npc_out[f] = 0.0f;
+    }
 
     /* Player target: which visible NPC slot is the current attack target */
     if (p->attack_target_idx >= 0) {

@@ -47,6 +47,10 @@ void fc_destroy(FcState* state);
  * Values are normalized to [0,1] via divisor tables. */
 void fc_write_obs(const FcState* state, float* out);
 
+/* Rebuild the cached sorted NPC index list. Called once per tick after
+ * all movement is finalized (end of fc_tick) and on fc_reset. */
+void fc_cache_sorted_npcs(FcState* state);
+
 /* Write the action mask buffer.
  * out must have room for FC_ACTION_MASK_SIZE floats.
  * 1.0 = valid action, 0.0 = invalid. */

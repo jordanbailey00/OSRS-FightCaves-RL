@@ -519,6 +519,9 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
         state->ep_reached_wave_31 = 1;
     }
 
-    /* 9. Increment tick */
+    /* 9. Cache sorted NPC indices for next tick's obs/mask/validation */
+    fc_cache_sorted_npcs(state);
+
+    /* 10. Increment tick */
     state->tick++;
 }

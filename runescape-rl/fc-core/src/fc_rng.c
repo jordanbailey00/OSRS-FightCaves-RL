@@ -23,7 +23,9 @@ uint32_t fc_rng_next(FcState* state) {
 
 int fc_rng_int(FcState* state, int max) {
     if (max <= 0) return 0;
-    return (int)(fc_rng_next(state) % (uint32_t)max);
+    /* Lemire's fast range reduction — replaces IDIV (10-40 cycles) with
+     * MUL + shift (3-4 cycles). Bias < 1/2^32, negligible for game rolls. */
+    return (int)(((uint64_t)fc_rng_next(state) * (uint64_t)max) >> 32);
 }
 
 float fc_rng_float(FcState* state) {

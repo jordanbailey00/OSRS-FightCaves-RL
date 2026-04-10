@@ -394,6 +394,12 @@ typedef struct {
     int ep_reached_wave_30;     /* 1 if episode reached wave 30 */
     int ep_cleared_wave_30;     /* 1 if episode cleared wave 30 */
     int ep_reached_wave_31;     /* 1 if episode reached wave 31 */
+
+    /* Cached sorted NPC indices — computed once per tick, reused by
+     * fc_write_obs, fc_write_mask, and fc_action_attempt_is_invalid. */
+    int sorted_npc_indices[FC_MAX_NPCS];
+    int sorted_npc_count;
+    int visible_npc_count;
 } FcState;
 
 #endif /* FC_TYPES_H */

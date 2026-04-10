@@ -118,10 +118,10 @@ if [ -z "$OBS_TENSOR_T" ]; then
 fi
 
 # Python paths
-PYTHON_INCLUDE=$(python -c "import sysconfig; print(sysconfig.get_path('include'))")
-PYBIND_INCLUDE=$(python -c "import pybind11; print(pybind11.get_include())")
-NUMPY_INCLUDE=$(python -c "import numpy; print(numpy.get_include())")
-EXT_SUFFIX=$(python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+PYTHON_INCLUDE=$(python3 -c "import sysconfig; print(sysconfig.get_path('include'))")
+PYBIND_INCLUDE=$(python3 -c "import pybind11; print(pybind11.get_include())")
+NUMPY_INCLUDE=$(python3 -c "import numpy; print(numpy.get_include())")
+EXT_SUFFIX=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 OUTPUT="pufferlib/_C${EXT_SUFFIX}"
 
 if [ "$MODE" = "cpu" ]; then

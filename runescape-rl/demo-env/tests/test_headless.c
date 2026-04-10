@@ -454,6 +454,7 @@ static void test_melee_safespot_gating(void) {
     blocked.npcs[1].current_hp = blocked.npcs[1].max_hp / 4;
 
     fc_npc_tick(&blocked, 0);
+    fc_cache_sorted_npcs(&blocked);
     fc_write_obs(&blocked, obs);
 
     TEST("Safespotted Yt-MejKot does not queue melee hits");
@@ -488,6 +489,7 @@ static void test_melee_safespot_gating(void) {
     open.npcs[1].current_hp = open.npcs[1].max_hp / 4;
 
     fc_npc_tick(&open, 0);
+    fc_cache_sorted_npcs(&open);
     fc_write_obs(&open, obs);
 
     TEST("Open-corner Yt-MejKot still queues a melee swing");
