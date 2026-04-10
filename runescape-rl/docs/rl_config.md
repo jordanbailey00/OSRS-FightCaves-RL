@@ -135,8 +135,8 @@ These are live config keys that currently affect scalar reward when nonzero.
 - **`w_jad_kill`** — sparse Jad kill reward.
 - **`w_player_death`** — terminal death penalty.
 - **`w_cave_complete`** — terminal full-cave completion reward.
-- **`w_correct_danger_prayer`** — reward for resolved ranged/magic hits blocked by the backend-locked protection prayer.
-- **`w_wrong_danger_prayer`** — penalty for resolved ranged/magic hits that were not blocked by the backend-locked prayer snapshot.
+- **`w_correct_danger_prayer`** — reward for resolved ranged / magic attacks that were blocked by the backend-locked prayer snapshot.
+- **`w_wrong_danger_prayer`** — penalty for resolved ranged / magic attacks that were not blocked by the backend-locked prayer snapshot.
 - **`w_invalid_action`** — penalty for invalid RL-facing masked actions. This is now live.
 - **`w_tick_penalty`** — unconditional living / time-cost penalty every tick.
 
@@ -153,7 +153,7 @@ These are live config keys that shape timing, efficiency, safety, or tempo.
 - **`shape_pot_safe_prayer_threshold`** — prayer threshold used by potion safety / waste logic.
 - **`shape_pot_no_threat_penalty`** — extra penalty for drinking when no near-term threat exists.
 - **`shape_wrong_prayer_penalty`** — extra penalty layered on the backend wrong-danger hit signal.
-- **`shape_npc_specific_prayer_bonus`** — extra reward for correct mapped prayer blocks using the prayer snapshot that actually blocked the hit.
+- **`shape_npc_specific_prayer_bonus`** — extra reward for correct mapped prayer blocks using the prayer snapshot that actually blocked the hit. This can be set to `0` to disable it without removing the path.
 - **`shape_npc_melee_penalty`** — per-tick penalty for allowing NPCs into melee range.
 - **`shape_wasted_attack_penalty`** — penalty for failing to attack on attack-ready ticks when offensive pressure should be maintained.
 - **`shape_wave_stall_base_penalty`** — base time-pressure penalty once a wave stalls past the configured start threshold.
@@ -185,7 +185,8 @@ These keys still exist in config parsing, but are currently disabled, legacy, or
 
 - **`invalid_action_this_tick` is now live** — Invalid RL-facing masked actions now set the backend flag, so `w_invalid_action` is no longer a dead no-op.
 - **`attack_attempt` / `attack_when_ready_rate` are now live** — A real launched attack cycle sets the reward feature, contributes to scalar reward via `w_attack_attempt`, and contributes to the episode analytic `attack_when_ready_rate`.
-- **Danger-prayer reward now follows combat snapshot timing** — `w_correct_danger_prayer`, `w_wrong_danger_prayer`, and `shape_wrong_prayer_penalty` now key off the backend resolved-hit flags, which already use the locked prayer snapshot rather than the live prayer on the impact tick.
+- **Danger-prayer reward currently follows resolve timing** — `w_correct_danger_prayer`, `w_wrong_danger_prayer`, and `shape_wrong_prayer_penalty` currently key off the later hit-resolve tick while still using the backend-locked prayer snapshot for the block decision.
+- **1-tick prayer flicks are free** — prayer drain now only accrues when prayer stayed active across the tick boundary, so perfect 1-tick flicking does not lose prayer points.
 - **Multi-hit overwrite in `hit_style_this_tick`** (Medium) — If 2+ hits resolve in one tick, only last hit's style is tracked. Correct/wrong prayer reward may be inaccurate for multi-hit ticks.
 - **PufferLib 4 does not enforce action masks** — Masks are observation features only. The CUDA sampling kernel samples from raw policy logits without masking. The policy must learn to respect masks.
 - **Contract source of truth is `fc_contracts.h`** — the live sizes and field groupings in this document now match the pruned v18 contract.
@@ -577,6 +578,801 @@ Bottom line:
   - Ket-Zek positioning / melee leakage
   - prayer-potion timing
   - late-run stability
+
+---
+
+## v20 Family Comparison Summary (2026-04-09)
+
+This four-run block cleanly separated three moving pieces:
+- the 1-tick prayer drain fix
+- snapshot-timed generic prayer reward
+- aggressive prayer reward magnitudes
+
+Run matrix:
+- `v20`
+  - 1-tick flick fix
+  - snapshot-timed generic prayer reward
+  - aggressive prayer magnitudes
+  - NPC-specific bonus disabled
+- `v20.1`
+  - 1-tick flick fix
+  - snapshot-timed generic prayer reward
+  - mild `v_tmp2.1` prayer magnitudes
+  - NPC-specific bonus restored
+- `v20.2`
+  - 1-tick flick fix
+  - original resolve-time generic prayer reward
+  - mild `v_tmp2.1` prayer magnitudes
+  - NPC-specific bonus restored
+- `v20.3`
+  - 1-tick flick fix
+  - original resolve-time generic prayer reward
+  - aggressive prayer magnitudes
+  - NPC-specific bonus disabled
+
+Final ranking by actual cave performance:
+- `v20.2` (`4o8gv87z`) — clear winner
+- `v_tmp2.1` / `ro7h07qm` — still strong, but now second-best
+- `v20` (`t4eudsav`) and `v20.1` (`rp7a0y2e`) — both meaningful regressions
+- `v20.3` (`77yha5y7`) — worst of the `v20` family
+
+What the matrix says:
+- the 1-tick flick fix itself is strongly positive
+  - `v20.2` is the direct evidence
+- snapshot-timed generic prayer reward is harmful in this form
+  - both `v20` and `v20.1` regressed while keeping that timing change
+- aggressive prayer reward magnitudes are also harmful
+  - `v20.3` regressed even after reward timing was restored to resolve-time
+- the best current recipe is:
+  - keep the 1-tick flick fix
+  - keep resolve-time generic prayer reward
+  - keep the milder `v_tmp2.1` prayer magnitudes
+  - keep the NPC-specific bonus enabled at the old value
+
+Key observations across the four runs:
+- snapshot timing consistently pushed the policy toward prayer camping
+  - `v20`: `prayer_uptime = 0.966`, `prayer_switches = 682`
+  - `v20.1`: `prayer_uptime = 0.980`, `prayer_switches = 402`
+  - both were much less switchy than `v_tmp2.1` while not getting deeper
+- aggressive magnitudes without snapshot timing still overconstrained the policy
+  - `v20.3`: `prayer_switches = 57.6`, `no_prayer_hits = 58.9`
+  - this was not just “camp more prayer”; it also lost offensive tempo and
+    stalled around the low-30 shelf for most of the run
+- `v20.2` is qualitatively different from the others
+  - it broke into the 40+ range by `948M`
+  - hit `45+` by `1.028B`
+  - hit `50+` by `1.193B`
+  - hit `55+` by `1.351B`
+  - no other run in this family came close
+
+Best-to-worst comparison at a glance:
+- `wave_reached`
+  - `v20.2: 55.83`
+  - `v_tmp2.1: 46.12`
+  - `v20: 44.66`
+  - `v20.1: 44.11`
+  - `v20.3: 38.32`
+- `max_wave`
+  - `v20.2: 60`
+  - `v_tmp2.1: 62`
+  - `v20: 51`
+  - `v20.1: 50`
+  - `v20.3: 49`
+- `attack_when_ready_rate`
+  - `v20.2: 0.657`
+  - `v_tmp2.1: 0.579`
+  - `v20: 0.537`
+  - `v20.1: 0.535`
+  - `v20.3: 0.465`
+- `tokxil_melee_ticks`
+  - `v20.2: 2.14`
+  - `v_tmp2.1: 7.04`
+  - `v20.1: 12.78`
+  - `v20.3: 11.20`
+  - `v20: 18.16`
+- `ketzek_melee_ticks`
+  - `v20.2: 4.21`
+  - `v_tmp2.1: 9.39`
+  - `v20.3: 8.12`
+  - `v20.1: 13.78`
+  - `v20: 20.83`
+
+Interpretation:
+- the old hypothesis that “maybe the new prayer timing reward just needs softer
+  magnitudes” did not hold up
+  - `v20.1` disproved that
+- the old hypothesis that “maybe the new reward magnitudes were the whole
+  problem” also did not hold up by itself
+  - `v20.3` disproved that
+- the current strongest explanation is:
+  - snapshot-timed generic reward creates bad credit assignment pressure
+  - aggressive prayer magnitudes also create bad optimization pressure
+  - the 1-tick flick fix is independently good and should be kept
+
+Recommendations:
+- promote `v20.2` as the new working baseline
+- do not train further on the snapshot-timed generic prayer reward path in its
+  current form
+- do not use the aggressive prayer reward magnitudes from `v20` / `v20.3`
+- if prayer reward timing is revisited later, test it only as a much smaller
+  auxiliary signal instead of replacing the resolve-time signal
+- if further ablations are needed, the clean next one would be:
+  - `v20.2` base
+  - keep resolve-time reward
+  - vary only NPC-specific bonus on/off
+  - leave generic prayer reward at `0.25`
+
+Bottom line:
+- `v20.2` answered the main question
+- the valuable backend change is the 1-tick flick fix
+- the valuable training recipe is still the mild `v_tmp2.1` prayer reward band
+- the new forward baseline should be `v20.2`, not `v20`, `v20.1`, or `v20.3`
+
+---
+
+## v20.3 (2026-04-09, completed)
+
+Actual run:
+- `77yha5y7`
+- W&B run name:
+  - `bright-firebrand-110`
+
+Status:
+- completed normally
+
+Goal:
+- test the aggressive prayer reward magnitudes from `v20` without the new
+  snapshot-timed prayer reward
+- separate “reward strength” from “reward timing”
+
+Config:
+- same PPO recipe as `v_tmp2.1`
+- no curriculum
+- `2.5B` budget
+- same loadout and same non-prayer shaping terms as `v_tmp2.1`
+
+Backend changes versus `v_tmp2.1` / `ro7h07qm`:
+- keep the 1-tick prayer drain fix
+- revert generic danger-prayer reward timing to the original resolve-time path
+
+Config changes versus `v20.2`:
+- disable `shape_npc_specific_prayer_bonus`
+- raise `w_correct_danger_prayer` from `0.25` to `1.75`
+
+Live `v20.3` values:
+- `w_correct_danger_prayer = 1.75`
+- `w_wrong_danger_prayer = 0.0`
+- `shape_wrong_prayer_penalty = -1.25`
+- `shape_npc_specific_prayer_bonus = 0.0`
+- `shape_npc_melee_penalty = -0.3`
+- `shape_unnecessary_prayer_penalty = -0.2`
+- `total_timesteps = 2_500_000_000`
+
+Results (`77yha5y7`):
+- completed normally
+- final trainer step: `2,496,659,456 / 2,500,000,000`
+- runtime: `1252s`
+- throughput: `1.81M SPS`
+
+Final metrics:
+- `wave_reached = 38.32`
+- `max_wave = 49`
+- `most_npcs_slayed = 195`
+- `episode_return = 8819.71`
+- `episode_length = 4650.34`
+- `reached_wave_30 = 0.9708`
+- `reached_wave_31 = 0.9417`
+- `prayer_uptime = 0.7789`
+- `prayer_uptime_melee = 0.000043`
+- `prayer_uptime_range = 0.4839`
+- `prayer_uptime_magic = 0.2949`
+- `correct_prayer = 1004.14`
+- `wrong_prayer_hits = 176.15`
+- `no_prayer_hits = 58.86`
+- `damage_blocked = 71645.82`
+- `dmg_taken_avg = 4080.46`
+- `prayer_switches = 57.56`
+- `attack_when_ready_rate = 0.4651`
+- `pots_used = 24.10`
+- `avg_prayer_on_pot = 0.5947`
+- `pots_wasted = 9.38`
+- `food_eaten = 20.0`
+- `avg_hp_on_food = 0.8899`
+- `food_wasted = 15.87`
+- `tokxil_melee_ticks = 11.20`
+- `ketzek_melee_ticks = 8.12`
+
+Key progression points:
+- `reached_wave_30 >= 0.90` by `811.6M`
+- `reached_wave_31 >= 0.90` by `895.5M`
+- never sampled `wave_reached >= 40`
+- never sampled `wave_reached >= 45`
+- never sampled `wave_reached >= 50`
+- never sampled `wave_reached >= 55`
+
+Comparison to `v20.2` (`4o8gv87z`):
+- `wave_reached: 38.32 vs 55.83`
+- `max_wave: 49 vs 60`
+- `most_npcs_slayed: 195 vs 264`
+- `episode_return: 8819.71 vs 19112.53`
+- `episode_length: 4650.34 vs 8246.68`
+- `reached_wave_30: 0.9708 vs 1.0`
+- `reached_wave_31: 0.9417 vs 1.0`
+- `first reached_wave_30 >= 0.90: 812M vs 436M`
+- `first reached_wave_31 >= 0.90: 895M vs 451M`
+- `never reached sampled wave_reached >= 40` vs `948M`
+- `prayer_uptime: 0.779 vs 0.824`
+- `correct_prayer: 1004.14 vs 1837.12`
+- `wrong_prayer_hits: 176.15 vs 155.01`
+- `no_prayer_hits: 58.86 vs 23.55`
+- `damage_blocked: 71646 vs 204649`
+- `dmg_taken_avg: 4080 vs 5241`
+- `prayer_switches: 57.6 vs 485.9`
+- `attack_when_ready_rate: 0.465 vs 0.657`
+- `tokxil_melee_ticks: 11.20 vs 2.14`
+- `ketzek_melee_ticks: 8.12 vs 4.21`
+- `food_eaten: 20.0 vs 15.5`
+- `food_wasted: 15.87 vs 7.57`
+- `pots_wasted: 9.38 vs 3.99`
+
+Comparison to `v20.1` (`rp7a0y2e`):
+- `wave_reached: 38.32 vs 44.11`
+- `max_wave: 49 vs 50`
+- `most_npcs_slayed: 195 vs 204`
+- `episode_return: 8819.71 vs 11739.62`
+- `episode_length: 4650.34 vs 5771.71`
+- `reached_wave_31: 0.9417 vs 0.9948`
+- `first reached_wave_30 >= 0.90: 812M vs 655M`
+- `first reached_wave_31 >= 0.90: 895M vs 666M`
+- `never reached sampled wave_reached >= 40` vs `1.840B`
+- `prayer_uptime: 0.779 vs 0.980`
+- `correct_prayer: 1004.14 vs 1681.56`
+- `wrong_prayer_hits: 176.15 vs 247.08`
+- `no_prayer_hits: 58.86 vs 8.49`
+- `damage_blocked: 71646 vs 127795`
+- `dmg_taken_avg: 4080 vs 4117`
+- `prayer_switches: 57.6 vs 401.6`
+- `attack_when_ready_rate: 0.465 vs 0.535`
+- `tokxil_melee_ticks: 11.20 vs 12.78`
+- `ketzek_melee_ticks: 8.12 vs 13.78`
+- `food_wasted: 15.87 vs 16.60`
+- `pots_wasted: 9.38 vs 6.26`
+
+Comparison to `v20` (`t4eudsav`):
+- `wave_reached: 38.32 vs 44.66`
+- `max_wave: 49 vs 51`
+- `most_npcs_slayed: 195 vs 211`
+- `episode_return: 8819.71 vs 12149.99`
+- `episode_length: 4650.34 vs 5904.67`
+- `reached_wave_31: 0.9417 vs 0.9946`
+- `first reached_wave_30 >= 0.90: 812M vs 302M`
+- `first reached_wave_31 >= 0.90: 895M vs 1.009B`
+- `never reached sampled wave_reached >= 40` vs `2.141B`
+- `prayer_uptime: 0.779 vs 0.966`
+- `correct_prayer: 1004.14 vs 1997.74`
+- `wrong_prayer_hits: 176.15 vs 231.66`
+- `no_prayer_hits: 58.86 vs 7.79`
+- `damage_blocked: 71646 vs 131147`
+- `dmg_taken_avg: 4080 vs 4093`
+- `prayer_switches: 57.6 vs 682.1`
+- `attack_when_ready_rate: 0.465 vs 0.537`
+- `tokxil_melee_ticks: 11.20 vs 18.16`
+- `ketzek_melee_ticks: 8.12 vs 20.83`
+- `food_wasted: 15.87 vs 16.83`
+- `pots_wasted: 9.38 vs 8.85`
+
+Comparison to `v_tmp2.1` / `ro7h07qm`:
+- `wave_reached: 38.32 vs 46.12`
+- `max_wave: 49 vs 62`
+- `most_npcs_slayed: 195 vs 270`
+- `episode_return: 8819.71 vs 12739.18`
+- `episode_length: 4650.34 vs 6066.53`
+- `reached_wave_30: 0.9708 vs 1.0`
+- `reached_wave_31: 0.9417 vs 0.9815`
+- `first reached_wave_30 >= 0.90: 812M vs 499M`
+- `first reached_wave_31 >= 0.90: 895M vs 499M`
+- `never reached sampled wave_reached >= 40` vs `1.743B`
+- `prayer_uptime: 0.779 vs 0.665`
+- `correct_prayer: 1004.14 vs 1339.86`
+- `wrong_prayer_hits: 176.15 vs 191.61`
+- `no_prayer_hits: 58.86 vs 26.04`
+- `damage_blocked: 71646 vs 122208`
+- `dmg_taken_avg: 4080 vs 5132`
+- `prayer_switches: 57.6 vs 1212.6`
+- `attack_when_ready_rate: 0.465 vs 0.579`
+- `tokxil_melee_ticks: 11.20 vs 7.04`
+- `ketzek_melee_ticks: 8.12 vs 9.39`
+- `food_wasted: 15.87 vs 10.65`
+- `pots_wasted: 9.38 vs 23.47`
+
+Interpretation:
+- `v20.3` answers the reward-magnitude question directly:
+  - the aggressive prayer reward settings are bad even when snapshot timing is
+    removed
+- this run did not become the same kind of high-prayer camper as `v20` /
+  `v20.1`; instead it became a much lower-switch, lower-tempo, range-biased
+  policy that stalled near the low-30 shelf
+- the strongest failure signatures are:
+  - `prayer_switches = 57.6`
+  - `attack_when_ready_rate = 0.465`
+  - `no_prayer_hits = 58.86`
+  - never reaching sampled `wave_reached >= 40`
+- compared with `v20.2`, this is not a small degradation; it is a completely
+  different and much weaker policy regime
+
+Most likely takeaway:
+- aggressive generic prayer reward magnitude is independently harmful
+- the `v20` regression was not only about snapshot timing
+- the strongest recipe remains the mild `v_tmp2.1` prayer reward band paired
+  with resolve-time reward and the 1-tick flick fix
+
+---
+
+## v20.2 (2026-04-09, completed)
+
+Actual run:
+- `4o8gv87z`
+- W&B run name:
+  - `valiant-spaceship-109`
+
+Status:
+- completed normally
+
+Goal:
+- isolate the 1-tick prayer drain fix by itself
+- remove the new snapshot-timed prayer reward change from the experiment
+- keep the successful `v_tmp2.1` / `ro7h07qm` reward magnitudes
+
+Config:
+- same PPO recipe as `v_tmp2.1`
+- no curriculum
+- `2.5B` budget
+- same loadout and same non-prayer shaping terms as `v_tmp2.1`
+
+Backend changes versus `v_tmp2.1` / `ro7h07qm`:
+- keep the 1-tick prayer drain fix:
+  - prayer drain only accrues if prayer was active at the start of the tick and
+    is still active after that tick's action processing
+  - perfect 1-tick flicking is therefore free
+- revert generic danger-prayer reward timing to the original state:
+  - prayer correctness reward fires on resolve, not on queue / lock
+- generic danger-prayer coverage remains on the original path:
+  - reward is driven by the old resolve-time danger-prayer signal
+
+Live `v20.2` values:
+- `w_correct_danger_prayer = 0.25`
+- `w_wrong_danger_prayer = 0.0`
+- `shape_wrong_prayer_penalty = -1.25`
+- `shape_npc_specific_prayer_bonus = 1.5`
+- `shape_npc_melee_penalty = -0.3`
+- `shape_unnecessary_prayer_penalty = -0.2`
+- `total_timesteps = 2_500_000_000`
+
+Results (`4o8gv87z`):
+- completed normally
+- final trainer step: `2,495,610,880 / 2,500,000,000`
+- runtime: `1223s`
+- throughput: `2.08M SPS`
+
+Final metrics:
+- `wave_reached = 55.83`
+- `max_wave = 60`
+- `most_npcs_slayed = 264`
+- `episode_return = 19112.53`
+- `episode_length = 8246.68`
+- `reached_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+- `prayer_uptime = 0.8238`
+- `prayer_uptime_melee = 0.0417`
+- `prayer_uptime_range = 0.2483`
+- `prayer_uptime_magic = 0.5338`
+- `correct_prayer = 1837.12`
+- `wrong_prayer_hits = 155.01`
+- `no_prayer_hits = 23.55`
+- `damage_blocked = 204648.86`
+- `dmg_taken_avg = 5241.05`
+- `prayer_switches = 485.93`
+- `attack_when_ready_rate = 0.6571`
+- `pots_used = 31.66`
+- `avg_prayer_on_pot = 0.5217`
+- `pots_wasted = 3.99`
+- `food_eaten = 15.5`
+- `avg_hp_on_food = 0.7686`
+- `food_wasted = 7.57`
+- `tokxil_melee_ticks = 2.14`
+- `ketzek_melee_ticks = 4.21`
+
+Key progression points:
+- `reached_wave_30 >= 0.90` by `436.2M`
+- `reached_wave_31 >= 0.90` by `450.9M`
+- first sampled `wave_reached >= 40` by `947.9M`
+- first sampled `wave_reached >= 45` by `1.028B`
+- first sampled `wave_reached >= 50` by `1.193B`
+- first sampled `wave_reached >= 55` by `1.351B`
+
+Comparison to `v_tmp2.1` / `ro7h07qm`:
+- `wave_reached: 55.83 vs 46.12`
+- `max_wave: 60 vs 62`
+- `most_npcs_slayed: 264 vs 270`
+- `episode_return: 19112.53 vs 12739.18`
+- `episode_length: 8246.68 vs 6066.53`
+- `reached_wave_30: 1.0 vs 1.0`
+- `reached_wave_31: 1.0 vs 0.9815`
+- `first reached_wave_30 >= 0.90: 436M vs 491M`
+- `first reached_wave_31 >= 0.90: 451M vs 499M`
+- `first wave_reached >= 40: 948M vs 1.743B`
+- `first wave_reached >= 45: 1.028B vs 2.009B`
+- `first wave_reached >= 50: 1.193B vs never sampled`
+- `prayer_uptime: 0.824 vs 0.665`
+- `prayer_switches: 486 vs 1213`
+- `attack_when_ready_rate: 0.657 vs 0.579`
+- `correct_prayer: 1837.12 vs 1339.86`
+- `wrong_prayer_hits: 155.01 vs 191.61`
+- `no_prayer_hits: 23.55 vs 26.04`
+- `damage_blocked: 204649 vs 122208`
+- `dmg_taken_avg: 5241 vs 5132`
+- `tokxil_melee_ticks: 2.14 vs 7.04`
+- `ketzek_melee_ticks: 4.21 vs 9.39`
+- `food_eaten: 15.5 vs 18.83`
+- `food_wasted: 7.57 vs 10.65`
+- `pots_wasted: 3.99 vs 23.47`
+
+Comparison to `v20.1` (`rp7a0y2e`):
+- `wave_reached: 55.83 vs 44.11`
+- `max_wave: 60 vs 50`
+- `most_npcs_slayed: 264 vs 204`
+- `episode_return: 19112.53 vs 11739.62`
+- `episode_length: 8246.68 vs 5771.71`
+- `reached_wave_31: 1.0 vs 0.9948`
+- `first reached_wave_30 >= 0.90: 436M vs 655M`
+- `first reached_wave_31 >= 0.90: 451M vs 666M`
+- `first wave_reached >= 40: 948M vs 1.840B`
+- `first wave_reached >= 45: 1.028B vs never sampled`
+- `prayer_uptime: 0.824 vs 0.980`
+- `correct_prayer: 1837.12 vs 1681.56`
+- `wrong_prayer_hits: 155.01 vs 247.08`
+- `no_prayer_hits: 23.55 vs 8.49`
+- `damage_blocked: 204649 vs 127795`
+- `dmg_taken_avg: 5241 vs 4117`
+- `prayer_switches: 486 vs 402`
+- `attack_when_ready_rate: 0.657 vs 0.535`
+- `tokxil_melee_ticks: 2.14 vs 12.78`
+- `ketzek_melee_ticks: 4.21 vs 13.78`
+- `food_eaten: 15.5 vs 20.0`
+- `food_wasted: 7.57 vs 16.60`
+- `pots_wasted: 3.99 vs 6.26`
+
+Comparison to `v20` (`t4eudsav`):
+- `wave_reached: 55.83 vs 44.66`
+- `max_wave: 60 vs 51`
+- `most_npcs_slayed: 264 vs 211`
+- `episode_return: 19112.53 vs 12149.99`
+- `episode_length: 8246.68 vs 5904.67`
+- `reached_wave_31: 1.0 vs 0.9946`
+- `first reached_wave_30 >= 0.90: 436M vs 302M`
+- `first reached_wave_31 >= 0.90: 451M vs 1.009B`
+- `first wave_reached >= 40: 948M vs 2.141B`
+- `first wave_reached >= 45: 1.028B vs 2.489B`
+- `prayer_uptime: 0.824 vs 0.966`
+- `correct_prayer: 1837.12 vs 1997.74`
+- `wrong_prayer_hits: 155.01 vs 231.66`
+- `no_prayer_hits: 23.55 vs 7.79`
+- `damage_blocked: 204649 vs 131147`
+- `dmg_taken_avg: 5241 vs 4093`
+- `prayer_switches: 486 vs 682`
+- `attack_when_ready_rate: 0.657 vs 0.537`
+- `tokxil_melee_ticks: 2.14 vs 18.16`
+- `ketzek_melee_ticks: 4.21 vs 20.83`
+- `food_eaten: 15.5 vs 20.0`
+- `food_wasted: 7.57 vs 16.83`
+- `pots_wasted: 3.99 vs 8.85`
+
+Interpretation:
+- `v20.2` is not just a recovery from `v20` / `v20.1`; it is a major step
+  forward over the whole `v_tmp2.1` line on average depth and late-wave
+  stability
+- the 1-tick flick fix appears strongly positive when paired with the old
+  resolve-time reward timing
+- compared with `v_tmp2.1`, the policy became:
+  - deeper on average
+  - much faster at breaking into the 40+ and 45+ ranges
+  - much more attack-ready
+  - far cleaner on Tok-Xil / Ket-Zek melee exposure
+  - much less wasteful on food and pot usage
+- the cost is narrow and understandable:
+  - slightly higher total damage taken
+  - somewhat higher prayer uptime than the old baseline
+  - lower prayer-switch count, but without losing prayer correctness
+
+Most likely takeaway:
+- the snapshot-timed prayer reward was the actual regression source in the
+  `v20` / `v20.1` line
+- the 1-tick prayer drain fix itself is highly likely to be a real positive
+  change
+- this run argues for keeping:
+  - the 1-tick flick fix
+  - the older resolve-time prayer reward path
+  - the milder `v_tmp2.1` prayer reward magnitudes
+- `v20.3` is still useful as a final control for aggressive reward magnitude,
+  but `v20.2` is already strong evidence that reward timing, not flick logic,
+  caused the earlier prayer-camping regressions
+
+---
+
+## v20.1 (2026-04-09, completed)
+
+Actual run:
+- `rp7a0y2e`
+
+Status:
+- completed normally
+
+Goal:
+- keep the backend-side prayer timing improvements from `v20`
+  - 1-tick prayer flick drain fix
+  - snapshot-timed prayer reward
+  - melee / ranged / magic coverage in the generic danger-prayer reward
+- revert the config knobs back to the successful `v_tmp2.1` / `ro7h07qm`
+  prayer-reward magnitudes
+
+Config:
+- same PPO recipe as `v_tmp2.1`
+- no curriculum
+- `2.5B` budget
+- same loadout and same non-prayer shaping terms as `v_tmp2.1`
+
+Backend changes versus `v_tmp2.1` / `ro7h07qm`:
+- 1-tick prayer drain fix:
+  - prayer drain only accrues if prayer was active at the start of the tick and
+    is still active after that tick's action processing
+  - perfect 1-tick flicking is therefore free
+- generic danger-prayer reward timing:
+  - immediate-snapshot attacks reward on the queue tick
+  - delayed-snapshot attacks reward on the lock tick
+  - reward no longer waits for the later damage-resolve tick
+- generic danger-prayer coverage:
+  - now covers melee, ranged, and magic
+  - not just ranged / magic
+
+Config changes versus `v20`:
+- restore `w_correct_danger_prayer` from `1.75` back to `0.25`
+- restore `shape_npc_specific_prayer_bonus` from `0.0` back to `1.5`
+
+Live `v20.1` values:
+- `w_correct_danger_prayer = 0.25`
+- `w_wrong_danger_prayer = 0.0`
+- `shape_wrong_prayer_penalty = -1.25`
+- `shape_npc_specific_prayer_bonus = 1.5`
+- `shape_npc_melee_penalty = -0.3`
+- `shape_unnecessary_prayer_penalty = -0.2`
+- `total_timesteps = 2_500_000_000`
+
+Results (`rp7a0y2e`):
+- completed normally
+- final trainer step: `2,499,805,184 / 2,500,000,000`
+- runtime: `1225s`
+- throughput: `2.01M SPS`
+
+Final metrics:
+- `wave_reached = 44.11`
+- `max_wave = 50`
+- `most_npcs_slayed = 204`
+- `episode_return = 11739.62`
+- `episode_length = 5771.71`
+- `reached_wave_30 = 0.9948`
+- `reached_wave_31 = 0.9948`
+- `prayer_uptime = 0.9796`
+- `wrong_prayer_hits = 247.08`
+- `no_prayer_hits = 8.49`
+- `dmg_taken_avg = 4117.20`
+- `prayer_switches = 401.55`
+- `attack_when_ready_rate = 0.5352`
+- `tokxil_melee_ticks = 12.78`
+- `ketzek_melee_ticks = 13.78`
+- `pots_used = 30.91`
+- `food_eaten = 20.0`
+- `food_wasted = 16.60`
+- `pots_wasted = 6.26`
+
+Key progression points:
+- `reached_wave_30 >= 0.90` by `655.4M`
+- `reached_wave_31 >= 0.90` by `665.8M`
+- first sampled `wave_reached >= 40` by `1.840B`
+- never sampled `wave_reached >= 45`
+
+Comparison to `v_tmp2.1` / `ro7h07qm`:
+- `wave_reached: 44.11 vs 46.12`
+- `max_wave: 50 vs 62`
+- `most_npcs_slayed: 204 vs 270`
+- `episode_return: 11739.62 vs 12739.18`
+- `reached_wave_30: 0.9948 vs 1.0`
+- `reached_wave_31: 0.9948 vs 0.9815`
+- `first reached_wave_30 >= 0.90: 666M vs 499M`
+- `first reached_wave_31 >= 0.90: 666M vs 499M`
+- `first wave_reached >= 40: 1.840B vs 1.743B`
+- `never reached sampled wave_reached >= 45` vs `2.009B`
+- `prayer_uptime: 0.980 vs 0.665`
+- `wrong_prayer_hits: 247.08 vs 191.61`
+- `no_prayer_hits: 8.49 vs 26.04`
+- `dmg_taken_avg: 4117 vs 5132`
+- `prayer_switches: 402 vs 1213`
+- `attack_when_ready_rate: 0.535 vs 0.579`
+- `tokxil_melee_ticks: 12.78 vs 7.04`
+- `ketzek_melee_ticks: 13.78 vs 9.39`
+- `food_wasted: 16.60 vs 10.65`
+- `pots_wasted: 6.26 vs 23.47`
+
+Comparison to `v20` (`t4eudsav`):
+- `wave_reached: 44.11 vs 44.66`
+- `max_wave: 50 vs 51`
+- `most_npcs_slayed: 204 vs 211`
+- `episode_return: 11739.62 vs 12149.99`
+- `prayer_uptime: 0.980 vs 0.966`
+- `wrong_prayer_hits: 247.08 vs 231.66`
+- `dmg_taken_avg: 4117 vs 4093`
+- `prayer_switches: 402 vs 682`
+- `tokxil_melee_ticks: 12.78 vs 18.16`
+- `ketzek_melee_ticks: 13.78 vs 20.83`
+- `first reached_wave_31 >= 0.90: 666M vs 1.009B`
+- `first wave_reached >= 40: 1.840B vs 2.141B`
+
+Interpretation:
+- `v20.1` is clearly healthier than `v20`, but it still regressed from the
+  strong `v_tmp2.1` / `ro7h07qm` line
+- the snapshot-timed reward with the mild old reward magnitudes still pushed
+  the policy toward heavy prayer camping:
+  - very high prayer uptime
+  - very low no-prayer exposure
+  - much lower prayer switching than the good baseline
+- compared with `v20`, restoring the NPC-specific bonus and lowering generic
+  prayer reward did help:
+  - much better Tok-Xil / Ket-Zek melee exposure
+  - much earlier wave-31 stability
+  - earlier climb into the 40+ range
+- but it still did not recover late-cave ceiling or switching tempo
+
+Most likely takeaway:
+- the main regression source is the snapshot-timed prayer reward itself, not
+  just the stronger `v20` reward magnitudes
+- `v20.2` is the right next control:
+  - keep the 1-tick flick fix
+  - remove snapshot-timed reward
+  - keep the known-good `v_tmp2.1` reward magnitudes
+
+Re-implementing snapshot-timed reward later:
+- the reverted implementation was small and localized
+- to restore it:
+  - add a helper like `fc_note_prayer_snapshot(...)` in `fc_combat.[ch]`
+  - call it in [fc_npc.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_npc.c) immediately after `queued->prayer_snapshot = p->prayer` for immediate-snapshot attacks
+  - call it in [fc_combat.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_combat.c) when delayed snapshots fill at `state->tick >= h->prayer_lock_tick`
+  - remove the resolve-time `correct_danger_prayer` / `wrong_danger_prayer` flag writes from the later hit-resolution block
+  - if desired, broaden the generic signal to include melee there as `v20` / `v20.1` did
+
+---
+
+## v20 (2026-04-09, completed)
+
+Actual run:
+- `t4eudsav`
+
+Status:
+- completed normally
+
+Goal:
+- push prayer learning earlier in the credit-assignment chain
+- reward the policy on the tick the backend decides which prayer snapshot will
+  govern the incoming hit, rather than waiting for the later resolve tick
+- remove the NPC-specific prayer bonus from this trial so the policy learns the
+  generic timing rule instead of leaning on monster-specific shaping
+
+Config:
+- same PPO recipe as `v_tmp2.1`
+- no curriculum
+- `2.5B` budget
+- same loadout and all non-prayer shaping terms as `v_tmp2.1`
+
+Backend changes versus `v_tmp2.1` / `ro7h07qm`:
+- 1-tick prayer drain fix:
+  - prayer drain only accrues if prayer was active at the start of the tick and
+    is still active after that tick's action processing
+  - perfect 1-tick flicking is therefore free
+- generic danger-prayer reward timing:
+  - immediate-snapshot attacks reward on the queue tick
+  - delayed-snapshot attacks reward on the lock tick
+  - reward no longer waits for the later damage-resolve tick
+- generic danger-prayer coverage:
+  - now covers melee, ranged, and magic
+  - not just ranged / magic
+- NPC-specific prayer bonus:
+  - backend path kept
+  - config disabled for this run
+
+Live `v20` values:
+- `w_correct_danger_prayer = 1.75`
+- `w_wrong_danger_prayer = 0.0`
+- `shape_wrong_prayer_penalty = -1.25`
+- `shape_npc_specific_prayer_bonus = 0.0`
+- `shape_npc_melee_penalty = -0.3`
+- `shape_unnecessary_prayer_penalty = -0.2`
+- `total_timesteps = 2_500_000_000`
+
+Results (`t4eudsav`):
+- completed normally
+- final trainer step: `2,495,610,880 / 2,500,000,000`
+- runtime: `1226s`
+- throughput: `2.03M SPS`
+
+Final metrics:
+- `wave_reached = 44.66`
+- `max_wave = 51`
+- `most_npcs_slayed = 211`
+- `episode_return = 12149.99`
+- `episode_length = 5904.67`
+- `reached_wave_30 = 0.9946`
+- `reached_wave_31 = 0.9946`
+- `prayer_uptime = 0.9659`
+- `wrong_prayer_hits = 231.66`
+- `no_prayer_hits = 7.79`
+- `dmg_taken_avg = 4093.19`
+- `prayer_switches = 682.05`
+- `attack_when_ready_rate = 0.5372`
+- `tokxil_melee_ticks = 18.16`
+- `ketzek_melee_ticks = 20.83`
+- `pots_used = 31.50`
+- `food_eaten = 20.0`
+- `food_wasted = 16.83`
+- `pots_wasted = 8.85`
+
+Key progression points:
+- `reached_wave_30 >= 0.90` by `302.0M`
+- `reached_wave_31 >= 0.90` by `1.009B`
+- first sampled `wave_reached >= 40` by `2.141B`
+- first sampled `wave_reached >= 45` by `2.489B`
+
+Comparison to `v_tmp2.1` / `ro7h07qm`:
+- `wave_reached: 44.66 vs 46.12`
+- `max_wave: 51 vs 62`
+- `most_npcs_slayed: 211 vs 270`
+- `episode_return: 12149.99 vs 12739.18`
+- `reached_wave_30: 0.9946 vs 1.0`
+- `reached_wave_31: 0.9946 vs 0.9815`
+- `first reached_wave_30 >= 0.90: 302M vs 491M`
+- `first reached_wave_31 >= 0.90: 1.009B vs 499M`
+- `first wave_reached >= 40: 2.141B vs 1.743B`
+- `prayer_uptime: 0.966 vs 0.665`
+- `wrong_prayer_hits: 231.66 vs 191.61`
+- `no_prayer_hits: 7.79 vs 26.04`
+- `dmg_taken_avg: 4093 vs 5132`
+- `prayer_switches: 682 vs 1213`
+- `attack_when_ready_rate: 0.537 vs 0.579`
+- `tokxil_melee_ticks: 18.16 vs 7.04`
+- `ketzek_melee_ticks: 20.83 vs 9.39`
+- `food_wasted: 16.83 vs 10.65`
+- `pots_wasted: 8.85 vs 23.47`
+
+Interpretation:
+- `v20` did not improve late-cave performance; it regressed from the strong
+  `v_tmp2.1` / `ro7h07qm` line
+- the most obvious shift is toward very conservative prayer camping:
+  - much higher prayer uptime
+  - far fewer switches
+  - far fewer no-prayer hits
+- that conservative behavior helped early wave-30 consistency, but it did not
+  convert into deeper cave performance
+- the later-wave handling got worse, not better:
+  - lower final depth
+  - much lower ceiling
+  - far worse Tok-Xil / Ket-Zek melee exposure
+  - slower climb from wave 31 into the 40+ range
+
+Most likely takeaway:
+- the backend-side timing changes themselves still look promising
+- the aggressive reward change in `v20` was the problem:
+  - `w_correct_danger_prayer = 1.75` plus disabling the NPC-specific bonus
+    appears to have over-incentivized “always keep something protective on”
+    rather than fast switching between threats
+- this run argues for keeping the new backend timing semantics but restoring the
+  milder `v_tmp2.1` reward magnitudes, which is exactly what `v20.1` does
 
 ---
 

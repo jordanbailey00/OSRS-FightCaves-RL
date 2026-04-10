@@ -19,8 +19,10 @@
 
 #define PRAYER_OVERHEAD_DRAIN_RATE 12
 
-void fc_prayer_drain_tick(FcPlayer* p) {
-    if (p->prayer == PRAYER_NONE) return;
+void fc_prayer_drain_tick(FcPlayer* p, int prayer_active_at_tick_start) {
+    /* Perfect 1-tick flicks should be free: only accrue drain when some prayer
+     * was active both before and after this tick's action processing. */
+    if (!prayer_active_at_tick_start || p->prayer == PRAYER_NONE) return;
     if (p->current_prayer <= 0) {
         /* Auto-deactivate if prayer points depleted */
         p->prayer = PRAYER_NONE;

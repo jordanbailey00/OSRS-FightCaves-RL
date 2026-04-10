@@ -19,7 +19,7 @@
  *      c. Movement (walk/run via directional head)
  *      d. Attack initiation (if target valid and timer ready)
  *   3. Decrement player timers (attack, food, potion, combo)
- *   4. Prayer drain
+ *   4. Prayer drain (only if prayer stayed active across the tick boundary)
  *   5. NPC AI tick (movement + attack) for all active NPCs
  *   6. Resolve pending hits (NPC → player, player → NPC)
  *   7. Check terminal conditions
@@ -447,6 +447,8 @@ static void check_terminal(FcState* state) {
 /* ======================================================================== */
 
 void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
+    int prayer_active_at_tick_start = (state->player.prayer != PRAYER_NONE);
+
     /* 1. Clear per-tick flags */
     clear_per_tick_flags(state);
 
@@ -457,7 +459,7 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     decrement_player_timers(&state->player);
 
     /* 4. Prayer drain */
-    fc_prayer_drain_tick(&state->player);
+    fc_prayer_drain_tick(&state->player, prayer_active_at_tick_start);
 
     /* 4b. HP regen (1 HP = 10 tenths every FC_HP_REGEN_INTERVAL ticks) */
     if (state->player.current_hp > 0 && state->player.current_hp < state->player.max_hp) {

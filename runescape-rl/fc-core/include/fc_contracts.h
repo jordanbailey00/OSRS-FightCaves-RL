@@ -128,8 +128,8 @@
 #define FC_RWD_MOVEMENT         13  /* walk/run action executed */
 #define FC_RWD_IDLE             14  /* wait/idle action */
 #define FC_RWD_TICK_PENALTY     15  /* fires every tick (time discount) */
-#define FC_RWD_CORRECT_DANGER_PRAY 16
-#define FC_RWD_WRONG_DANGER_PRAY   17
+#define FC_RWD_CORRECT_DANGER_PRAY 16  /* prayer matched resolved ranged/magic attack */
+#define FC_RWD_WRONG_DANGER_PRAY   17  /* prayer did not match resolved ranged/magic attack */
 #define FC_RWD_ATTACK_ATTEMPT   18  /* valid attack cycle launched this tick */
 #define FC_REWARD_FEATURES      19
 
