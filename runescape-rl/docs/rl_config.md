@@ -264,6 +264,7 @@ These are the live logged metrics that appear in the terminal dashboard, local J
 ### Aggregation Rules
 
 - **`score` / `episode_return` / `episode_length` / `wave_reached`** come from the PufferLib `Log` struct and are reported as rolling averages over completed episodes in the current logging window.
+- **`cave_complete_rate`** is an explicit alias for **`score`** with the same value.
 - **`max_wave`** and **`most_npcs_slayed`** are all-time maxima for the current run. They are not reset each log flush.
 - All other Fight Caves analytics are accumulated per completed episode in `fight_caves.h`, then averaged in `binding.c:my_log()` over the completed episodes in the current logging window.
 - Metrics like **`reached_wave_30`** are therefore best read as episode fractions in the current window, not lifetime truths for the whole run.
@@ -273,6 +274,10 @@ These are the live logged metrics that appear in the terminal dashboard, local J
 - **`score`** — Fraction of completed episodes that ended in full cave completion.
   What it measures: `1.0` when terminal code is `TERMINAL_CAVE_COMPLETE`, else `0.0`.
   Why we have it: exact success-rate signal for full clears.
+
+- **`cave_complete_rate`** — Explicitly named full-clear success rate.
+  What it measures: same value as `score`.
+  Why we have it: avoids misreading `score` as “reached Jad” or “killed Jad.”
 
 - **`episode_return`** — Average shaped return per completed episode.
   What it measures: sum of all scalar rewards produced by `fc_puffer_compute_reward()` across the episode.
@@ -383,6 +388,14 @@ These are the live logged metrics that appear in the terminal dashboard, local J
 - **`reached_wave_31`** — Fraction of completed episodes in the log window that reached wave 31 or higher.
   What it measures: average of the binary `ep_reached_wave_31` flag.
   Why we have it: explicit late-frontier milestone. In the current code it is effectively equivalent to `cleared_wave_30`.
+
+- **`reached_wave_63`** — Fraction of completed episodes in the log window that reached wave 63 or higher.
+  What it measures: average of the binary `ep_reached_wave_63` flag.
+  Why we have it: explicit Jad-wave reach rate, separate from full completion.
+
+- **`jad_kill_rate`** — Fraction of completed episodes in the log window where Jad died at least once.
+  What it measures: average of the binary `ep_jad_killed` flag, which latches for the whole episode when Jad is killed.
+  Why we have it: separates “reached Jad” from “actually finished the Jad fight.”
 
 ### Trainer / PPO Diagnostics
 
@@ -578,6 +591,203 @@ Bottom line:
   - Ket-Zek positioning / melee leakage
   - prayer-potion timing
   - late-run stability
+
+---
+
+## v21 (2026-04-09, completed)
+
+Actual run:
+- `v4ekkk3z`
+- W&B run name:
+  - `logical-wave-125`
+
+Status:
+- completed normally
+
+Goal:
+- run the `v20.2` baseline longer without changing the reward recipe or backend
+  behavior
+- test whether the strong `v20.2` trajectory continues to improve when given a
+  `5B` budget instead of `2.5B`
+
+Config:
+- exact `v20.2` PPO recipe
+- exact `v20.2` env / reward recipe
+- no curriculum
+- same loadout
+- only intended config change versus `v20.2`:
+  - `total_timesteps: 2.5B -> 5.0B`
+
+Backend changes versus `v20.2`:
+- none
+- keep:
+  - locked-prayer combat backend
+  - 1-tick prayer flick drain fix
+  - resolve-time generic danger-prayer reward
+  - mild `v_tmp2.1` prayer reward magnitudes
+
+Live `v21` values:
+- `w_correct_danger_prayer = 0.25`
+- `w_wrong_danger_prayer = 0.0`
+- `shape_wrong_prayer_penalty = -1.25`
+- `shape_npc_specific_prayer_bonus = 1.5`
+- `shape_npc_melee_penalty = -0.3`
+- `shape_unnecessary_prayer_penalty = -0.2`
+- `total_timesteps = 5_000_000_000`
+
+Important caveat:
+- this was not a clean “same run, longer” control in trainer internals
+- `total_timesteps` also lengthened the prioritized-replay beta anneal horizon
+  in the current PufferLib implementation
+- so `v21` changed both:
+  - the total budget
+  - the replay-anneal schedule
+
+Results (`v4ekkk3z`):
+- completed normally
+- final trainer step: `4,999,610,368 / 5,000,000,000`
+- runtime: `2418s`
+- throughput: `2.01M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `wave_reached = 61.40`
+- `max_wave = 63`
+- `most_npcs_slayed = 273`
+- `episode_return = 22940.31`
+- `episode_length = 10027.00`
+- `reached_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+- `prayer_uptime = 0.7345`
+- `prayer_uptime_melee = 0.0371`
+- `prayer_uptime_range = 0.1906`
+- `prayer_uptime_magic = 0.5068`
+- `correct_prayer = 2173.52`
+- `wrong_prayer_hits = 281.50`
+- `no_prayer_hits = 37.47`
+- `damage_blocked = 277395.06`
+- `dmg_taken_avg = 7028.79`
+- `prayer_switches = 2725.36`
+- `attack_when_ready_rate = 0.6226`
+- `pots_used = 32.0`
+- `avg_prayer_on_pot = 0.5754`
+- `pots_wasted = 9.42`
+- `food_eaten = 16.94`
+- `avg_hp_on_food = 0.7751`
+- `food_wasted = 9.02`
+- `tokxil_melee_ticks = 10.76`
+- `ketzek_melee_ticks = 18.08`
+
+Key progression points:
+- sampled `wave_reached >= 30` by `218M`
+- sampled `wave_reached >= 35` by `455M`
+- sampled `wave_reached >= 40` by `696M`
+- sampled `wave_reached >= 45` by `696M`
+- sampled `wave_reached >= 50` by `696M`
+- sampled `wave_reached >= 55` by `1.013B`
+- sampled `wave_reached >= 60` by `1.013B`
+- sampled `max_wave = 63` by `1.876B`
+- best sampled window was around `3.246B`:
+  - `wave_reached = 61.8`
+  - `episode_return = 23283.6`
+  - `episode_length = 10191`
+- after that peak, the run drifted back into the upper-50 / low-60 band for
+  the rest of training rather than converting into full clears
+
+Comparison to `v20.2` (`4o8gv87z`):
+- `score: 0.0 vs 0.0`
+- `wave_reached: 61.40 vs 55.83`
+- `max_wave: 63 vs 60`
+- `most_npcs_slayed: 273 vs 264`
+- `episode_return: 22940.31 vs 19112.53`
+- `episode_length: 10027.00 vs 8246.68`
+- `sampled wave_reached >= 30: 218M vs 489M`
+- `sampled wave_reached >= 40: 696M vs 973M`
+- `sampled wave_reached >= 50: 696M vs 1.260B`
+- `sampled wave_reached >= 55: 1.013B vs 1.369B`
+- `prayer_uptime: 0.734 vs 0.824`
+- `correct_prayer: 2173.52 vs 1837.12`
+- `wrong_prayer_hits: 281.50 vs 155.01`
+- `no_prayer_hits: 37.47 vs 23.55`
+- `damage_blocked: 277395 vs 204649`
+- `dmg_taken_avg: 7029 vs 5241`
+- `prayer_switches: 2725.4 vs 485.9`
+- `attack_when_ready_rate: 0.623 vs 0.657`
+- `tokxil_melee_ticks: 10.76 vs 2.14`
+- `ketzek_melee_ticks: 18.08 vs 4.21`
+- `food_wasted: 9.02 vs 7.57`
+- `pots_wasted: 9.42 vs 3.99`
+
+Jad / completion audit:
+- `score = 0` is correct for this run under the current backend
+- in Fight Caves, `score` only increments when terminal code is
+  `TERMINAL_CAVE_COMPLETE`
+- reaching wave 63 does **not** imply a score increment
+- so `max_wave = 63` with `score = 0` means:
+  - the run reached Jad-wave episodes
+  - no episode actually cleared the cave
+- before this audit patch, the backend did **not** preserve a per-episode
+  “Jad died at any point” latch in logged analytics
+- therefore the old logs cannot prove whether `v21` ever killed Jad in an
+  episode and later died to healers
+- however, `most_npcs_slayed = 273` is still informative:
+  - a full cave without Jad healers is `272` kills total
+  - `273` proves the policy reached Jad healer-phase territory in at least one
+    episode
+  - but it does **not** prove Jad kill, because `273` could be:
+    - Jad + 1 healer
+    - or 2 healers with Jad still alive
+- forward fix applied here:
+  - added explicit `reached_wave_63`, `jad_kill_rate`, and
+    `cave_complete_rate` analytics so future runs cannot blur those cases
+
+Interpretation:
+- `v21` is deeper than `v20.2` on every coarse depth metric that matters:
+  average wave, max wave, kill-count ceiling, return, and episode length
+- but it is also much sloppier in late-wave execution:
+  - far more wrong-prayer hits
+  - more no-prayer hits
+  - much more prayer thrash
+  - much worse Tok-Xil / Ket-Zek melee leakage
+  - more potion waste
+- this is not the old `v20` / `v20.1` prayer-camping failure mode
+- instead it looks like a high-ceiling, low-conversion regime:
+  - it gets to Jad territory early and often
+  - but it leaks too much damage and resource efficiency to finish
+- because the anneal horizon changed with the longer budget, this cannot be
+  cleanly interpreted as “5B is better than 2.5B” without qualification
+
+Most important new insight:
+- longer training on the `v20.2` recipe does unlock much more frequent Jad-wave
+  reach and a higher peak frontier on this stack
+- but the current trainer schedule does not turn that extra depth into actual
+  cave clears
+- the run is good evidence that the recipe has more ceiling left
+- it is not good evidence yet that the final `5B` policy is the right control
+  for future reward/backend comparisons
+
+Recommendations:
+- keep `v20.2` as the clean baseline for config comparisons
+- treat `v21` as a promising but schedule-confounded long-run result
+- decouple replay beta anneal horizon from `total_timesteps` before the next
+  long control (`v21.1` / `v22`)
+- use the new explicit `reached_wave_63`, `jad_kill_rate`, and
+  `cave_complete_rate` metrics for all future Jad-facing runs
+- evaluate the best `v21` checkpoint window, not just the final checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/v4ekkk3z/0000003251634176.bin`
+- if follow-up tuning is needed after the anneal decouple, focus on:
+  - late-wave damage leakage
+  - Tok-Xil / Ket-Zek melee exposure
+  - resource waste during Jad/healer phase
+  - not on broad prayer-reward redesign first
+
+Bottom line:
+- `v21` was a real frontier extension over `v20.2` in raw depth
+- `v21` did **not** produce a cave clear
+- old logging could not tell us whether Jad ever died during a failed wave-63
+  episode
+- the backend audit found that ambiguity and the patch here fixes it for future
+  runs
 
 ---
 
