@@ -90,8 +90,6 @@ void my_init(Env* env, Dict* kwargs) {
     env->shape_low_prayer_pot_reward = item ? (float)item->value : defaults.shape_low_prayer_pot_reward;
     item = dict_get_unsafe(kwargs, "shape_wrong_prayer_penalty");
     env->shape_wrong_prayer_penalty = item ? (float)item->value : defaults.shape_wrong_prayer_penalty;
-    item = dict_get_unsafe(kwargs, "shape_one_tick_prayer_block_bonus");
-    env->shape_one_tick_prayer_block_bonus = item ? (float)item->value : defaults.shape_one_tick_prayer_block_bonus;
     item = dict_get_unsafe(kwargs, "shape_npc_specific_prayer_bonus");
     env->shape_npc_specific_prayer_bonus = item ? (float)item->value : defaults.shape_npc_specific_prayer_bonus;
     item = dict_get_unsafe(kwargs, "shape_npc_melee_penalty");

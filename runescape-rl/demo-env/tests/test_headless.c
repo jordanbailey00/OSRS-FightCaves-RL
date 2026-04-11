@@ -16,7 +16,6 @@
 #include "fc_contracts.h"
 #include "fc_api.h"
 #include "fc_npc.h"
-#include "fc_reward.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,15 +164,22 @@ static void test_reward_features(void) {
     if (rwd[FC_RWD_PLAYER_DEATH] < 0.01f) PASS();
     else FAIL("player_death fired at tick 1");
 
-    state.damage_taken_this_tick = 100;
-    state.player.damage_taken_this_tick = 100;
-    state.player.current_hp -= 100;
-    fc_write_obs(&state, obs);
-    rwd = obs + FC_REWARD_START;
+    /* Run until player takes damage (NPCs will attack) */
+    int took_damage = 0;
+    for (int t = 0; t < 200; t++) {
+        memset(actions, 0, sizeof(actions));
+        fc_step(&state, actions);
+        fc_write_obs(&state, obs);
+        rwd = obs + FC_REWARD_START;
+        if (rwd[FC_RWD_DAMAGE_TAKEN] > 0.0f) {
+            took_damage = 1;
+            break;
+        }
+        if (state.terminal != TERMINAL_NONE) break;
+    }
 
-    TEST("Damage taken reward fires when player takes damage");
-    if (rwd[FC_RWD_DAMAGE_TAKEN] > 0.0f) PASS();
-    else FAIL("damage_taken did not fire");
+    TEST("Damage taken reward fires when NPC hits player");
+    if (took_damage) PASS(); else FAIL("no damage taken in 200 ticks");
 
     /* Test food reward: eat a shark */
     if (state.terminal == TERMINAL_NONE && state.player.current_hp < state.player.max_hp) {
@@ -192,185 +198,6 @@ static void test_reward_features(void) {
     }
 
     fc_destroy(&state);
-}
-
-/* ====================================================================== */
-/* Test 2b: Reward timing semantics                                       */
-/* ====================================================================== */
-
-static void test_reward_timing_semantics(void) {
-    printf("\n=== Reward Timing Semantics ===\n");
-
-    FcState state;
-    init_manual_test_state(&state);
-    state.npcs_remaining = 1;
-    state.player.attack_timer = 0;
-    state.player.attack_target_idx = 0;
-
-    FcRewardParams params = fc_reward_default_params();
-    FcRewardRuntime runtime = {0};
-    FcRewardBreakdown breakdown;
-    char err[128];
-
-    breakdown = fc_reward_compute_breakdown(&state, &params, &runtime);
-    TEST("First ready tick has no wasted/not-attacking penalty");
-    if (fabsf(breakdown.wasted_attack) < 0.0001f &&
-        fabsf(breakdown.not_attacking) < 0.0001f &&
-        runtime.ticks_since_attack == 1) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "wasted=%.4f not=%.4f ready_ticks=%d",
-                 breakdown.wasted_attack, breakdown.not_attacking,
-                 runtime.ticks_since_attack);
-        FAIL(err);
-    }
-
-    breakdown = fc_reward_compute_breakdown(&state, &params, &runtime);
-    TEST("Second ready tick applies wasted_attack only");
-    if (fabsf(breakdown.wasted_attack - params.shape_wasted_attack_penalty) < 0.0001f &&
-        fabsf(breakdown.not_attacking) < 0.0001f &&
-        runtime.ticks_since_attack == 2) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "wasted=%.4f not=%.4f ready_ticks=%d",
-                 breakdown.wasted_attack, breakdown.not_attacking,
-                 runtime.ticks_since_attack);
-        FAIL(err);
-    }
-
-    breakdown = fc_reward_compute_breakdown(&state, &params, &runtime);
-    TEST("Third ready tick applies not_attacking only");
-    if (fabsf(breakdown.wasted_attack) < 0.0001f &&
-        fabsf(breakdown.not_attacking - params.shape_not_attacking_penalty) < 0.0001f &&
-        runtime.ticks_since_attack == 3) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "wasted=%.4f not=%.4f ready_ticks=%d",
-                 breakdown.wasted_attack, breakdown.not_attacking,
-                 runtime.ticks_since_attack);
-        FAIL(err);
-    }
-
-    state.attack_attempt_this_tick = 1;
-    breakdown = fc_reward_compute_breakdown(&state, &params, &runtime);
-    TEST("Attack attempt resets ready-no-attack counter");
-    if (fabsf(breakdown.wasted_attack) < 0.0001f &&
-        fabsf(breakdown.not_attacking) < 0.0001f &&
-        runtime.ticks_since_attack == 0) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "wasted=%.4f not=%.4f ready_ticks=%d",
-                 breakdown.wasted_attack, breakdown.not_attacking,
-                 runtime.ticks_since_attack);
-        FAIL(err);
-    }
-
-    fc_destroy(&state);
-}
-
-/* ====================================================================== */
-/* Test 2c: One-tick prayer block bonus                                    */
-/* ====================================================================== */
-
-static void queue_manual_locked_hit(FcState* state, int source_idx, int style, int damage) {
-    FcPendingHit* hit = &state->player.pending_hits[state->player.num_pending_hits++];
-    memset(hit, 0, sizeof(*hit));
-    hit->active = 1;
-    hit->damage = damage;
-    hit->ticks_remaining = 1;
-    hit->attack_style = style;
-    hit->source_npc_idx = source_idx;
-    hit->prayer_drain = 0;
-    hit->prayer_snapshot = -1;
-    hit->prayer_lock_tick = state->tick;
-}
-
-static void test_one_tick_prayer_block_bonus(void) {
-    printf("\n=== One-Tick Prayer Block Bonus ===\n");
-
-    FcRewardParams params = fc_reward_default_params();
-    FcRewardRuntime runtime = {0};
-    FcRewardBreakdown breakdown;
-    char err[128];
-
-    FcState one_tick;
-    init_manual_test_state(&one_tick);
-    one_tick.current_wave = 1;
-    one_tick.npcs_remaining = 1;
-    one_tick.npcs[0].npc_type = NPC_KET_ZEK;
-    queue_manual_locked_hit(&one_tick, 0, ATTACK_MAGIC, 100);
-
-    int actions[FC_NUM_ACTION_HEADS] = {0};
-    actions[2] = FC_PRAYER_MAGIC;
-    fc_tick(&one_tick, actions);
-    breakdown = fc_reward_compute_breakdown(&one_tick, &params, &runtime);
-
-    TEST("Activation tick gets normal prayer reward but no 1-tick bonus yet");
-    if (breakdown.correct_danger_prayer > 0.0f &&
-        fabsf(breakdown.one_tick_prayer_block) < 0.0001f) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "danger=%.4f flick=%.4f",
-                 breakdown.correct_danger_prayer, breakdown.one_tick_prayer_block);
-        FAIL(err);
-    }
-
-    memset(actions, 0, sizeof(actions));
-    actions[2] = FC_PRAYER_OFF;
-    fc_tick(&one_tick, actions);
-    breakdown = fc_reward_compute_breakdown(&one_tick, &params, &runtime);
-
-    TEST("Turning off after one blocked tick awards flick bonus");
-    if (fabsf(breakdown.one_tick_prayer_block -
-              params.shape_one_tick_prayer_block_bonus) < 0.0001f) {
-        PASS();
-    } else {
-        snprintf(err, sizeof(err), "flick=%.4f expected=%.4f",
-                 breakdown.one_tick_prayer_block,
-                 params.shape_one_tick_prayer_block_bonus);
-        FAIL(err);
-    }
-
-    fc_destroy(&one_tick);
-
-    FcState two_tick;
-    init_manual_test_state(&two_tick);
-    two_tick.current_wave = 1;
-    two_tick.npcs_remaining = 1;
-    two_tick.npcs[0].npc_type = NPC_KET_ZEK;
-    queue_manual_locked_hit(&two_tick, 0, ATTACK_MAGIC, 100);
-    runtime.ticks_since_attack = 0;
-    runtime.ticks_in_wave = 0;
-
-    memset(actions, 0, sizeof(actions));
-    actions[2] = FC_PRAYER_MAGIC;
-    fc_tick(&two_tick, actions);
-    breakdown = fc_reward_compute_breakdown(&two_tick, &params, &runtime);
-
-    memset(actions, 0, sizeof(actions));
-    fc_tick(&two_tick, actions);
-    breakdown = fc_reward_compute_breakdown(&two_tick, &params, &runtime);
-
-    TEST("Leaving prayer on for a second tick suppresses flick bonus");
-    if (fabsf(breakdown.one_tick_prayer_block) < 0.0001f) PASS();
-    else {
-        snprintf(err, sizeof(err), "flick=%.4f", breakdown.one_tick_prayer_block);
-        FAIL(err);
-    }
-
-    memset(actions, 0, sizeof(actions));
-    actions[2] = FC_PRAYER_OFF;
-    fc_tick(&two_tick, actions);
-    breakdown = fc_reward_compute_breakdown(&two_tick, &params, &runtime);
-
-    TEST("Ending a two-tick prayer streak still gives no flick bonus");
-    if (fabsf(breakdown.one_tick_prayer_block) < 0.0001f) PASS();
-    else {
-        snprintf(err, sizeof(err), "flick=%.4f", breakdown.one_tick_prayer_block);
-        FAIL(err);
-    }
-
-    fc_destroy(&two_tick);
 }
 
 /* ====================================================================== */
@@ -427,7 +254,11 @@ static void test_action_mask(void) {
 
     /* After taking damage, eat should become valid */
     int actions[FC_NUM_ACTION_HEADS] = {0};
-    state.player.current_hp -= 100;
+    for (int t = 0; t < 200; t++) {
+        fc_step(&state, actions);
+        if (state.player.current_hp < state.player.max_hp) break;
+        if (state.terminal != TERMINAL_NONE) break;
+    }
 
     if (state.player.current_hp < state.player.max_hp && state.terminal == TERMINAL_NONE) {
         fc_write_mask(&state, mask);
@@ -693,8 +524,6 @@ int main(void) {
 
     test_obs_normalized();
     test_reward_features();
-    test_reward_timing_semantics();
-    test_one_tick_prayer_block_bonus();
     test_action_mask();
     test_determinism();
     test_multi_episode();

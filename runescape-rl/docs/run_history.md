@@ -11,6 +11,631 @@ Formatting note:
 
 ---
 
+## v24.s (2026-04-11, planned)
+
+Actual runs:
+- TBD
+
+Goal:
+- trim the successful `v22.1` recipe down to the smallest config that still
+  preserves its behavior
+- do this with controlled ablations, not broad hyperparameter search
+- separate two questions that are easy to mix up:
+  - what can be removed while keeping the strong `v22.1` warm-start behavior?
+  - which parts of the recipe, if any, still help without a warm-start?
+
+Why this exists:
+- the active config has become too large to reason about comfortably
+- the right next step is not a generic LR/entropy sweep
+- the right next step is a subtractive ablation sweep around the best known
+  recipe
+
+Recommended method:
+- use manual ablation sweeps, not broad random/Bayesian sweeps
+- keep the `v22.1` codepath, corrected combat model, and PPO stack fixed
+- remove clusters first, then split winning clusters into individual knobs
+- use shorter screening budgets before committing to full `5B` reruns
+
+Existing repo support:
+- the repo already has a `v22.1` manual ablation scaffold:
+  - [README.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/README.md:1)
+  - [run_v22_1_sweep.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh:1)
+- existing config matrix:
+  - control
+  - reward retune OFF
+  - low-prayer shaping OFF
+  - both OFF
+- existing initialization axis:
+  - warm-start from `u58coupx/0000001311768576.bin`
+  - cold-start from scratch
+
+Recommended sweep order:
+
+Phase 0: exact control rerun
+- run `v24` first as the exact `v22.1` control
+- this answers the variance / hidden-drift question before trimming anything
+
+Phase 1: warm-start cluster screen
+- this is the highest-value first sweep
+- run only the warm-start half of the existing `2 x 4` matrix
+- budget:
+  - `2.25B` steps each
+  - expected runtime roughly `20-25m` per run on the current box
+  - total roughly `80-100m`
+- runs:
+  - `warm_control`
+  - `warm_no_low_prayer`
+  - `warm_no_reward_retune`
+  - `warm_no_reward_retune_no_low_prayer`
+- what this answers:
+  - whether the low-prayer rescue shaping matters at all
+  - whether the reward-retune cluster matters at all
+  - whether both can be removed together while keeping warm-start performance
+- this is the correct first sweep if the immediate goal is:
+  - smallest config that still reproduces `v22.1`-style behavior
+
+Phase 2: cold-start dependency screen
+- run the cold-start half only after the warm-start screen
+- budget:
+  - `2.25B` steps each
+  - another `80-100m`
+- runs:
+  - `cold_control`
+  - `cold_no_low_prayer`
+  - `cold_no_reward_retune`
+  - `cold_no_reward_retune_no_low_prayer`
+- what this answers:
+  - whether the same trimmed recipe still helps from scratch
+  - whether warm-start is carrying most of the observed `v22.1` gains
+- what it does **not** answer:
+  - it will not magically produce a strong no-warm-start recipe if all cold
+    runs are weak
+  - it only tells you whether the current recipe family transfers without the
+    checkpoint
+
+Phase 3: one-at-a-time trimming inside the winning cluster
+- only do this after Phase 1 narrows the search space
+- if `warm_no_low_prayer` matches control:
+  - split the low-prayer cluster next
+  - test:
+    - `shape_low_prayer_no_pot_penalty`
+    - `shape_low_prayer_pot_reward`
+    - the exact-zero threshold itself
+- if `warm_no_reward_retune` matches control:
+  - split the reward-retune cluster next
+  - test:
+    - `w_damage_dealt`
+    - `w_attack_attempt`
+    - `w_npc_kill`
+    - `w_wave_clear`
+- recommended budget for this phase:
+  - `1.5B-2.25B` per run
+- this is where you start removing knobs one by one
+- do not start here before Phase 1, or you will waste time
+
+Best use of a `4-6h` window:
+- if you want maximum information today:
+  - run `v24` control
+  - run the 4 warm-start ablations
+  - run the 4 cold-start ablations
+- that is the cleanest full first-pass answer set
+- if you want maximum efficiency toward a minimal warm-start recipe:
+  - run `v24` control
+  - run only the 4 warm-start ablations
+  - then spend the remaining time on the first `2-4` one-at-a-time trims from
+    the winning cluster
+
+How to interpret outcomes:
+- if `warm_no_low_prayer` is near control:
+  - low-prayer rescue shaping is a good removal candidate
+- if `warm_no_reward_retune` is near control:
+  - the reward-retune cluster is a good removal candidate
+- if only `warm_control` works:
+  - `v22.1` is compact enough already in the places that matter most
+- if cold runs all lag badly:
+  - the sweep still helped, but the answer is:
+    - current `v22.1` performance still relies heavily on warm-start
+- if one cold variant materially beats `cold_control`:
+  - that variant is the best starting point for a later no-warm-path branch
+
+Metrics to rank by:
+- primary:
+  - `wave_reached`
+  - `reached_wave_63`
+  - `jad_kill_rate`
+- secondary:
+  - `prayer_uptime_magic`
+  - `damage_blocked`
+  - `attack_when_ready_rate`
+  - `avg_prayer_on_pot`
+  - `pots_wasted`
+- do not rank by a single metric in isolation
+
+Recommended commands:
+- preview the existing 8-run matrix:
+  - `bash /home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh --dry-run`
+- run the full existing matrix:
+  - `bash /home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh`
+- if only doing the warm-start half, run these four manually:
+  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_control.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin FORCE_BACKEND_REBUILD=1 bash train.sh`
+  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_low_prayer.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
+  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_reward_retune.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
+  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_reward_retune_no_low_prayer.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
+
+Answer to the warm-path question:
+- this sweep **will help answer** whether a trimmed `v22.1`-style recipe still
+  helps without warm-start
+- this sweep will **not by itself guarantee** a strong no-warm-path recipe
+- if all cold runs are poor, the next step is a separate cold-start
+  optimization branch after the warm-start recipe has already been minimized
+
+Status:
+- planned
+
+Results:
+- TBD
+
+---
+
+## v24 (2026-04-11, completed)
+
+Actual run:
+- `h2kpwkdk`
+- W&B path:
+  - `jordanbaileypmp-georgia-institute-of-technology/puffer4/h2kpwkdk`
+- local run log:
+  - [h2kpwkdk.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/h2kpwkdk.json)
+
+Status:
+- completed to the full `5B` budget
+- W&B tagged `v24`
+
+Goal:
+- do an exact rerun of `v22.1`
+- remove all `v23` / `v23.1` code-path and config changes
+- keep the same warm-start source, PPO recipe, corrected combat model, and
+  reward stack that produced `721zk2cg`
+- use this as the control rerun before any further ablations
+
+Config versus `v22.1`:
+- no intended code delta
+- no intended config delta
+- same warm-start source:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+- same corrected `Masori (f) + TBow` combat model
+- same attack-ready penalty semantics as the original `v22.1`
+- no 1-tick flick block bonus
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=-0.01`, `shape_low_prayer_pot_reward=0.15`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `anneal_lr=0`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Expected read:
+- this is the exact control rerun for `v22.1`
+- if it returns to the `61-63` wave regime, the `v23` / `v23.1` regressions
+  were caused by the bundled reward/code changes rather than variance
+- if it does not, then the next suspicion is hidden environment drift rather
+  than the explicit `v23` deltas
+
+Results:
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2574s`
+- throughput:
+  - `1.85M SPS`
+
+Final metrics:
+- `score = 0.0217`
+- `cave_complete_rate = 0.0217`
+- `wave_reached = 61.97`
+- `max_wave = 63`
+- `most_npcs_slayed = 325`
+- `episode_return = 32277.45`
+- `episode_length = 8581.45`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+- `reached_wave_63 = 0.3582`
+- `jad_kill_rate = 0.0149`
+- `prayer_uptime = 0.7345`
+- `prayer_uptime_melee = 0.0322`
+- `prayer_uptime_range = 0.1727`
+- `prayer_uptime_magic = 0.5296`
+- `correct_prayer = 1550.93`
+- `wrong_prayer_hits = 296.24`
+- `no_prayer_hits = 29.76`
+- `damage_blocked = 187216.98`
+- `dmg_taken_avg = 6445.69`
+- `prayer_switches = 651.28`
+- `attack_when_ready_rate = 0.7500`
+- `pots_used = 31.36`
+- `avg_prayer_on_pot = 0.3760`
+- `food_eaten = 8.01`
+- `avg_hp_on_food = 0.5725`
+- `food_wasted = 1.33`
+- `pots_wasted = 3.07`
+- `tokxil_melee_ticks = 3.85`
+- `ketzek_melee_ticks = 5.36`
+
+Key progression points:
+- this rerun reproduced the `v22.1` frontier trajectory almost exactly
+- strong mid-run breakout:
+  - `1.876B`: `wave_reached = 50.5`, `episode_return = 21952.0`
+- frontier competence was established by the mid-run sample:
+  - `3.126B`: `wave_reached = 61.3`, `episode_return = 31342.2`
+- the late window stayed in the same `~62` regime:
+  - `4.376B`: `wave_reached = 61.98`, `episode_return = 32250.6`
+  - `5.000B`: `wave_reached = 61.97`, `episode_return = 32277.4`
+
+Comparison to `v22.1` (`721zk2cg`):
+- `score: 0.0217 vs 0.0217`
+- `cave_complete_rate: 0.0217 vs 0.0217`
+- `wave_reached: 61.97 vs 61.97`
+- `max_wave: 63 vs 63`
+- `most_npcs_slayed: 325 vs 325`
+- `episode_return: 32277.4 vs 32277.4`
+- `episode_length: 8581 vs 8581`
+- `reached_wave_63: 0.3582 vs 0.3582`
+- `jad_kill_rate: 0.0149 vs 0.0149`
+- `prayer_uptime_magic: 0.5296 vs 0.5296`
+- `damage_blocked: 187217 vs 187217`
+- `prayer_switches: 651.3 vs 651.3`
+- `attack_when_ready_rate: 0.7500 vs 0.7500`
+- `avg_prayer_on_pot: 0.3760 vs 0.3760`
+- `pots_wasted: 3.07 vs 3.07`
+
+Main read:
+- `v24` successfully reproduces the `v22.1` branch
+- this clears the main uncertainty around hidden repo drift
+- the `v22.1` behavior is reproducible on the current codebase when the repo is
+  set back to the correct codepath and live config
+- `v24` should be treated as the control baseline for all `v24.s` trimming
+  ablations
+
+Checkpoint notes:
+- early eval checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/h2kpwkdk/0000001888485376.bin`
+- frontier checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/h2kpwkdk/0000003146776576.bin`
+- late stable checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/h2kpwkdk/0000004614782976.bin`
+- final checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/h2kpwkdk/0000004999610368.bin`
+
+---
+
+## v23.1 (2026-04-11, completed)
+
+Actual run:
+- `fdzlxlwm`
+- W&B path:
+  - `jordanbaileypmp-georgia-institute-of-technology/puffer4/fdzlxlwm`
+- local run log:
+  - [fdzlxlwm.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/fdzlxlwm.json)
+
+Status:
+- completed to the full `5B` budget
+- W&B tagged `v23.1`
+
+Goal:
+- keep the full `v23` numeric config exactly as-is
+- keep the same warm-start source, PPO recipe, corrected combat model, and
+  attack-ready timing semantics
+- keep the same `shape_one_tick_prayer_block_bonus = 0.1`
+- narrow the new flick reward semantics so it only pays on:
+  - blocked 1-tick prayer streak
+  - followed by `PRAYER_OFF`
+- explicitly do not reward prayer-to-prayer switches
+- make no LOS, Jad, healer, or combat-model changes in this run
+
+Config versus `v23`:
+- identical reward weights
+- identical shaping values
+- identical runtime / PPO / policy config
+- identical warm-start source:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+- only code-path delta:
+  - `shape_one_tick_prayer_block_bonus` now fires only when a blocked
+    1-tick prayer streak ends by switching to `OFF`
+  - prayer-to-prayer transitions no longer qualify
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=0.0`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=-0.01`, `shape_low_prayer_pot_reward=0.15`, `shape_wrong_prayer_penalty=-1.25`, `shape_one_tick_prayer_block_bonus=0.1`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `anneal_lr=0`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Expected read:
+- this isolates the strongest suspected root cause from `v23`
+- if near-full prayer-pot use falls back toward `v22.1` behavior, the original
+  `v23` regression was mainly caused by paying the flick bonus on
+  prayer-to-prayer switches
+- if the regression remains, the next most likely ablations are:
+  - restore `w_tick_penalty = -0.005`
+  - revert the attack-ready timing change
+
+Results (`fdzlxlwm`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2438s`
+- throughput:
+  - `1.91M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 43.02`
+- `max_wave = 49`
+- `most_npcs_slayed = 198`
+- `episode_return = 15835.42`
+- `episode_length = 6193.56`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 0.9879`
+- `reached_wave_31 = 0.9879`
+- `reached_wave_63 = 0.0`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.3247`
+- `prayer_uptime_melee = 0.0421`
+- `prayer_uptime_range = 0.1375`
+- `prayer_uptime_magic = 0.1451`
+- `correct_prayer = 1174.14`
+- `wrong_prayer_hits = 117.98`
+- `no_prayer_hits = 103.39`
+- `damage_blocked = 89391.76`
+- `dmg_taken_avg = 4090.91`
+- `prayer_switches = 2183.79`
+- `attack_when_ready_rate = 0.3859`
+- `pots_used = 32.0`
+- `avg_prayer_on_pot = 0.9721`
+- `food_eaten = 19.99`
+- `avg_hp_on_food = 0.8887`
+- `food_wasted = 16.54`
+- `pots_wasted = 31.26`
+- `tokxil_melee_ticks = 7.34`
+- `ketzek_melee_ticks = 7.02`
+
+Key progression points:
+- unlike `v23`, this run did keep climbing through the full budget:
+  - `0.627B`: `wave_reached = 29.56`, `episode_return = 7195.1`
+  - `1.876B`: `wave_reached = 30.89`, `episode_return = 8105.4`
+  - `3.126B`: `wave_reached = 35.60`, `episode_return = 10787.9`
+  - `4.376B`: `wave_reached = 41.51`, `episode_return = 14634.1`
+  - `5.000B`: `wave_reached = 43.02`, `episode_return = 15835.4`
+- it restored some late-wave magic-prayer behavior, but never reached the
+  `v22.1` frontier window
+- `score`, `reached_wave_63`, and `jad_kill_rate` stayed at `0.0` throughout
+
+Comparison to `v23` (`yq3tbole`):
+- `wave_reached: 43.02 vs 31.15`
+- `max_wave: 49 vs 35`
+- `most_npcs_slayed: 198 vs 130`
+- `episode_return: 15835.4 vs 8585.6`
+- `prayer_uptime_magic: 0.1451 vs 0.0`
+- `correct_prayer: 1174.1 vs 812.6`
+- `damage_blocked: 89392 vs 12065`
+- `prayer_switches: 2183.8 vs 1503.5`
+- `attack_when_ready_rate: 0.3859 vs 0.5722`
+- `avg_prayer_on_pot: 0.9721 vs 0.9260`
+- `pots_wasted: 31.26 vs 30.54`
+- `food_eaten: 19.99 vs 8.18`
+- `food_wasted: 16.54 vs 6.01`
+
+Comparison to `v22.1` (`721zk2cg`):
+- `score: 0.0 vs 0.0217`
+- `cave_complete_rate: 0.0 vs 0.0217`
+- `wave_reached: 43.02 vs 61.97`
+- `max_wave: 49 vs 63`
+- `most_npcs_slayed: 198 vs 325`
+- `episode_return: 15835.4 vs 32277.4`
+- `episode_length: 6194 vs 8581`
+- `reached_wave_30: 1.0 vs 1.0`
+- `cleared_wave_30: 0.9879 vs 1.0`
+- `reached_wave_31: 0.9879 vs 1.0`
+- `reached_wave_63: 0.0 vs 0.3582`
+- `jad_kill_rate: 0.0 vs 0.0149`
+- `prayer_uptime_magic: 0.1451 vs 0.5296`
+- `damage_blocked: 89392 vs 187217`
+- `prayer_switches: 2183.8 vs 651.3`
+- `attack_when_ready_rate: 0.3859 vs 0.7500`
+- `avg_prayer_on_pot: 0.9721 vs 0.3760`
+- `pots_wasted: 31.26 vs 3.07`
+- `food_eaten: 19.99 vs 8.01`
+- `food_wasted: 16.54 vs 1.33`
+- `no_prayer_hits: 103.39 vs 29.76`
+
+Main read:
+- narrowing the flick bonus to only pay on `1-tick -> OFF` did remove the
+  direct prayer-to-prayer reward exploit
+- that recovered some magic-prayer usage and pushed the run well past the
+  `v23` wall
+- but it did not fix the overall resource collapse:
+  - the agent still potted at near-full prayer
+  - prayer switches increased even further
+  - attack tempo got worse
+  - food timing also regressed badly
+- this means `v23.1` is still a clear regression from `v22.1`, even though it
+  is materially better than `v23`
+
+Checkpoint notes:
+- early eval checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/fdzlxlwm/0000000630194176.bin`
+- mid-run breakout checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/fdzlxlwm/0000003146776576.bin`
+- late frontier checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/fdzlxlwm/0000004352638976.bin`
+- final checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/fdzlxlwm/0000004999610368.bin`
+
+---
+
+## v23 (2026-04-11, completed)
+
+Actual run:
+- `yq3tbole`
+- W&B path:
+  - `jordanbaileypmp-georgia-institute-of-technology/puffer4/yq3tbole`
+- local run log:
+  - [yq3tbole.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/yq3tbole.json)
+
+Status:
+- completed to the full `5B` budget
+- W&B tagged `v23`
+
+Goal:
+- keep the `v22.1` recipe, warm-start source, PPO settings, and corrected
+  `Masori (f) + TBow` combat model
+- remove the global per-tick penalty entirely
+- fix the attack-ready stall timing so penalties do not fire on the exact tick
+  attack cooldown reaches `0`
+- add one small positive signal for an exact 1-tick prayer activation that
+  successfully blocks a hit
+- make no LOS, Jad, healer, or combat-model changes in this run
+
+Config versus `v22.1`:
+- same PPO/train recipe
+- same `5B` budget
+- same backend structure
+- same viewer / reward-parity / analytics infrastructure
+- same corrected `Masori (f) + TBow` combat model
+- same warm-start source:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+- same reward weights and shaping except:
+  - `w_tick_penalty: -0.005 -> 0.0`
+  - add `shape_one_tick_prayer_block_bonus = 0.1`
+- code-path delta versus `v22.1`:
+  - attack-ready penalty semantics changed from immediate ready-state penalty
+    to:
+    - first ready-no-attack tick: no penalty
+    - second ready-no-attack tick: `wasted_attack`
+    - third and later ready-no-attack ticks: `not_attacking`
+- explicitly not included:
+  - LOS fixes
+  - Jad safespot fixes
+  - healer reward / penalty changes
+  - further combat-model changes
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=0.0`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=-0.01`, `shape_low_prayer_pot_reward=0.15`, `shape_wrong_prayer_penalty=-1.25`, `shape_one_tick_prayer_block_bonus=0.1`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `anneal_lr=0`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`yq3tbole`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2431s`
+- throughput:
+  - `1.98M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 31.15`
+- `max_wave = 35`
+- `most_npcs_slayed = 130`
+- `episode_return = 8585.58`
+- `episode_length = 3957.24`
+- `reached_wave_30 = 0.9810`
+- `cleared_wave_30 = 0.9734`
+- `reached_wave_31 = 0.9734`
+- `reached_wave_63 = 0.0`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.5904`
+- `prayer_uptime_melee = 0.1494`
+- `prayer_uptime_range = 0.4410`
+- `prayer_uptime_magic = 0.0`
+- `correct_prayer = 812.58`
+- `wrong_prayer_hits = 49.98`
+- `no_prayer_hits = 32.47`
+- `damage_blocked = 12064.99`
+- `dmg_taken_avg = 2486.96`
+- `prayer_switches = 1503.53`
+- `attack_when_ready_rate = 0.5722`
+- `pots_used = 32.0`
+- `avg_prayer_on_pot = 0.9260`
+- `food_eaten = 8.18`
+- `avg_hp_on_food = 0.8625`
+- `food_wasted = 6.01`
+- `pots_wasted = 30.54`
+- `tokxil_melee_ticks = 4.51`
+- `ketzek_melee_ticks = 0.52`
+
+Key progression points:
+- there was no `v22.1`-style breakout window anywhere in the run
+- the run stayed below wave `30` through the first `~3.1B` steps:
+  - `0.627B`: `wave_reached = 25.1`, `episode_return = 5208.7`
+  - `1.876B`: `wave_reached = 27.0`, `episode_return = 6072.2`
+  - `3.126B`: `wave_reached = 29.1`, `episode_return = 7370.8`
+- the best sampled window arrived late, but only reached low-wave-`31`:
+  - `4.376B`: `wave_reached = 31.24`, `episode_return = 8654.7`
+  - `5.000B`: `wave_reached = 31.15`, `episode_return = 8585.6`
+- `score`, `reached_wave_63`, and `jad_kill_rate` stayed at `0.0` across the
+  whole sampled trajectory
+- this run did eventually become a consistent wave-30 clearer, but never found
+  a wave-31-plus frontier policy
+
+Comparison to `v22.1` (`721zk2cg`):
+- `score: 0.0 vs 0.0217`
+- `cave_complete_rate: 0.0 vs 0.0217`
+- `wave_reached: 31.15 vs 61.97`
+- `max_wave: 35 vs 63`
+- `most_npcs_slayed: 130 vs 325`
+- `episode_return: 8585.6 vs 32277.4`
+- `episode_length: 3957 vs 8581`
+- `reached_wave_30: 0.9810 vs 1.0`
+- `cleared_wave_30: 0.9734 vs 1.0`
+- `reached_wave_31: 0.9734 vs 1.0`
+- `reached_wave_63: 0.0 vs 0.3582`
+- `jad_kill_rate: 0.0 vs 0.0149`
+- `prayer_uptime: 0.5904 vs 0.7345`
+- `prayer_uptime_melee: 0.1494 vs 0.0322`
+- `prayer_uptime_range: 0.4410 vs 0.1727`
+- `prayer_uptime_magic: 0.0 vs 0.5296`
+- `correct_prayer: 812.6 vs 1550.9`
+- `no_prayer_hits: 32.5 vs 29.8`
+- `damage_blocked: 12065.0 vs 187217.0`
+- `prayer_switches: 1503.5 vs 651.3`
+- `attack_when_ready_rate: 0.5722 vs 0.7500`
+- `avg_prayer_on_pot: 0.9260 vs 0.3760`
+- `pots_wasted: 30.54 vs 3.07`
+- `avg_hp_on_food: 0.8625 vs 0.5725`
+- `food_wasted: 6.01 vs 1.33`
+
+Main read:
+- the combined `v23` change set was a hard regression
+- the most diagnostic signatures were:
+  - zero `protect from magic` usage (`prayer_uptime_magic = 0.0`)
+  - much lower attack tempo (`attack_when_ready_rate = 0.5722`)
+  - much higher switch count with much lower blocked damage
+  - near-full prayer-pot usage (`avg_prayer_on_pot = 0.9260`)
+  - much earlier food usage (`avg_hp_on_food = 0.8625`)
+- this suggests the `v23` incentives shifted the policy toward noisy
+  prayer-on/prayer-switch behavior and worse resource timing, without producing
+  the high-wave prayer-control behavior that `v22.1` inherited from the warm
+  start
+- because `v23` bundled three changes at once, attribution is still confounded:
+  - zeroed `w_tick_penalty`
+  - added `shape_one_tick_prayer_block_bonus`
+  - delayed the attack-ready stall penalties by one tick
+
+Checkpoint notes:
+- first eval checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yq3tbole/0000001259339776.bin`
+- best sampled-window checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yq3tbole/0000004352638976.bin`
+- final checkpoint:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yq3tbole/0000004999610368.bin`
+
+---
+
 ## v21.3 (2026-04-10, planned)
 
 Actual run:

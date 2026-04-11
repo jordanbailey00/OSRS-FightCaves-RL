@@ -151,9 +151,6 @@ typedef struct {
 
     /* Active prayer */
     int prayer;  /* FcPrayer enum */
-    int prayer_streak_prayer;   /* current prayer streak identity, or PRAYER_NONE */
-    int prayer_streak_ticks;    /* consecutive ticks current prayer has stayed active */
-    int prayer_streak_blocked;  /* 1 if current prayer streak has blocked at least one hit */
 
     /* Prayer drain counter (OSRS counter-based system from PrayerDrain.kt):
      * Each tick: counter += active prayer drain rate (12 for protect prayers).
@@ -366,8 +363,6 @@ typedef struct {
     int wrong_jad_prayer;
     int correct_danger_prayer;
     int wrong_danger_prayer;
-    int blocked_prayer_mask_this_tick;       /* bitmask of prayers that blocked this tick */
-    int one_tick_prayer_block_bonus_this_tick; /* one-tick prayer streak with a successful block ended */
     int attack_attempt_this_tick;
     int invalid_action_this_tick;
     int movement_this_tick;
