@@ -59,9 +59,9 @@ Phase 1: warm-start cluster screen
 - this is the highest-value first sweep
 - run only the warm-start half of the existing `2 x 4` matrix
 - budget:
-  - `2.25B` steps each
-  - expected runtime roughly `20-25m` per run on the current box
-  - total roughly `80-100m`
+  - `3B` steps each
+  - expected runtime roughly `27-32m` per run on the current box
+  - total roughly `110-130m`
 - runs:
   - `warm_control`
   - `warm_no_low_prayer`
@@ -77,8 +77,8 @@ Phase 1: warm-start cluster screen
 Phase 2: cold-start dependency screen
 - run the cold-start half only after the warm-start screen
 - budget:
-  - `2.25B` steps each
-  - another `80-100m`
+  - `3B` steps each
+  - another `110-130m`
 - runs:
   - `cold_control`
   - `cold_no_low_prayer`

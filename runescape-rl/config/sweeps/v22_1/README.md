@@ -24,7 +24,7 @@ What this 8-run design answers:
 - whether there is interaction between warm-start and the two reward changes
 
 Suggested sweep budget:
-- `2.25B` steps each
+- `3B` steps each
 - same warm-start checkpoint for the 4 warm-started runs:
   - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
 
