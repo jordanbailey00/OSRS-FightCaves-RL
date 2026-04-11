@@ -1,5 +1,87 @@
 # Changelog
 
+## 2026-04-11
+
+- Added `v22.1` recovery docs and follow-up tooling in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md), [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md), [runescape-rl/config/benchmarks](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/benchmarks), [runescape-rl/config/sweeps/v22_1](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1), and [runescape-rl/docs/training_config_matrix_v20.2_v21_v21.2.csv](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/training_config_matrix_v20.2_v21_v21.2.csv).
+- `v22.1` (`721zk2cg`) summary:
+  - first non-zero `cave_complete_rate` on this stack
+  - stable `61-62.5` wave regime; no late collapse
+  - strongest replay checkpoint: `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/721zk2cg/0000004614782976.bin`
+- Added two concrete follow-up paths:
+  - `v22.1` warm/cold ablation sweep
+  - `v21.2` `300M` benchmark config for short sanity runs
+- Kept shared-core parity current in [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h), [runescape-rl/training-env/binding.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/binding.c), [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h), [runescape-rl/demo-env/src/fc_debug_overlay.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_debug_overlay.h), and [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c).
+- Remaining issues:
+  - `v22.1` is a five-change bundle; attribution is weak
+  - potion timing still overfires (`pots_used` near full inventory, `avg_prayer_on_pot` too high)
+  - `jad_kill_rate` undercounts versus `cave_complete_rate`
+- Outcome:
+  - keep `v22.1` as mainline
+  - run the staged `v22.1` sweep before falling back to `v21.3`
+  - keep short benchmark configs for cheap early-branch validation
+- W&B:
+  - tagged latest remote runs consistently (`v22`, `v22.1`, `v21.3`, `v21.2-300m-benchmark`, `v22.1-sweep-warm-control`)
+
+## 2026-04-10
+
+- Landed reward-parity and analytics audit work in [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h), [runescape-rl/training-env](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env), [runescape-rl/demo-env](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env), and [runescape-rl/analyze_run.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/analyze_run.sh):
+  - shared reward breakdown for trainer and viewer
+  - added `cave_complete_rate`, `reached_wave_63`, `jad_kill_rate`
+  - replay/debug surfaces now match training much more closely
+- Staged and documented `v21`, `v21.1`, `v21.2`, `v22`, and planned `v21.3` in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md), [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md), [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), and [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini).
+- `v22` branch changes:
+  - corrected active `Masori (f) + Twisted bow` combat model
+  - added per-NPC `npc_type` observation channel
+  - added low-prayer potion-teaching signal
+- Results:
+  - `v21.1`: severe regression; stable wave-31 shelf after `shape_not_attacking_*` retune
+  - `v21.2`: partial recovery; regained Jad reach, still collapsed on prayer/resource sustain
+  - `v22`: severe regression; high prayer uptime, full resource burn, low offensive tempo
+- Lessons learned:
+  - keep parity/analytics infrastructure even when the training branch fails
+  - do not bundle obs-contract changes and new shaping with a combat-model correction
+  - revert the smallest learning delta first when the regression signature is obvious
+
+## 2026-04-09
+
+- Merged shared-core follow-up fixes in [runescape-rl/fc-core](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core), [runescape-rl/training-env](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env), and [runescape-rl/demo-env](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env):
+  - kept locked-prayer hit-resolution semantics
+  - kept the 1-tick prayer drain fix
+  - restored resolve-time generic danger-prayer reward behavior
+  - repaired viewer parity after the refactor
+- Fixed replay ergonomics in [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py) and [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c):
+  - checkpoint replay loading fixed
+  - TPS / replay-speed controls fixed
+- Promoted `v20.2` as the prayer baseline and documented the `v20` family.
+- Results:
+  - `v20.2` isolated the good backend change: keep the 1-tick flick fix, keep mild prayer rewards, revert snapshot-timed generic prayer reward
+  - `v20` / `v20.1`: snapshot-timed generic prayer reward regressed into camping behavior
+  - `v20.3`: aggressive prayer reward magnitudes regressed even without snapshot timing
+- Lessons learned:
+  - separate backend correctness changes from shaping changes
+  - keep generic prayer reward timing on resolve-time behavior
+  - after a structural refactor, viewer/eval parity is mandatory validation work
+
+## 2026-04-08
+
+- Finished pre-refactor config/doc sync for `v19.3` in [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md), [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), and [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini).
+- Took snapshot `pre-shared-refactor-2026-04-08`, then moved the duplicated Fight Caves backend into shared [runescape-rl/fc-core](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core):
+  - rewired `training-env` and `demo-env` to shared headers/sources
+  - moved collision/build wiring to shared paths
+  - deleted the duplicated `training-env/src` backend copy
+- Added replay controls and fixed melee safespot/pathing in [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c), [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py), and [runescape-rl/fc-core/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src); added [runescape-rl/demo-env/tests/test_headless.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/tests/test_headless.c).
+- Results:
+  - `fc-core` split removed the main training/viewer/eval drift vector
+  - snapshot-first approach made the refactor recoverable
+  - replay controls plus headless coverage gave the move an immediate verification loop
+- Costs:
+  - include/build/replay/doc assumptions broke and required follow-up parity work on April 9-10
+  - `/claude`-era path assumptions were still embedded in several docs/scripts
+- Lessons learned:
+  - snapshot first for invasive structural work
+  - schedule parity validation as part of the same change
+  - removing duplicated simulation code is worth the churn here
+
 ## 2026-04-07
 
 - Updated stale observation-size comments in [runescape-rl/training-env/src/fc_contracts.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src/fc_contracts.h) and [runescape-rl/training-env/fight_caves.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/fight_caves.h) so the documented live contract matches the actual buffers again.
