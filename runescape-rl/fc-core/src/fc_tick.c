@@ -41,6 +41,8 @@ static void clear_per_tick_flags(FcState* state) {
     state->wrong_jad_prayer = 0;
     state->correct_danger_prayer = 0;
     state->wrong_danger_prayer = 0;
+    state->blocked_prayer_mask_this_tick = 0;
+    state->one_tick_prayer_block_bonus_this_tick = 0;
     state->attack_attempt_this_tick = 0;
     state->invalid_action_this_tick = 0;
     state->movement_this_tick = 0;
@@ -64,6 +66,34 @@ static void clear_per_tick_flags(FcState* state) {
     for (int i = 0; i < FC_MAX_NPCS; i++) {
         state->npcs[i].damage_taken_this_tick = 0;
         state->npcs[i].died_this_tick = 0;
+    }
+}
+
+static void update_prayer_streak(FcState* state) {
+    FcPlayer* p = &state->player;
+    int prayer = p->prayer;
+    int blocked = (prayer != PRAYER_NONE) &&
+        ((state->blocked_prayer_mask_this_tick & (1 << prayer)) != 0);
+
+    if (prayer == p->prayer_streak_prayer && prayer != PRAYER_NONE) {
+        p->prayer_streak_ticks++;
+        if (blocked) p->prayer_streak_blocked = 1;
+        return;
+    }
+
+    if (p->prayer_streak_prayer != PRAYER_NONE &&
+        p->prayer_streak_ticks == 1 &&
+        p->prayer_streak_blocked) {
+        state->one_tick_prayer_block_bonus_this_tick = 1;
+    }
+
+    p->prayer_streak_prayer = prayer;
+    if (prayer != PRAYER_NONE) {
+        p->prayer_streak_ticks = 1;
+        p->prayer_streak_blocked = blocked ? 1 : 0;
+    } else {
+        p->prayer_streak_ticks = 0;
+        p->prayer_streak_blocked = 0;
     }
 }
 
@@ -485,6 +515,10 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
             fc_resolve_npc_pending_hits(state, i);
         }
     }
+
+    /* Prayer streak state is updated after hit resolution so one-tick
+     * block bonuses can be awarded exactly when a one-tick streak ends. */
+    update_prayer_streak(state);
 
     /* 6b. Process death timers — dead NPCs stay visible briefly */
     for (int i = 0; i < FC_MAX_NPCS; i++) {

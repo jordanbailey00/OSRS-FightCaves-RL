@@ -304,6 +304,7 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "shape_low_prayer_no_pot_penalty") == 0) params->shape_low_prayer_no_pot_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_low_prayer_pot_reward") == 0) params->shape_low_prayer_pot_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_one_tick_prayer_block_bonus") == 0) params->shape_one_tick_prayer_block_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_specific_prayer_bonus") == 0) params->shape_npc_specific_prayer_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_wasted_attack_penalty") == 0) params->shape_wasted_attack_penalty = strtof(value, NULL);

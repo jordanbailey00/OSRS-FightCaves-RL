@@ -43,7 +43,11 @@ int main(void) {
         env.shape_pot_waste_scale = defaults.shape_pot_waste_scale;
         env.shape_pot_safe_prayer_threshold = defaults.shape_pot_safe_prayer_threshold;
         env.shape_pot_no_threat_penalty = defaults.shape_pot_no_threat_penalty;
+        env.shape_low_prayer_pot_threshold = defaults.shape_low_prayer_pot_threshold;
+        env.shape_low_prayer_no_pot_penalty = defaults.shape_low_prayer_no_pot_penalty;
+        env.shape_low_prayer_pot_reward = defaults.shape_low_prayer_pot_reward;
         env.shape_wrong_prayer_penalty = defaults.shape_wrong_prayer_penalty;
+        env.shape_one_tick_prayer_block_bonus = defaults.shape_one_tick_prayer_block_bonus;
         env.shape_npc_specific_prayer_bonus = defaults.shape_npc_specific_prayer_bonus;
         env.shape_npc_melee_penalty = defaults.shape_npc_melee_penalty;
         env.shape_wasted_attack_penalty = defaults.shape_wasted_attack_penalty;

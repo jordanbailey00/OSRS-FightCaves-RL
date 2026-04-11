@@ -148,6 +148,7 @@ typedef struct FightCaves {
     float shape_low_prayer_no_pot_penalty;
     float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
+    float shape_one_tick_prayer_block_bonus;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
     float shape_wasted_attack_penalty;
@@ -171,7 +172,7 @@ typedef struct FightCaves {
     int curriculum_wave_3;       /* optional third late-wave curriculum bucket */
     float curriculum_pct_3;
     int disable_movement;        /* 1 = force idle movement, agent can't walk/run */
-    int ticks_since_attack;      /* ticks since agent last dealt damage */
+    int ticks_since_attack;      /* consecutive ready ticks without an attack attempt */
     int ticks_in_wave;           /* ticks since current wave started */
 
     /* Episode tracking */
@@ -232,6 +233,7 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_low_prayer_no_pot_penalty = env->shape_low_prayer_no_pot_penalty;
     params.shape_low_prayer_pot_reward = env->shape_low_prayer_pot_reward;
     params.shape_wrong_prayer_penalty = env->shape_wrong_prayer_penalty;
+    params.shape_one_tick_prayer_block_bonus = env->shape_one_tick_prayer_block_bonus;
     params.shape_npc_specific_prayer_bonus = env->shape_npc_specific_prayer_bonus;
     params.shape_npc_melee_penalty = env->shape_npc_melee_penalty;
     params.shape_wasted_attack_penalty = env->shape_wasted_attack_penalty;

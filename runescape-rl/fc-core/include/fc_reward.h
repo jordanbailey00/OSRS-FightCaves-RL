@@ -38,6 +38,7 @@ typedef struct {
     float shape_low_prayer_no_pot_penalty;
     float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
+    float shape_one_tick_prayer_block_bonus;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
     float shape_wasted_attack_penalty;
@@ -91,6 +92,7 @@ typedef struct {
     float correct_danger_prayer;
     float wrong_danger_prayer_weight;
     float wrong_danger_prayer_shape;
+    float one_tick_prayer_block;
     float npc_specific_prayer;
     float melee_pressure;
     float wasted_attack;
@@ -126,7 +128,7 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.w_invalid_action = -0.1f;
     params.w_movement = 0.0f;
     params.w_idle = 0.0f;
-    params.w_tick_penalty = -0.005f;
+    params.w_tick_penalty = 0.0f;
 
     params.shape_food_full_waste_penalty = -6.5f;
     params.shape_food_waste_scale = -1.2f;
@@ -140,6 +142,7 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_low_prayer_no_pot_penalty = -0.01f;
     params.shape_low_prayer_pot_reward = 0.15f;
     params.shape_wrong_prayer_penalty = -1.25f;
+    params.shape_one_tick_prayer_block_bonus = 0.10f;
     params.shape_npc_specific_prayer_bonus = 1.5f;
     params.shape_npc_melee_penalty = -0.3f;
     params.shape_wasted_attack_penalty = -0.1f;
@@ -317,6 +320,9 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.raw[FC_RWD_WRONG_DANGER_PRAY] * params->w_wrong_danger_prayer;
     out.wrong_danger_prayer_shape =
         out.raw[FC_RWD_WRONG_DANGER_PRAY] * params->shape_wrong_prayer_penalty;
+    if (state->one_tick_prayer_block_bonus_this_tick) {
+        out.one_tick_prayer_block = params->shape_one_tick_prayer_block_bonus;
+    }
 
     {
         int prayer = p->hit_locked_prayer_this_tick;
@@ -339,11 +345,6 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     if (out.threat_ctx.melee_pressure_npcs > 0) {
         out.melee_pressure = params->shape_npc_melee_penalty *
             (float)out.threat_ctx.melee_pressure_npcs;
-    }
-
-    if (p->attack_timer <= 0 && out.raw[FC_RWD_DAMAGE_DEALT] <= 0.0f &&
-        state->npcs_remaining > 0 && p->attack_target_idx >= 0) {
-        out.wasted_attack = params->shape_wasted_attack_penalty;
     }
 
     if (state->npcs_remaining > 0) {
@@ -373,11 +374,16 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     if (out.raw[FC_RWD_ATTACK_ATTEMPT] > 0.0f) {
         runtime->ticks_since_attack = 0;
     } else if (state->npcs_remaining > 0 && p->attack_timer <= 0) {
+        int wasted_attack_tick = params->shape_not_attacking_grace_ticks;
+        if (wasted_attack_tick < 2) wasted_attack_tick = 2;
         runtime->ticks_since_attack++;
-        if (runtime->ticks_since_attack >= params->shape_not_attacking_grace_ticks) {
+        if (runtime->ticks_since_attack == wasted_attack_tick &&
+            p->attack_target_idx >= 0) {
+            out.wasted_attack = params->shape_wasted_attack_penalty;
+        } else if (runtime->ticks_since_attack >= wasted_attack_tick + 1) {
             out.not_attacking = params->shape_not_attacking_penalty;
         }
-    } else if (state->npcs_remaining <= 0) {
+    } else {
         runtime->ticks_since_attack = 0;
     }
 
@@ -426,6 +432,7 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.correct_danger_prayer +
         out.wrong_danger_prayer_weight +
         out.wrong_danger_prayer_shape +
+        out.one_tick_prayer_block +
         out.npc_specific_prayer +
         out.melee_pressure +
         out.wasted_attack +

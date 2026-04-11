@@ -65,6 +65,9 @@ static uint32_t hash_player(uint32_t h, const FcPlayer* p) {
     h = fnv_feed_int(h, p->current_prayer);
     h = fnv_feed_int(h, p->max_prayer);
     h = fnv_feed_int(h, p->prayer);
+    h = fnv_feed_int(h, p->prayer_streak_prayer);
+    h = fnv_feed_int(h, p->prayer_streak_ticks);
+    h = fnv_feed_int(h, p->prayer_streak_blocked);
     h = fnv_feed_int(h, p->sharks_remaining);
     h = fnv_feed_int(h, p->prayer_doses_remaining);
     h = fnv_feed_int(h, p->attack_timer);
@@ -145,6 +148,8 @@ uint32_t fc_state_hash(const FcState* state) {
     h = fnv_feed_int(h, state->damage_taken_this_tick);
     h = fnv_feed_int(h, state->npcs_killed_this_tick);
     h = fnv_feed_int(h, state->wave_just_cleared);
+    h = fnv_feed_int(h, state->blocked_prayer_mask_this_tick);
+    h = fnv_feed_int(h, state->one_tick_prayer_block_bonus_this_tick);
 
     return h;
 }

@@ -316,6 +316,10 @@ void fc_resolve_player_pending_hits(FcState* state) {
                 else state->wrong_danger_prayer = 1;
             }
 
+            if (blocked && locked_prayer != PRAYER_NONE) {
+                state->blocked_prayer_mask_this_tick |= (1 << locked_prayer);
+            }
+
             /* Episode-level hit analytics */
             state->ep_hits_total++;
             if (locked_prayer != PRAYER_NONE) {
