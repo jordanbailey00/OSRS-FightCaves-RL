@@ -394,6 +394,8 @@ typedef struct {
     int ep_reached_wave_30;     /* 1 if episode reached wave 30 */
     int ep_cleared_wave_30;     /* 1 if episode cleared wave 30 */
     int ep_reached_wave_31;     /* 1 if episode reached wave 31 */
+    int ep_reached_wave_63;     /* 1 if episode reached Jad wave */
+    int ep_jad_killed;          /* 1 if Jad died at any point this episode */
 } FcState;
 
 #endif /* FC_TYPES_H */

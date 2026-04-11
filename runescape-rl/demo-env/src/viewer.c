@@ -26,12 +26,14 @@
 #include "fc_npc.h"
 #include "fc_combat.h"
 #include "fc_pathfinding.h"
+#include "fc_reward.h"
 #include "fc_wave.h"
 #include "fc_terrain_loader.h"
 #include "fc_objects_loader.h"
 #include "fc_npc_models.h"
 #include "fc_anim_loader.h"
 #include "fc_debug_overlay.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +44,7 @@
 #define HEADER_HEIGHT   40
 #define WINDOW_W        (FC_ARENA_WIDTH * TILE_SIZE + PANEL_WIDTH)
 #define WINDOW_H        (FC_ARENA_HEIGHT * TILE_SIZE + HEADER_HEIGHT)
-#define MAX_TPS         30.0f
+#define MAX_TPS         60.0f
 #define MIN_TPS         0.25f
 #define HALF_TPS        0.50f
 #define NORMAL_TPS      (5.0f / 3.0f)
@@ -107,6 +109,13 @@ static const char* TERRAIN_PATHS[] = {
 static const char* OBJECTS_PATHS[] = {
     "demo-env/assets/fightcaves.objects", "../demo-env/assets/fightcaves.objects",
     "assets/fightcaves.objects", NULL };
+#define FC_REWARD_CONFIG_PATH_MAX 256
+static const char* REWARD_CONFIG_PATHS[] = {
+    "config/fight_caves.ini",
+    "../config/fight_caves.ini",
+    "../../config/fight_caves.ini",
+    NULL
+};
 #define FC_WORLD_ORIGIN_X 2368
 #define FC_WORLD_ORIGIN_Y 5056
 
@@ -217,6 +226,12 @@ typedef struct {
     int policy_episode_count; /* number of completed policy-pipe episodes */
     int start_wave;     /* 0 = wave 1 (default), >0 = skip to this wave on reset */
     int disable_movement; /* 1 = force idle movement */
+    FcRewardParams reward_params;
+    FcRewardRuntime reward_runtime;
+    FcRewardBreakdown reward_breakdown;
+    int reward_breakdown_tick;
+    int reward_config_loaded;
+    char reward_config_path[FC_REWARD_CONFIG_PATH_MAX];
     /* Smooth movement interpolation — stored by stable slot (player + NPC array index) */
     float prev_player_x, prev_player_y;
     float prev_npc_x[FC_MAX_NPCS];
@@ -247,8 +262,126 @@ static int float_near(float a, float b) {
     return fabsf(a - b) < 0.0001f;
 }
 
-static const float MANUAL_TPS_PRESETS[] = {0.25f, 0.50f, NORMAL_TPS, 4.0f, 10.0f, 15.0f};
-static const char* MANUAL_TPS_LABELS[] = {"0.25", "0.5", "1.67", "4", "10", "15"};
+static char* trim_ascii(char* s) {
+    while (*s && isspace((unsigned char)*s)) s++;
+    if (*s == '\0') return s;
+
+    char* end = s + strlen(s) - 1;
+    while (end >= s && isspace((unsigned char)*end)) {
+        *end = '\0';
+        end--;
+    }
+    return s;
+}
+
+static void reward_params_apply_key(FcRewardParams* params,
+                                    const char* key,
+                                    const char* value) {
+    if (strcmp(key, "w_damage_dealt") == 0) params->w_damage_dealt = strtof(value, NULL);
+    else if (strcmp(key, "w_attack_attempt") == 0) params->w_attack_attempt = strtof(value, NULL);
+    else if (strcmp(key, "w_damage_taken") == 0) params->w_damage_taken = strtof(value, NULL);
+    else if (strcmp(key, "w_npc_kill") == 0) params->w_npc_kill = strtof(value, NULL);
+    else if (strcmp(key, "w_wave_clear") == 0) params->w_wave_clear = strtof(value, NULL);
+    else if (strcmp(key, "w_jad_damage") == 0) params->w_jad_damage = strtof(value, NULL);
+    else if (strcmp(key, "w_jad_kill") == 0) params->w_jad_kill = strtof(value, NULL);
+    else if (strcmp(key, "w_player_death") == 0) params->w_player_death = strtof(value, NULL);
+    else if (strcmp(key, "w_cave_complete") == 0) params->w_cave_complete = strtof(value, NULL);
+    else if (strcmp(key, "w_correct_danger_prayer") == 0) params->w_correct_danger_prayer = strtof(value, NULL);
+    else if (strcmp(key, "w_wrong_danger_prayer") == 0) params->w_wrong_danger_prayer = strtof(value, NULL);
+    else if (strcmp(key, "w_invalid_action") == 0) params->w_invalid_action = strtof(value, NULL);
+    else if (strcmp(key, "w_movement") == 0) params->w_movement = strtof(value, NULL);
+    else if (strcmp(key, "w_idle") == 0) params->w_idle = strtof(value, NULL);
+    else if (strcmp(key, "w_tick_penalty") == 0) params->w_tick_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_food_full_waste_penalty") == 0) params->shape_food_full_waste_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_food_waste_scale") == 0) params->shape_food_waste_scale = strtof(value, NULL);
+    else if (strcmp(key, "shape_food_safe_hp_threshold") == 0) params->shape_food_safe_hp_threshold = strtof(value, NULL);
+    else if (strcmp(key, "shape_food_no_threat_penalty") == 0) params->shape_food_no_threat_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_pot_full_waste_penalty") == 0) params->shape_pot_full_waste_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_pot_waste_scale") == 0) params->shape_pot_waste_scale = strtof(value, NULL);
+    else if (strcmp(key, "shape_pot_safe_prayer_threshold") == 0) params->shape_pot_safe_prayer_threshold = strtof(value, NULL);
+    else if (strcmp(key, "shape_pot_no_threat_penalty") == 0) params->shape_pot_no_threat_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_npc_specific_prayer_bonus") == 0) params->shape_npc_specific_prayer_bonus = strtof(value, NULL);
+    else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wasted_attack_penalty") == 0) params->shape_wasted_attack_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wave_stall_base_penalty") == 0) params->shape_wave_stall_base_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wave_stall_cap") == 0) params->shape_wave_stall_cap = strtof(value, NULL);
+    else if (strcmp(key, "shape_not_attacking_penalty") == 0) params->shape_not_attacking_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_kiting_reward") == 0) params->shape_kiting_reward = strtof(value, NULL);
+    else if (strcmp(key, "shape_unnecessary_prayer_penalty") == 0) params->shape_unnecessary_prayer_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_resource_threat_window") == 0) params->shape_resource_threat_window = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_kiting_min_dist") == 0) params->shape_kiting_min_dist = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_kiting_max_dist") == 0) params->shape_kiting_max_dist = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_wave_stall_start") == 0) params->shape_wave_stall_start = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_wave_stall_ramp_interval") == 0) params->shape_wave_stall_ramp_interval = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_not_attacking_grace_ticks") == 0) params->shape_not_attacking_grace_ticks = (int)strtol(value, NULL, 10);
+}
+
+static void load_reward_params(ViewerState* v) {
+    v->reward_params = fc_reward_default_params();
+    v->reward_config_loaded = 0;
+    snprintf(v->reward_config_path, sizeof(v->reward_config_path), "%s", "defaults");
+
+    for (int i = 0; REWARD_CONFIG_PATHS[i]; i++) {
+        FILE* f = fopen(REWARD_CONFIG_PATHS[i], "r");
+        if (!f) continue;
+
+        char line[512];
+        int in_env = 0;
+        while (fgets(line, sizeof(line), f)) {
+            char* comment = strchr(line, '#');
+            if (comment) *comment = '\0';
+
+            char* text = trim_ascii(line);
+            if (*text == '\0') continue;
+
+            if (*text == '[') {
+                char* close = strchr(text, ']');
+                if (!close) continue;
+                *close = '\0';
+                in_env = (strcmp(text + 1, "env") == 0);
+                continue;
+            }
+
+            if (!in_env) continue;
+
+            char* eq = strchr(text, '=');
+            if (!eq) continue;
+            *eq = '\0';
+
+            char* key = trim_ascii(text);
+            char* value = trim_ascii(eq + 1);
+            if (*key == '\0' || *value == '\0') continue;
+
+            reward_params_apply_key(&v->reward_params, key, value);
+        }
+
+        fclose(f);
+        v->reward_config_loaded = 1;
+        snprintf(v->reward_config_path, sizeof(v->reward_config_path), "%s", REWARD_CONFIG_PATHS[i]);
+        return;
+    }
+}
+
+static void reset_reward_tracking(ViewerState* v) {
+    fc_reward_runtime_reset(&v->reward_runtime);
+    memset(&v->reward_breakdown, 0, sizeof(v->reward_breakdown));
+    v->reward_breakdown_tick = -1;
+}
+
+static void update_reward_breakdown(ViewerState* v) {
+    if (v->reward_breakdown_tick == v->state.tick) return;
+    v->reward_breakdown = fc_reward_compute_breakdown(
+        &v->state, &v->reward_params, &v->reward_runtime);
+    v->reward_breakdown_tick = v->state.tick;
+}
+
+static const float MANUAL_TPS_PRESETS[] = {
+    0.25f, 0.50f, NORMAL_TPS, 4.0f, 10.0f, 15.0f, 30.0f, 60.0f
+};
+static const char* MANUAL_TPS_LABELS[] = {
+    "0.25", "0.5", "1.67", "4", "10", "15", "30", "60"
+};
 #define NUM_MANUAL_TPS_PRESETS ((int)(sizeof(MANUAL_TPS_PRESETS) / sizeof(MANUAL_TPS_PRESETS[0])))
 
 static float policy_replay_multiplier_to_tps(int multiplier) {
@@ -420,6 +553,8 @@ static void print_policy_episode_summary(const ViewerState* v) {
 }
 
 static void reset_ep(ViewerState* v) {
+    load_reward_params(v);
+    reset_reward_tracking(v);
     v->seed = (uint32_t)GetRandomValue(1, 999999);
     fc_reset(&v->state, v->seed);
     /* Skip to start_wave if set */
@@ -435,6 +570,7 @@ static void reset_ep(ViewerState* v) {
         v->state.player.current_prayer = v->state.player.max_prayer;
     }
     fc_fill_render_entities(&v->state, v->entities, &v->entity_count);
+    update_reward_breakdown(v);
     v->last_hash = fc_state_hash(&v->state);
     v->episode_count++;
     v->attack_target = -1;
@@ -1747,12 +1883,16 @@ static void draw_panel(ViewerState* v) {
     /* ---- Debug info tabs (Phase 9c, shown when O is toggled on) ---- */
     if (v->dbg_flags) {
         v->dbg_tab_y = npc_end_y;
-        dbg_draw_panel_tabs(&v->state, px, x, npc_end_y, PANEL_WIDTH, v->dbg_tab);
+        npc_end_y = dbg_draw_panel_tabs(&v->state, &v->reward_params,
+                                        &v->reward_breakdown, &v->reward_runtime,
+                                        v->reward_config_loaded,
+                                        v->reward_config_path,
+                                        px, x, npc_end_y, PANEL_WIDTH, v->dbg_tab);
     } else {
         v->dbg_tab_y = 0;
     }
 
-    int controls_y = (v->dbg_flags ? npc_end_y + 200 : npc_end_y) + 34;
+    int controls_y = npc_end_y + 34;
     static int loadout_open = 0;
 
     /* ---- Wave jump dropdown ---- */
@@ -1831,7 +1971,9 @@ static void draw_panel(ViewerState* v) {
                     v->state.player.current_prayer = v->state.player.max_prayer;
                     v->state.terminal = TERMINAL_NONE;
                     v->state.jad_healers_spawned = 0;
+                    reset_reward_tracking(v);
                     fc_fill_render_entities(&v->state, v->entities, &v->entity_count);
+                    update_reward_breakdown(v);
                     memset(v->hitsplats, 0, sizeof(v->hitsplats));
                     memset(v->projectiles, 0, sizeof(v->projectiles));
                     v->attack_target = -1;
@@ -1904,6 +2046,8 @@ static void draw_panel(ViewerState* v) {
                     p->ammo_count = lo->ammo;
                     p->sharks_remaining = FC_MAX_SHARKS;
                     p->prayer_doses_remaining = FC_MAX_PRAYER_DOSES;
+                    v->reward_breakdown_tick = -1;
+                    update_reward_breakdown(v);
                     loadout_open = 0;
                 }
             }
@@ -1918,13 +2062,14 @@ static void draw_panel(ViewerState* v) {
         int box_x = px + 8;
         int box_w = PANEL_WIDTH - 16;
         int box_y = controls_y;
-        int box_h = 74;
-        int label_y = box_y + 6;
-        int btn_y = box_y + 24;
         int btn_gap = 6;
         int btn_cols = 3;
-        int btn_w = (box_w - btn_gap * (btn_cols - 1)) / btn_cols;
         int btn_h = 18;
+        int btn_rows = (NUM_MANUAL_TPS_PRESETS + btn_cols - 1) / btn_cols;
+        int box_h = 24 + btn_rows * btn_h + (btn_rows - 1) * 6 + 8;
+        int label_y = box_y + 6;
+        int btn_y = box_y + 24;
+        int btn_w = (box_w - btn_gap * (btn_cols - 1)) / btn_cols;
 
         DrawRectangle(box_x, box_y, box_w, box_h, CLITERAL(Color){20, 18, 14, 220});
         DrawRectangleLines(box_x, box_y, box_w, box_h, COL_PANEL_BORDER);
@@ -2325,6 +2470,7 @@ int main(int argc, char** argv) {
             /* Step simulation */
             if (v.disable_movement) v.actions[0] = 0;
             fc_step(&v.state, v.actions);
+            update_reward_breakdown(&v);
             v.tick_frac = 0.0f;
 
             /* Debug event log — record events from this tick */

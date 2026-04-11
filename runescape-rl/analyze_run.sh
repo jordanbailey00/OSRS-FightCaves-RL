@@ -46,6 +46,12 @@ print(f'  most_npcs_slayed: {s.get(\"env/most_npcs_slayed\", \"N/A\")}')
 print(f'  episode_return: {s.get(\"env/episode_return\", 0):.1f}')
 print(f'  episode_length: {s.get(\"env/episode_length\", 0):.0f}')
 print(f'  score:          {s.get(\"env/score\", 0):.0f}')
+if s.get('env/cave_complete_rate', None) is not None:
+    print(f'  cave_complete:  {s.get(\"env/cave_complete_rate\", 0):.4f}')
+if s.get('env/reached_wave_63', None) is not None:
+    print(f'  reached_wave63: {s.get(\"env/reached_wave_63\", 0):.4f}')
+if s.get('env/jad_kill_rate', None) is not None:
+    print(f'  jad_kill_rate:  {s.get(\"env/jad_kill_rate\", 0):.4f}')
 print(f'  epochs:         {s.get(\"epoch\", 0)}')
 print(f'  entropy:        {s.get(\"loss/entropy\", 0):.3f}')
 print(f'  clipfrac:       {s.get(\"loss/clipfrac\", 0):.4f}')
@@ -60,8 +66,7 @@ prayer_up = s.get('env/prayer_uptime', None)
 if prayer_up is not None:
     print('=== ANALYTICS ===')
     print(f'  prayer_uptime:     {prayer_up:.3f}')
-    print(f'  correct_blocks:    {s.get(\"env/correct_blocks\", 0):.1f}')
-    print(f'  correct_blocks:    {s.get(\"env/correct_blocks\", 0):.1f}')
+    print(f'  correct_prayer:    {s.get(\"env/correct_prayer\", 0):.1f}')
     print(f'  dmg_taken_avg:     {s.get(\"env/dmg_taken_avg\", 0):.1f}')
     print(f'  pots_used:         {s.get(\"env/pots_used\", 0):.1f}')
     print(f'  food_eaten:        {s.get(\"env/food_eaten\", 0):.1f}')

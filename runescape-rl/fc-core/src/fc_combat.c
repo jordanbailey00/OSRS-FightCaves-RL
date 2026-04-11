@@ -331,6 +331,7 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
 
                 if (npc->npc_type == NPC_TZTOK_JAD) {
                     state->jad_killed = 1;
+                    state->ep_jad_killed = 1;
                 }
 
                 /* Tz-Kek parent: split into 2 small Tz-Kek.

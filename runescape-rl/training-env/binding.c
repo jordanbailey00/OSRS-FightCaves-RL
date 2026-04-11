@@ -6,6 +6,7 @@
  */
 
 #include "fight_caves.h"
+#include "fc_reward.h"
 
 #define OBS_SIZE FC_PUFFER_OBS_SIZE
 #define OBS_TENSOR_T FloatTensor
@@ -19,97 +20,98 @@
 
 void my_init(Env* env, Dict* kwargs) {
     env->num_agents = 1;  /* Fight Caves is single-agent */
+    FcRewardParams defaults = fc_reward_default_params();
 
     /* Reward shaping weights (from config/fight_caves.ini [env] section) */
     DictItem* item;
     item = dict_get_unsafe(kwargs, "w_damage_dealt");
-    env->w_damage_dealt = item ? (float)item->value : 0.5f;
+    env->w_damage_dealt = item ? (float)item->value : defaults.w_damage_dealt;
     item = dict_get_unsafe(kwargs, "w_attack_attempt");
-    env->w_attack_attempt = item ? (float)item->value : 0.0f;
+    env->w_attack_attempt = item ? (float)item->value : defaults.w_attack_attempt;
     item = dict_get_unsafe(kwargs, "w_damage_taken");
-    env->w_damage_taken = item ? (float)item->value : -0.75f;
+    env->w_damage_taken = item ? (float)item->value : defaults.w_damage_taken;
     item = dict_get_unsafe(kwargs, "w_npc_kill");
-    env->w_npc_kill = item ? (float)item->value : 3.0f;
+    env->w_npc_kill = item ? (float)item->value : defaults.w_npc_kill;
     item = dict_get_unsafe(kwargs, "w_wave_clear");
-    env->w_wave_clear = item ? (float)item->value : 10.0f;
+    env->w_wave_clear = item ? (float)item->value : defaults.w_wave_clear;
     item = dict_get_unsafe(kwargs, "w_jad_damage");
-    env->w_jad_damage = item ? (float)item->value : 2.0f;
+    env->w_jad_damage = item ? (float)item->value : defaults.w_jad_damage;
     item = dict_get_unsafe(kwargs, "w_jad_kill");
-    env->w_jad_kill = item ? (float)item->value : 50.0f;
+    env->w_jad_kill = item ? (float)item->value : defaults.w_jad_kill;
     item = dict_get_unsafe(kwargs, "w_player_death");
-    env->w_player_death = item ? (float)item->value : -20.0f;
+    env->w_player_death = item ? (float)item->value : defaults.w_player_death;
     item = dict_get_unsafe(kwargs, "w_cave_complete");
-    env->w_cave_complete = item ? (float)item->value : 100.0f;
+    env->w_cave_complete = item ? (float)item->value : defaults.w_cave_complete;
     item = dict_get_unsafe(kwargs, "w_food_used");
-    env->w_food_used = item ? (float)item->value : -0.5f;
+    env->w_food_used = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_food_used_well");
-    env->w_food_used_well = item ? (float)item->value : 1.0f;
+    env->w_food_used_well = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_prayer_pot_used");
-    env->w_prayer_pot_used = item ? (float)item->value : -1.0f;
+    env->w_prayer_pot_used = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_correct_jad_prayer");
     env->w_correct_jad_prayer = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_wrong_jad_prayer");
     env->w_wrong_jad_prayer = item ? (float)item->value : 0.0f;
     item = dict_get_unsafe(kwargs, "w_correct_danger_prayer");
-    env->w_correct_danger_prayer = item ? (float)item->value : 2.0f;
+    env->w_correct_danger_prayer = item ? (float)item->value : defaults.w_correct_danger_prayer;
     item = dict_get_unsafe(kwargs, "w_wrong_danger_prayer");
-    env->w_wrong_danger_prayer = item ? (float)item->value : 0.0f;
+    env->w_wrong_danger_prayer = item ? (float)item->value : defaults.w_wrong_danger_prayer;
     item = dict_get_unsafe(kwargs, "w_invalid_action");
-    env->w_invalid_action = item ? (float)item->value : -0.1f;
+    env->w_invalid_action = item ? (float)item->value : defaults.w_invalid_action;
     item = dict_get_unsafe(kwargs, "w_movement");
-    env->w_movement = item ? (float)item->value : 0.0f;
+    env->w_movement = item ? (float)item->value : defaults.w_movement;
     item = dict_get_unsafe(kwargs, "w_idle");
-    env->w_idle = item ? (float)item->value : 0.0f;
+    env->w_idle = item ? (float)item->value : defaults.w_idle;
     item = dict_get_unsafe(kwargs, "w_tick_penalty");
-    env->w_tick_penalty = item ? (float)item->value : -0.001f;
+    env->w_tick_penalty = item ? (float)item->value : defaults.w_tick_penalty;
 
     /* Configurable shaping terms */
     item = dict_get_unsafe(kwargs, "shape_food_full_waste_penalty");
-    env->shape_food_full_waste_penalty = item ? (float)item->value : -5.0f;
+    env->shape_food_full_waste_penalty = item ? (float)item->value : defaults.shape_food_full_waste_penalty;
     item = dict_get_unsafe(kwargs, "shape_food_waste_scale");
-    env->shape_food_waste_scale = item ? (float)item->value : -1.0f;
+    env->shape_food_waste_scale = item ? (float)item->value : defaults.shape_food_waste_scale;
     item = dict_get_unsafe(kwargs, "shape_food_safe_hp_threshold");
-    env->shape_food_safe_hp_threshold = item ? (float)item->value : 0.70f;
+    env->shape_food_safe_hp_threshold = item ? (float)item->value : defaults.shape_food_safe_hp_threshold;
     item = dict_get_unsafe(kwargs, "shape_food_no_threat_penalty");
-    env->shape_food_no_threat_penalty = item ? (float)item->value : -0.5f;
+    env->shape_food_no_threat_penalty = item ? (float)item->value : defaults.shape_food_no_threat_penalty;
     item = dict_get_unsafe(kwargs, "shape_pot_full_waste_penalty");
-    env->shape_pot_full_waste_penalty = item ? (float)item->value : -5.0f;
+    env->shape_pot_full_waste_penalty = item ? (float)item->value : defaults.shape_pot_full_waste_penalty;
     item = dict_get_unsafe(kwargs, "shape_pot_waste_scale");
-    env->shape_pot_waste_scale = item ? (float)item->value : -1.0f;
+    env->shape_pot_waste_scale = item ? (float)item->value : defaults.shape_pot_waste_scale;
     item = dict_get_unsafe(kwargs, "shape_pot_safe_prayer_threshold");
-    env->shape_pot_safe_prayer_threshold = item ? (float)item->value : 0.50f;
+    env->shape_pot_safe_prayer_threshold = item ? (float)item->value : defaults.shape_pot_safe_prayer_threshold;
     item = dict_get_unsafe(kwargs, "shape_pot_no_threat_penalty");
-    env->shape_pot_no_threat_penalty = item ? (float)item->value : -0.5f;
+    env->shape_pot_no_threat_penalty = item ? (float)item->value : defaults.shape_pot_no_threat_penalty;
     item = dict_get_unsafe(kwargs, "shape_wrong_prayer_penalty");
-    env->shape_wrong_prayer_penalty = item ? (float)item->value : -1.0f;
+    env->shape_wrong_prayer_penalty = item ? (float)item->value : defaults.shape_wrong_prayer_penalty;
     item = dict_get_unsafe(kwargs, "shape_npc_specific_prayer_bonus");
-    env->shape_npc_specific_prayer_bonus = item ? (float)item->value : 2.0f;
+    env->shape_npc_specific_prayer_bonus = item ? (float)item->value : defaults.shape_npc_specific_prayer_bonus;
     item = dict_get_unsafe(kwargs, "shape_npc_melee_penalty");
-    env->shape_npc_melee_penalty = item ? (float)item->value : -0.5f;
+    env->shape_npc_melee_penalty = item ? (float)item->value : defaults.shape_npc_melee_penalty;
     item = dict_get_unsafe(kwargs, "shape_wasted_attack_penalty");
-    env->shape_wasted_attack_penalty = item ? (float)item->value : -0.3f;
+    env->shape_wasted_attack_penalty = item ? (float)item->value : defaults.shape_wasted_attack_penalty;
     item = dict_get_unsafe(kwargs, "shape_wave_stall_base_penalty");
-    env->shape_wave_stall_base_penalty = item ? (float)item->value : -0.75f;
+    env->shape_wave_stall_base_penalty = item ? (float)item->value : defaults.shape_wave_stall_base_penalty;
     item = dict_get_unsafe(kwargs, "shape_wave_stall_cap");
-    env->shape_wave_stall_cap = item ? (float)item->value : -3.0f;
+    env->shape_wave_stall_cap = item ? (float)item->value : defaults.shape_wave_stall_cap;
     item = dict_get_unsafe(kwargs, "shape_not_attacking_penalty");
-    env->shape_not_attacking_penalty = item ? (float)item->value : -0.5f;
+    env->shape_not_attacking_penalty = item ? (float)item->value : defaults.shape_not_attacking_penalty;
     item = dict_get_unsafe(kwargs, "shape_kiting_reward");
-    env->shape_kiting_reward = item ? (float)item->value : 1.0f;
+    env->shape_kiting_reward = item ? (float)item->value : defaults.shape_kiting_reward;
     item = dict_get_unsafe(kwargs, "shape_unnecessary_prayer_penalty");
-    env->shape_unnecessary_prayer_penalty = item ? (float)item->value : -0.2f;
+    env->shape_unnecessary_prayer_penalty = item ? (float)item->value : defaults.shape_unnecessary_prayer_penalty;
     item = dict_get_unsafe(kwargs, "shape_resource_threat_window");
-    env->shape_resource_threat_window = item ? (int)item->value : 2;
+    env->shape_resource_threat_window = item ? (int)item->value : defaults.shape_resource_threat_window;
     item = dict_get_unsafe(kwargs, "shape_kiting_min_dist");
-    env->shape_kiting_min_dist = item ? (int)item->value : 5;
+    env->shape_kiting_min_dist = item ? (int)item->value : defaults.shape_kiting_min_dist;
     item = dict_get_unsafe(kwargs, "shape_kiting_max_dist");
-    env->shape_kiting_max_dist = item ? (int)item->value : 7;
+    env->shape_kiting_max_dist = item ? (int)item->value : defaults.shape_kiting_max_dist;
     item = dict_get_unsafe(kwargs, "shape_wave_stall_start");
-    env->shape_wave_stall_start = item ? (int)item->value : 500;
+    env->shape_wave_stall_start = item ? (int)item->value : defaults.shape_wave_stall_start;
     item = dict_get_unsafe(kwargs, "shape_wave_stall_ramp_interval");
-    env->shape_wave_stall_ramp_interval = item ? (int)item->value : 50;
+    env->shape_wave_stall_ramp_interval = item ? (int)item->value : defaults.shape_wave_stall_ramp_interval;
     item = dict_get_unsafe(kwargs, "shape_not_attacking_grace_ticks");
-    env->shape_not_attacking_grace_ticks = item ? (int)item->value : 2;
+    env->shape_not_attacking_grace_ticks = item ? (int)item->value : defaults.shape_not_attacking_grace_ticks;
 
     /* Curriculum */
     item = dict_get_unsafe(kwargs, "curriculum_wave");
@@ -151,6 +153,8 @@ void my_log(Log* log, Dict* out) {
     extern float g_sum_food_wasted, g_sum_pots_wasted, g_n_analytics;
     extern float g_sum_tokxil_melee_ticks, g_sum_ketzek_melee_ticks;
     extern float g_sum_reached_wave_30, g_sum_cleared_wave_30, g_sum_reached_wave_31;
+    extern float g_sum_reached_wave_63, g_sum_jad_kill_rate;
+    dict_set(out, "cave_complete_rate", log->score);
     dict_set(out, "max_wave", g_max_wave_ever);
     dict_set(out, "most_npcs_slayed", g_most_npcs_ever);
     if (g_n_analytics > 0) {
@@ -176,6 +180,8 @@ void my_log(Log* log, Dict* out) {
         dict_set(out, "reached_wave_30", g_sum_reached_wave_30 / g_n_analytics);
         dict_set(out, "cleared_wave_30", g_sum_cleared_wave_30 / g_n_analytics);
         dict_set(out, "reached_wave_31", g_sum_reached_wave_31 / g_n_analytics);
+        dict_set(out, "reached_wave_63", g_sum_reached_wave_63 / g_n_analytics);
+        dict_set(out, "jad_kill_rate", g_sum_jad_kill_rate / g_n_analytics);
         g_sum_prayer_uptime = 0; g_sum_prayer_uptime_melee = 0;
         g_sum_prayer_uptime_range = 0; g_sum_prayer_uptime_magic = 0;
         g_sum_correct_blocks = 0;
@@ -188,6 +194,7 @@ void my_log(Log* log, Dict* out) {
         g_sum_pots_wasted = 0; g_sum_tokxil_melee_ticks = 0;
         g_sum_ketzek_melee_ticks = 0; g_sum_reached_wave_30 = 0;
         g_sum_cleared_wave_30 = 0; g_sum_reached_wave_31 = 0;
+        g_sum_reached_wave_63 = 0; g_sum_jad_kill_rate = 0;
         g_n_analytics = 0;
     }
 }
