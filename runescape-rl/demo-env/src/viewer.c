@@ -300,6 +300,9 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "shape_pot_waste_scale") == 0) params->shape_pot_waste_scale = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_safe_prayer_threshold") == 0) params->shape_pot_safe_prayer_threshold = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_no_threat_penalty") == 0) params->shape_pot_no_threat_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_low_prayer_pot_threshold") == 0) params->shape_low_prayer_pot_threshold = strtof(value, NULL);
+    else if (strcmp(key, "shape_low_prayer_no_pot_penalty") == 0) params->shape_low_prayer_no_pot_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_low_prayer_pot_reward") == 0) params->shape_low_prayer_pot_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_specific_prayer_bonus") == 0) params->shape_npc_specific_prayer_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);
@@ -854,7 +857,7 @@ static const AgentTest AGENT_TESTS[] = {
     { "Collision",      "Press O first! Green=walkable, red=blocked tiles",     5, {0, 0,0,0,0, 0,0} },
     { "LOS rays",       "Green lines=LOS clear, red=blocked. Walk near NPCs",  8, {5, 0,0,0,0, 0,0} },
     { "Path viz",       "Walk to tile (30,25) — yellow path shows route",       10,{0, 0,0,0,0, 31,26} },
-    { "Attack range",   "Blue ring = 7-tile crossbow range around player",      5, {0, 0,0,0,0, 0,0} },
+    { "Attack range",   "Blue ring = current player weapon range",               5, {0, 0,0,0,0, 0,0} },
 };
 #define NUM_AGENT_TESTS (int)(sizeof(AGENT_TESTS)/sizeof(AGENT_TESTS[0]))
 
@@ -2039,6 +2042,9 @@ static void draw_panel(ViewerState* v) {
                     p->attack_level = lo->attack_lvl; p->strength_level = lo->strength_lvl;
                     p->defence_level = lo->defence_lvl; p->ranged_level = lo->ranged_lvl;
                     p->prayer_level = lo->prayer_lvl; p->magic_level = lo->magic_lvl;
+                    p->weapon_kind = lo->weapon_kind;
+                    p->weapon_speed = lo->weapon_speed;
+                    p->weapon_range = lo->weapon_range;
                     p->ranged_attack_bonus = lo->ranged_atk; p->ranged_strength_bonus = lo->ranged_str;
                     p->defence_stab = lo->def_stab; p->defence_slash = lo->def_slash;
                     p->defence_crush = lo->def_crush; p->defence_magic = lo->def_magic;
@@ -2162,6 +2168,7 @@ int main(int argc, char** argv) {
     ViewerState v; memset(&v, 0, sizeof(v));
     fc_init(&v.state);
     v.paused = 1; v.tps = NORMAL_TPS; v.show_debug = 1; v.auto_mode = 0;
+    v.active_loadout = FC_ACTIVE_LOADOUT;
     v.attack_target = -1;
     v.cam_yaw = 0; v.cam_pitch = 0.8f; v.cam_dist = 30;
     v.camera.up = (Vector3){0,1,0}; v.camera.fovy = 32;

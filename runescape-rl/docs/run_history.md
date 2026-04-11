@@ -3,6 +3,599 @@
 Tracks every training config change with results and reasoning.
 Current config is at the top. Older runs below.
 
+Formatting note:
+- recent sections now include `Exact active config` snapshots
+- these list all non-zero training-shaping values plus semantically important
+  zero-valued keys when the zero itself materially changes behavior
+  (for example `shape_low_prayer_pot_threshold = 0.0` or `load_model_path = null`)
+
+---
+
+## v21.3 (2026-04-10, planned)
+
+Actual run:
+- TBD
+
+Goal:
+- return to the `v21.2` learning recipe as the planning baseline
+- keep `v21.2` as the clean reference point while adding only a very narrow
+  prayer-potion rescue signal
+- use this as the fallback branch if the `v22.x` line does not recover
+- keep the corrected `Masori (f) + TBow` combat model and `7/10` kiting band
+  from `v22.1`
+
+Config versus `v21.2`:
+- same baseline except for one narrow low-prayer potion rule
+- same PPO/train recipe
+- same `5B` budget
+- same backend structure
+- same reward weights and shaping terms
+- same vectorization / minibatching
+- same no-curriculum setup
+- same intended learning behavior aside from emergency prayer-pot use
+- keep the `v22.1` combat model and kiting distance
+
+Exact starting config:
+- reward weights:
+  - `w_damage_dealt = 0.5`
+  - `w_attack_attempt = 0.1`
+  - `w_damage_taken = -0.6`
+  - `w_npc_kill = 3.0`
+  - `w_wave_clear = 10.0`
+  - `w_jad_damage = 2.0`
+  - `w_jad_kill = 50.0`
+  - `w_player_death = -20.0`
+  - `w_cave_complete = 100.0`
+  - `w_correct_danger_prayer = 0.25`
+  - `w_wrong_danger_prayer = 0.0`
+  - `w_invalid_action = -0.1`
+  - `w_movement = 0.0`
+  - `w_idle = 0.0`
+  - `w_tick_penalty = -0.005`
+- shaping terms:
+  - `shape_food_full_waste_penalty = -6.5`
+  - `shape_food_waste_scale = -1.2`
+  - `shape_food_safe_hp_threshold = 1.0`
+  - `shape_food_no_threat_penalty = 0.0`
+  - `shape_pot_full_waste_penalty = -6.5`
+  - `shape_pot_waste_scale = -1.2`
+  - `shape_pot_safe_prayer_threshold = 1.0`
+  - `shape_pot_no_threat_penalty = 0.0`
+  - `shape_low_prayer_pot_threshold = 0.05`
+  - `shape_low_prayer_no_pot_penalty = -0.01`
+  - `shape_low_prayer_pot_reward = 0.0`
+  - `shape_wrong_prayer_penalty = -1.25`
+  - `shape_npc_specific_prayer_bonus = 1.5`
+  - `shape_npc_melee_penalty = -0.3`
+  - `shape_wasted_attack_penalty = -0.1`
+  - `shape_wave_stall_start = 500`
+  - `shape_wave_stall_base_penalty = -0.5`
+  - `shape_wave_stall_ramp_interval = 50`
+  - `shape_wave_stall_cap = -2.0`
+  - `shape_not_attacking_grace_ticks = 2`
+  - `shape_not_attacking_penalty = -0.01`
+  - `shape_kiting_reward = 1.0`
+  - `shape_kiting_min_dist = 7`
+  - `shape_kiting_max_dist = 10`
+  - `shape_unnecessary_prayer_penalty = -0.2`
+  - `shape_resource_threat_window = 2`
+- runtime:
+  - `total_agents = 4096`
+  - `num_buffers = 2`
+  - `total_timesteps = 5_000_000_000`
+  - `learning_rate = 0.0003`
+  - `anneal_lr = 0`
+  - `gamma = 0.999`
+  - `gae_lambda = 0.95`
+  - `clip_coef = 0.2`
+  - `vf_coef = 0.5`
+  - `ent_coef = 0.01`
+  - `max_grad_norm = 0.5`
+  - `horizon = 256`
+  - `minibatch_size = 4096`
+  - `hidden_size = 256`
+  - `num_layers = 2`
+
+Current planning stance:
+- selected tweak set is intentionally tiny:
+  - `shape_low_prayer_pot_threshold = 0.05`
+  - `shape_low_prayer_no_pot_penalty = -0.01`
+  - `shape_low_prayer_pot_reward = 0.0`
+- no checkpoint warm-start
+- keep the `v22.1` combat model and `7/10` kiting band
+- do not fold in the `v22` / `v22.1` reward retune or obs changes
+
+---
+
+## v22.1 (2026-04-11, completed)
+
+Actual run:
+- `721zk2cg`
+- local run log:
+  - [721zk2cg.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/721zk2cg.json)
+
+Status:
+- completed to the full `5B` budget
+
+Goal:
+- recover from the `v22` collapse without giving up the corrected `Masori (f) +
+  TBow` combat model
+- remove the added per-NPC identity observation from `v22`
+- keep the `v22` low-prayer shaping path, but retune it to exact zero prayer
+- increase combat-tempo / conversion rewards
+- widen the rewarded kiting band for the corrected TBow range
+- warm-start from a strong `v21.2` checkpoint
+
+Config versus `v22`:
+- same PPO/train recipe
+- same `5B` budget
+- same backend structure
+- same viewer / reward-parity / analytics infrastructure
+- same corrected `Masori (f) + TBow` player combat model
+- intended learning-behavior changes were:
+  - remove the added per-NPC `npc_type` observation channel
+  - move the low-prayer shaping threshold from `59` prayer to exact `0`
+  - keep `shape_low_prayer_no_pot_penalty = -0.01`
+  - keep `shape_low_prayer_pot_reward = 0.15`
+  - increase:
+    - `w_damage_dealt: 0.5 -> 0.7`
+    - `w_attack_attempt: 0.1 -> 0.2`
+    - `w_npc_kill: 3.0 -> 3.5`
+    - `w_wave_clear: 10.0 -> 15.0`
+  - widen the kiting band:
+    - `shape_kiting_min_dist: 5 -> 7`
+    - `shape_kiting_max_dist: 7 -> 10`
+  - warm-start from:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=-0.01`, `shape_low_prayer_pot_reward=0.15`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`721zk2cg`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2634s`
+- throughput:
+  - `1.83M SPS`
+
+Final metrics:
+- `score = 0.0217`
+- `cave_complete_rate = 0.0217`
+- `wave_reached = 61.97`
+- `max_wave = 63`
+- `most_npcs_slayed = 325`
+- `episode_return = 32277.45`
+- `episode_length = 8581.45`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+- `reached_wave_63 = 0.3582`
+- `jad_kill_rate = 0.0149`
+- `prayer_uptime = 0.7345`
+- `prayer_uptime_melee = 0.0322`
+- `prayer_uptime_range = 0.1727`
+- `prayer_uptime_magic = 0.5296`
+- `correct_prayer = 1550.93`
+- `wrong_prayer_hits = 296.24`
+- `no_prayer_hits = 29.76`
+- `damage_blocked = 187217.02`
+- `dmg_taken_avg = 6445.69`
+- `prayer_switches = 651.28`
+- `attack_when_ready_rate = 0.7500`
+- `pots_used = 31.36`
+- `avg_prayer_on_pot = 0.3760`
+- `food_eaten = 8.01`
+- `avg_hp_on_food = 0.5725`
+- `food_wasted = 1.33`
+- `pots_wasted = 3.07`
+- `tokxil_melee_ticks = 3.85`
+- `ketzek_melee_ticks = 5.36`
+
+Key progression points:
+- early climb was solid but not special through `~1.5B`:
+  - `1.248B`: `wave_reached = 33.5`, `episode_return = 9219.3`
+  - `1.516B`: `wave_reached = 35.0`, `episode_return = 10056.0`
+- the major jump happened between `1.52B` and `1.82B`:
+  - `1.818B`: `wave_reached = 54.2`, `episode_return = 24812.8`
+- frontier competence arrived soon after:
+  - `2.072B`: `wave_reached = 59.6`, `episode_return = 28984.9`
+  - `2.284B`: `wave_reached = 61.4`, `episode_return = 30993.2`
+- unlike `v22` and `v21.2`, there was no catastrophic late collapse
+- the run stabilized in a `61-62.5` wave regime for the rest of training
+- best sampled window was late:
+  - `4.127B`: `wave_reached = 62.3`, `episode_return = 32340.6`
+  - `4.627B`: `wave_reached = 62.5`, `episode_return = 32827.5`
+- nearest eval checkpoint to the best sampled window:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/721zk2cg/0000004614782976.bin`
+
+Comparison to `v22` (`7vuw9jy8`):
+- `score: 0.0217 vs 0.0`
+- `cave_complete_rate: 0.0217 vs 0.0`
+- `wave_reached: 61.97 vs 27.15`
+- `max_wave: 63 vs 33`
+- `most_npcs_slayed: 325 vs 123`
+- `episode_return: 32277.4 vs 4338.1`
+- `episode_length: 8581 vs 4386`
+- `reached_wave_30: 1.0 vs 0.0648`
+- `cleared_wave_30: 1.0 vs 0.0`
+- `reached_wave_31: 1.0 vs 0.0`
+- `reached_wave_63: 0.3582 vs 0.0`
+- `jad_kill_rate: 0.0149 vs 0.0`
+- `prayer_uptime: 0.7345 vs 0.9758`
+- `prayer_uptime_magic: 0.5296 vs 0.0`
+- `attack_when_ready_rate: 0.7500 vs 0.4557`
+- `pots_used: 31.36 vs 31.96`
+- `avg_prayer_on_pot: 0.3760 vs 0.6929`
+- `food_eaten: 8.01 vs 20.0`
+- `food_wasted: 1.33 vs 17.09`
+
+Comparison to `v21.2` (`u58coupx`):
+- `score: 0.0217 vs 0.0`
+- `cave_complete_rate: 0.0217 vs 0.0`
+- `wave_reached: 61.97 vs 48.65`
+- `max_wave: 63 vs 63`
+- `most_npcs_slayed: 325 vs 272`
+- `episode_return: 32277.4 vs 14307.1`
+- `episode_length: 8581 vs 6493`
+- `reached_wave_30: 1.0 vs 0.9733`
+- `cleared_wave_30: 1.0 vs 0.9733`
+- `reached_wave_31: 1.0 vs 0.9733`
+- `reached_wave_63: 0.3582 vs 0.0067`
+- `jad_kill_rate: 0.0149 vs 0.0`
+- `prayer_uptime: 0.7345 vs 0.2638`
+- `prayer_uptime_magic: 0.5296 vs 0.1228`
+- `correct_prayer: 1550.9 vs 1143.9`
+- `wrong_prayer_hits: 296.2 vs 98.4`
+- `no_prayer_hits: 29.8 vs 155.6`
+- `damage_blocked: 187217 vs 139493`
+- `dmg_taken_avg: 6445.7 vs 6818.0`
+- `prayer_switches: 651.3 vs 2284.7`
+- `attack_when_ready_rate: 0.7500 vs 0.6329`
+- `pots_used: 31.36 vs 0.02`
+- `food_eaten: 8.01 vs 15.89`
+- `food_wasted: 1.33 vs 4.33`
+
+Comparison to `v21` (`v4ekkk3z`):
+- `score: 0.0217 vs 0.0`
+- `wave_reached: 61.97 vs 61.40`
+- `max_wave: 63 vs 63`
+- `most_npcs_slayed: 325 vs 273`
+- `episode_return: 32277.4 vs 22940.3`
+- `episode_length: 8581 vs 10027`
+- `prayer_uptime: 0.7345 vs 0.7345`
+- `prayer_uptime_magic: 0.5296 vs 0.5068`
+- `correct_prayer: 1550.9 vs 2173.5`
+- `wrong_prayer_hits: 296.2 vs 281.5`
+- `no_prayer_hits: 29.8 vs 37.5`
+- `damage_blocked: 187217 vs 277395`
+- `dmg_taken_avg: 6445.7 vs 7028.8`
+- `prayer_switches: 651.3 vs 2725.4`
+- `attack_when_ready_rate: 0.7500 vs 0.6226`
+- `pots_used: 31.36 vs 32.0`
+- `avg_prayer_on_pot: 0.3760 vs 0.5754`
+- `food_eaten: 8.01 vs 16.94`
+- `food_wasted: 1.33 vs 9.02`
+- `tokxil_melee_ticks: 3.85 vs 10.76`
+- `ketzek_melee_ticks: 5.36 vs 18.08`
+
+Interpretation:
+- `v22.1` is a decisive recovery from `v22`
+- it does not look like the `v22` prayer-camping collapse at all
+- it also clearly beats `v21.2`
+- and on the logged metrics that matter most, it likely becomes the new best
+  branch so far:
+  - first non-zero `cave_complete_rate`
+  - first non-zero `jad_kill_rate`
+  - sustained `61-62.5` wave regime
+  - full wave-30+ stability
+- the potion issue is effectively solved in the narrow sense that the agent now
+  absolutely knows how to consume prayer pots
+- however, it did not learn conservative potion timing:
+  - `pots_used = 31.36`
+  - `avg_prayer_on_pot = 0.376`
+- the food side is much cleaner:
+  - only `8.0` food eaten on average
+  - much lower waste than both `v22` and `v21`
+- the prayer profile is notable:
+  - total prayer uptime is almost identical to `v21`
+  - magic prayer dominates the uptime mix
+  - prayer switches are far lower than `v21`
+- that suggests a different high-level policy style than `v21`:
+  - more tempo / damage conversion
+  - fewer switches
+  - fewer panic resources
+  - still enough prayer correctness to reach and sometimes finish Jad
+
+Important observation:
+- there is a small analytics inconsistency:
+  - `cave_complete_rate = 0.0217`
+  - `jad_kill_rate = 0.0149`
+- logically, cave completion should imply Jad kill
+- so `jad_kill_rate` appears to be undercounting relative to terminal cave
+  completions in this run
+- the run result itself is still clear because `score` / `cave_complete_rate`
+  is authoritative for clears, but the new `jad_kill_rate` metric should be
+  audited before relying on it as ground truth
+
+Most important new insight:
+- the `v22` recovery cannot be attributed cleanly to one change
+- `v22.1` changed five things at once relative to `v22`:
+  - removed `npc_type` obs
+  - changed low-prayer threshold to zero
+  - increased combat-conversion rewards
+  - widened kiting distance
+  - warm-started from `v21.2`
+- so this is not a clean ablation
+- still, the result is strong enough that the branch itself is worth keeping
+- the biggest practical conclusion is:
+  - do not abandon the `v22.x` line yet
+
+Recommendations:
+- keep `v22.1` as the new working branch
+- do not jump straight to `v21.3` as the mainline follow-up
+- if the next goal is optimization rather than fallback validation, run a small
+  ablation sweep around `v22.1` first
+- if the next goal is simplicity / safety, only then use `v21.3` as the
+  fallback control branch
+
+Bottom line:
+- `v22.1` is a considerable success
+- it fully recovers the `v22` collapse
+- it beats `v21.2`
+- and it likely beats `v21` as the best overall run family so far, because it
+  is the first branch with non-zero cave completion
+
+---
+
+## v22 (2026-04-10, completed)
+
+Actual run:
+- `7vuw9jy8`
+- W&B run name:
+  - `good-planet-129`
+- local run log:
+  - [7vuw9jy8.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/7vuw9jy8.json)
+
+Status:
+- completed to the full `5B` budget
+
+Goal:
+- keep the `v21` / `v21.2` PPO stack and overall reward recipe
+- fix the player-side combat-model mismatch for the active `Masori (f) + TBow`
+  loadout
+- give the policy explicit NPC identity in obs so late-wave prayer decisions are
+  less slot-order-dependent
+- make prayer-potion timing directly teachable without adding heavy or invasive
+  shaping
+
+Config versus `v21.2`:
+- same PPO/train recipe
+- same `5B` budget
+- same backend structure
+- same viewer / reward-parity / analytics infrastructure
+- intended learning-behavior changes were:
+  - correct the active player weapon/loadout model
+  - add one per-NPC `npc_type` observation channel
+  - add a lightweight low-prayer potion teaching signal
+
+Exact differences versus `v21.2`:
+- player weapon model:
+  - `weapon_kind`: generic ranged -> `Twisted bow`
+  - `weapon_range`: `7 -> 10`
+  - `weapon_speed`: unchanged at `5` on rapid
+  - player ranged attack roll and max-hit path now use a lightweight TBow
+    target-magic scaling instead of the old generic ranged formula
+  - TBow scaling is simplified and localized:
+    - uses target NPC magic level only
+    - caps target magic level at `250`
+    - does not add a deeper full target-magic-accuracy model
+- active loadout-B hardcoded player stats corrected:
+  - `def_stab: 115 -> 116`
+  - `def_slash: 104 -> 106`
+  - `def_crush: 129 -> 129` (unchanged)
+  - `def_magic: 148 -> 150`
+  - `def_ranged: 111 -> 121`
+  - `prayer_bonus: 9 -> 6`
+  - offensive totals remain:
+    - `ranged_atk = 215`
+    - `ranged_str = 99`
+- policy observation contract:
+  - add explicit `npc_type` per visible NPC slot
+  - `FC_OBS_NPC_STRIDE: 10 -> 11`
+  - `FC_POLICY_OBS_SIZE: 106 -> 114`
+  - Puffer/eval policy input:
+    - `142 -> 150` floats (`policy obs + mask5`)
+  - full backend buffer:
+    - `291 -> 299` floats
+- reward shaping:
+  - keep all existing `v21.2` weights and shaping terms
+  - add three new live shaping keys:
+    - `shape_low_prayer_pot_threshold = 0.60`
+    - `shape_low_prayer_no_pot_penalty = -0.01`
+    - `shape_low_prayer_pot_reward = 0.15`
+
+Exact active config:
+- run setup: `load_model_path=null`, corrected `Masori (f) + TBow` combat model, per-NPC `npc_type` obs enabled, `policy_obs=114`, `puffer_obs=150`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.60`, `shape_low_prayer_no_pot_penalty=-0.01`, `shape_low_prayer_pot_reward=0.15`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`7vuw9jy8`):
+- completed normally
+- final logged trainer step:
+  - `4,991,221,760 / 5,000,000,000`
+- runtime:
+  - `2446s`
+- throughput:
+  - `1.95M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 27.15`
+- `max_wave = 33`
+- `most_npcs_slayed = 123`
+- `episode_return = 4338.14`
+- `episode_length = 4385.76`
+- `reached_wave_30 = 0.0648`
+- `cleared_wave_30 = 0.0`
+- `reached_wave_31 = 0.0`
+- `reached_wave_63 = 0.0`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.9758`
+- `prayer_uptime_melee = 0.4382`
+- `prayer_uptime_range = 0.5376`
+- `prayer_uptime_magic = 0.0`
+- `correct_prayer = 1400.37`
+- `wrong_prayer_hits = 179.28`
+- `no_prayer_hits = 22.09`
+- `damage_blocked = 25648.89`
+- `dmg_taken_avg = 3090.27`
+- `prayer_switches = 616.13`
+- `attack_when_ready_rate = 0.4557`
+- `pots_used = 31.96`
+- `avg_prayer_on_pot = 0.6929`
+- `pots_wasted = 14.27`
+- `food_eaten = 20.0`
+- `avg_hp_on_food = 0.9068`
+- `food_wasted = 17.09`
+- `tokxil_melee_ticks = 19.89`
+- `ketzek_melee_ticks = 0.0`
+
+Key progression points:
+- sampled `wave_reached >= 20` by `218M`
+- sampled `wave_reached >= 25` by `218M`
+- sampled `wave_reached >= 28` by `218M`
+- sampled `wave_reached >= 29` by `455M`
+- never sampled `wave_reached >= 30`
+- strongest window was roughly `1.01B-1.49B`:
+  - `1.013B`: `wave_reached = 29.9`, `episode_return = 5507.6`
+  - `1.491B`: `wave_reached = 29.2`, `episode_return = 5514.9`
+- after `~3.0B`, the run decayed
+- the sharp collapse arrived around `4.11B`:
+  - sampled `wave_reached = 25.6`
+  - sampled `episode_return = 3793.0`
+- nearest eval checkpoint to the best sampled average-wave window:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7vuw9jy8/0000001012924416.bin`
+
+Comparison to `v21.2` (`u58coupx`):
+- `score: 0.0 vs 0.0`
+- `cave_complete_rate: 0.0 vs 0.0`
+- `wave_reached: 27.15 vs 48.65`
+- `max_wave: 33 vs 63`
+- `most_npcs_slayed: 123 vs 272`
+- `episode_return: 4338.1 vs 14307.1`
+- `episode_length: 4386 vs 6493`
+- `reached_wave_30: 0.0648 vs 0.9733`
+- `cleared_wave_30: 0.0 vs 0.9733`
+- `reached_wave_31: 0.0 vs 0.9733`
+- `reached_wave_63: 0.0 vs 0.0067`
+- `jad_kill_rate: 0.0 vs 0.0`
+- `prayer_uptime: 0.976 vs 0.264`
+- `prayer_uptime_melee: 0.438 vs 0.033`
+- `prayer_uptime_range: 0.538 vs 0.108`
+- `prayer_uptime_magic: 0.000 vs 0.123`
+- `correct_prayer: 1400.4 vs 1143.9`
+- `wrong_prayer_hits: 179.3 vs 98.4`
+- `no_prayer_hits: 22.1 vs 155.6`
+- `damage_blocked: 25649 vs 139493`
+- `dmg_taken_avg: 3090 vs 6818`
+- `prayer_switches: 616.1 vs 2284.7`
+- `attack_when_ready_rate: 0.456 vs 0.633`
+- `pots_used: 32.0 vs 0.02`
+- `avg_prayer_on_pot: 0.693 vs 0.0018`
+- `pots_wasted: 14.27 vs 0.0`
+- `food_eaten: 20.0 vs 15.9`
+- `food_wasted: 17.09 vs 4.33`
+- `tokxil_melee_ticks: 19.89 vs 4.79`
+- `ketzek_melee_ticks: 0.0 vs 10.28`
+
+Comparison to `v21` (`v4ekkk3z`):
+- `score: 0.0 vs 0.0`
+- `wave_reached: 27.15 vs 61.40`
+- `max_wave: 33 vs 63`
+- `most_npcs_slayed: 123 vs 273`
+- `episode_return: 4338.1 vs 22940.3`
+- `episode_length: 4386 vs 10027`
+- `prayer_uptime: 0.976 vs 0.734`
+- `prayer_uptime_melee: 0.438 vs 0.037`
+- `prayer_uptime_range: 0.538 vs 0.191`
+- `prayer_uptime_magic: 0.000 vs 0.507`
+- `correct_prayer: 1400.4 vs 2173.5`
+- `wrong_prayer_hits: 179.3 vs 281.5`
+- `no_prayer_hits: 22.1 vs 37.5`
+- `damage_blocked: 25649 vs 277395`
+- `dmg_taken_avg: 3090 vs 7029`
+- `prayer_switches: 616.1 vs 2725.4`
+- `attack_when_ready_rate: 0.456 vs 0.623`
+- `pots_used: 32.0 vs 32.0`
+- `avg_prayer_on_pot: 0.693 vs 0.575`
+- `pots_wasted: 14.27 vs 9.42`
+- `food_eaten: 20.0 vs 16.94`
+- `food_wasted: 17.09 vs 9.02`
+- `tokxil_melee_ticks: 19.89 vs 10.76`
+- `ketzek_melee_ticks: 0.0 vs 18.08`
+
+Interpretation:
+- this is a severe regression, not a minor frontier wobble
+- `v22` did not preserve the `v21.2` Jad-facing ceiling at all
+- instead it fell into a high-prayer, high-consumption, low-offense regime:
+  - prayer almost always on
+  - all prayer doses consumed
+  - all food consumed
+  - low prayer-switch count
+  - low attack-ready rate
+  - no durable post-wave-30 competence
+- the behavioral signature looks much closer to the old prayer-camping
+  regressions than to the `v21.2` no-pot-collapse regime
+- especially important:
+  - `prayer_uptime = 0.976`
+  - `prayer_uptime_magic = 0.0`
+  - `prayer_uptime_range = 0.538`
+  - `reached_wave_30 = 0.0648`
+  - `attack_when_ready_rate = 0.456`
+- this is not a late-wave resource-collapse policy
+- it is an early/mid-wave over-defensive policy that never builds enough tempo
+  or switching competence to reach the old frontier
+
+Most important new insight:
+- the `v22` delta bundle did not fail in a neutral way
+- it appears to have pushed the policy into a heavily defensive prayer-potion
+  regime very early
+- there are three plausible causes in the `v22` delta set:
+  - corrected player combat model
+  - added `npc_type` obs / larger policy input
+  - low-prayer potion teaching signal
+- of those, the strongest *behavioral* signature points more toward the new
+  low-prayer shaping than toward the combat-model correction:
+  - potion use went from near-zero in `v21.2` to essentially full-inventory
+  - prayer uptime exploded upward instead of collapsing
+- however, because `v22` also changed the policy-input contract from `106` to
+  `114`, the added `npc_type` channel is still a valid rollback target
+
+Recommendations:
+- revert the added `npc_type` observation as `v22.1`
+- keep the corrected player combat model for now
+- keep the low-prayer shaping for one more rollback test only if the goal is
+  to isolate the obs-contract change first
+- if `v22.1` is still strongly regressed, the next primary suspect is the
+  low-prayer potion shaping, not the player combat-model correction
+- use the early `v22` checkpoint window for replay if needed, not the final
+  checkpoint
+
+Bottom line:
+- `v22` is a considerable regression from both `v21.2` and `v21`
+- it never reached wave 31 in a stable way
+- it never reached Jad
+- its failure mode is a high-prayer, full-resource-burn, low-tempo regime
+- `v22.1` should be the clean rollback of the added `npc_type` observation
+  while leaving the other `v22` changes intact
+
 ---
 
 ## v_tmp2.1 (2026-04-09, completed)
@@ -54,6 +647,12 @@ Backend / config provenance:
     - `curriculum_pct = 0.0`
   - the run was launched with `FORCE_BACKEND_REBUILD=1`, so the trainer backend
     was rebuilt from the `v_tmp2` source tree before training
+
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results:
 - completed normally
@@ -195,16 +794,11 @@ Config versus `v21`:
   - viewer / debug overlay parity fixes so replay inspection matches training
     reward terms and current observation labels
 
-Live `v21.2` values:
-- `w_correct_danger_prayer = 0.25`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 1.5`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_not_attacking_grace_ticks = 2`
-- `shape_not_attacking_penalty = -0.01`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 5_000_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`u58coupx`):
 - completed normally
@@ -419,16 +1013,11 @@ Tooling / analytics changes kept in this run:
   - `reached_wave_63`
   - `jad_kill_rate`
 
-Live `v21.1` values:
-- `w_correct_danger_prayer = 0.25`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 1.5`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_not_attacking_grace_ticks = 6`
-- `shape_not_attacking_penalty = -0.03`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 5_000_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=6`, `shape_not_attacking_penalty=-0.03`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`nxj1iw0b`):
 - completed normally
@@ -588,14 +1177,11 @@ Backend changes versus `v20.2`:
   - resolve-time generic danger-prayer reward
   - mild `v_tmp2.1` prayer reward magnitudes
 
-Live `v21` values:
-- `w_correct_danger_prayer = 0.25`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 1.5`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 5_000_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Important caveat:
 - this was not a clean “same run, longer” control in trainer internals
@@ -911,14 +1497,11 @@ Config changes versus `v20.2`:
 - disable `shape_npc_specific_prayer_bonus`
 - raise `w_correct_danger_prayer` from `0.25` to `1.75`
 
-Live `v20.3` values:
-- `w_correct_danger_prayer = 1.75`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 0.0`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 2_500_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=1.75`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`77yha5y7`):
 - completed normally
@@ -1111,14 +1694,11 @@ Backend changes versus `v_tmp2.1` / `ro7h07qm`:
 - generic danger-prayer coverage remains on the original path:
   - reward is driven by the old resolve-time danger-prayer signal
 
-Live `v20.2` values:
-- `w_correct_danger_prayer = 0.25`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 1.5`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 2_500_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`4o8gv87z`):
 - completed normally
@@ -1310,14 +1890,11 @@ Config changes versus `v20`:
 - restore `w_correct_danger_prayer` from `1.75` back to `0.25`
 - restore `shape_npc_specific_prayer_bonus` from `0.0` back to `1.5`
 
-Live `v20.1` values:
-- `w_correct_danger_prayer = 0.25`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 1.5`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 2_500_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, snapshot-timed generic prayer reward, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`rp7a0y2e`):
 - completed normally
@@ -1459,14 +2036,11 @@ Backend changes versus `v_tmp2.1` / `ro7h07qm`:
   - backend path kept
   - config disabled for this run
 
-Live `v20` values:
-- `w_correct_danger_prayer = 1.75`
-- `w_wrong_danger_prayer = 0.0`
-- `shape_wrong_prayer_penalty = -1.25`
-- `shape_npc_specific_prayer_bonus = 0.0`
-- `shape_npc_melee_penalty = -0.3`
-- `shape_unnecessary_prayer_penalty = -0.2`
-- `total_timesteps = 2_500_000_000`
+Exact active config:
+- run setup: `load_model_path=null`, snapshot-timed generic prayer reward, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=1.75`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`t4eudsav`):
 - completed normally
@@ -1593,6 +2167,12 @@ Config:
 - same PPO / reward recipe as the `v19.3` family
 - same current end-game loadout
 
+Exact active config:
+- run setup: `load_model_path=null`, early prayer-lock timing enabled, per-NPC `npc_type` obs enabled, locked-prayer resolved-hit reward follow-up enabled, `policy_obs=114`, `puffer_obs=150`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.5`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.0`, `shape_npc_specific_prayer_bonus=2.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
 Backend differences:
 - versus `v_tmp2`:
   - adds early prayer-lock timing
@@ -1668,6 +2248,12 @@ Config:
 - `2.5B` budget
 - same PPO / reward recipe as the `v19.3` family
 - same current end-game loadout
+
+Exact active config:
+- run setup: `load_model_path=null`, prayer timing fix only, no `npc_type` obs follow-up, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.5`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.0`, `shape_npc_specific_prayer_bonus=2.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Backend differences:
 - versus `v_tmp1`:
@@ -1752,6 +2338,12 @@ Config:
 - `2.5B` budget
 - same PPO / reward recipe as the `v19.3` family
 - same current end-game loadout
+
+Exact active config:
+- run setup: `load_model_path=null`, pre-prayer-fix baseline, no `npc_type` obs follow-up, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.5`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.0`, `shape_npc_specific_prayer_bonus=2.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Backend differences:
 - versus `v_tmp2`:
@@ -1880,6 +2472,12 @@ What changes versus `v19.1`:
 - `curriculum_wave: 31 -> 0`
 - `curriculum_pct: 1.0 -> 0.0`
 - all curriculum buckets disabled
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/8u6flr5y/0000000263192576.bin`, no curriculum, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.5`, `w_attack_attempt=0.1`, `w_damage_taken=-0.6`, `w_npc_kill=3.0`, `w_wave_clear=10.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.5`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_wrong_prayer_penalty=-1.0`, `shape_npc_specific_prayer_bonus=2.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=5`, `shape_kiting_max_dist=7`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=2_500_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
 
 Results (`hl0yb7qa`):
 - completed normally

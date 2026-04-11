@@ -36,15 +36,15 @@
  * Defence stats used by fc_npc_def_roll for player attack accuracy.
  *
  * Fields: max_hp, attack_style, attack_speed, attack_range, max_hit,
- *         att_level, att_bonus, def_level, def_bonus, size, movement_speed,
- *         prayer_drain, heal_amount, heal_interval, jad_ranged_max_hit
+ *         att_level, att_bonus, def_level, def_bonus, magic_level, size,
+ *         movement_speed, prayer_drain, heal_amount, heal_interval, jad_ranged_max_hit
  */
 /*
  * Stats from Void 634 cache + tzhaar_fight_cave.npcs.toml + tzhaar_fight_cave.combat.toml.
  * Sizes verified via NPCDecoder opcode 12 from Void 634 cache (2026-04-02 audit).
  *
  * Fields: max_hp, attack_style, attack_speed, attack_range, max_hit, melee_max_hit,
- *         att_level, att_bonus, def_level, def_bonus, size, movement_speed,
+ *         att_level, att_bonus, def_level, def_bonus, magic_level, size, movement_speed,
  *         prayer_drain, heal_amount, heal_interval, jad_ranged_max_hit
  *
  * Dual-mode NPCs (Tok-Xil, Ket-Zek, Jad):
@@ -53,45 +53,45 @@
  */
 static const FcNpcStats NPC_STATS[NPC_TYPE_COUNT] = {
     /* NPC_NONE */
-    { 0, ATTACK_NONE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    { 0, ATTACK_NONE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 
     /* NPC_TZ_KIH: Lv 22 melee bat. Drains 1 prayer on hit (10 tenths).
      * Void 634: HP 100, Att 20, Str 30, Def 15, size 1, stab max 40 */
-    { 100, ATTACK_MELEE, 4, 1, 40, 0, 20, 0, 15, 0, 1, 1, 10, 0, 0, 0 },
+    { 100, ATTACK_MELEE, 4, 1, 40, 0, 20, 0, 15, 0, 0, 1, 1, 10, 0, 0, 0 },
 
     /* NPC_TZ_KEK: Lv 45 melee blob. Splits into 2 small on death.
      * Void 634: HP 200, Att 40, Str 60, Def 30, size 2, crush max 70 */
-    { 200, ATTACK_MELEE, 4, 1, 70, 0, 40, 0, 30, 0, 2, 1, 0, 0, 0, 0 },
+    { 200, ATTACK_MELEE, 4, 1, 70, 0, 40, 0, 30, 0, 0, 2, 1, 0, 0, 0, 0 },
 
     /* NPC_TZ_KEK_SM: Lv 22 small blob (from split).
      * Void 634: HP 100, Att 20, Str 30, Def 15, size 1, crush max 40 */
-    { 100, ATTACK_MELEE, 4, 1, 40, 0, 20, 0, 15, 0, 1, 1, 0, 0, 0, 0 },
+    { 100, ATTACK_MELEE, 4, 1, 40, 0, 20, 0, 15, 0, 0, 1, 1, 0, 0, 0, 0 },
 
     /* NPC_TOK_XIL: Lv 90 ranged + melee (DUAL MODE).
      * Void 634: HP 400, Att 80, Str 120, Def 60, Rng 120, size 3
      * combat.toml: melee crush max 130 (range 1), ranged max 140 (range 14) */
-    { 400, ATTACK_RANGED, 4, 14, 140, 130, 120, 0, 60, 0, 3, 1, 0, 0, 0, 0 },
+    { 400, ATTACK_RANGED, 4, 14, 140, 130, 120, 0, 60, 0, 0, 3, 1, 0, 0, 0, 0 },
 
     /* NPC_YT_MEJKOT: Lv 180 melee + heals nearby NPCs with HP < 50% max.
      * Void 634: HP 800, Att 160, Str 240, Def 120, size 4
      * combat.toml: crush max 250. Heals 100 HP to nearby NPCs. */
-    { 800, ATTACK_MELEE, 4, 1, 250, 0, 160, 0, 120, 0, 4, 1, 0, 100, 4, 0 },
+    { 800, ATTACK_MELEE, 4, 1, 250, 0, 160, 0, 120, 0, 0, 4, 1, 0, 100, 4, 0 },
 
     /* NPC_KET_ZEK: Lv 360 magic + melee (DUAL MODE).
      * Void 634: HP 1600, Att 320, Str 480, Def 240, Mag 240, size 5
      * combat.toml: melee stab max 540 (range 1), magic max 490 (range 14) */
-    { 1600, ATTACK_MAGIC, 4, 14, 490, 540, 240, 0, 240, 0, 5, 1, 0, 0, 0, 0 },
+    { 1600, ATTACK_MAGIC, 4, 14, 490, 540, 240, 0, 240, 0, 240, 5, 1, 0, 0, 0, 0 },
 
     /* NPC_TZTOK_JAD: Lv 702 magic + ranged + melee.
      * Void 634: HP 2500, Att 640, Str 960, Def 480, Mag 480, Rng 960, size 5
      * combat.toml: melee stab max 970 (range 1), magic max 950 (range 14), ranged max 970
      * attack speed 8 (double normal), range 14 */
-    { 2500, ATTACK_MAGIC, 8, 14, 970, 970, 480, 0, 480, 0, 5, 1, 0, 0, 0, 950 },
+    { 2500, ATTACK_MAGIC, 8, 14, 970, 970, 480, 0, 480, 0, 480, 5, 1, 0, 0, 0, 950 },
 
     /* NPC_YT_HURKOT: Lv 108 Jad healer. Heals Jad 50 HP every 4 ticks within 5 tiles.
      * Void 634: HP 600, Att 140, Str 100, Def 60, size 1
      * combat.toml: crush max 140 */
-    { 600, ATTACK_MELEE, 4, 1, 140, 0, 140, 0, 60, 0, 1, 1, 0, 50, 4, 0 },
+    { 600, ATTACK_MELEE, 4, 1, 140, 0, 140, 0, 60, 0, 0, 1, 1, 0, 50, 4, 0 },
 };
 
 const FcNpcStats* fc_npc_get_stats(int npc_type) {

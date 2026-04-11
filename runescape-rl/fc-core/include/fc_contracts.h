@@ -285,7 +285,7 @@ static const int FC_ACTION_DIMS[FC_NUM_ACTION_HEADS] = FC_ACT_SIZES;
 
 /*
  * Total floats in the full FC backend buffer:
- *   FC_POLICY_OBS_SIZE (106) + FC_REWARD_FEATURES (18) + FC_ACTION_MASK_SIZE (166) = 290
+ *   FC_POLICY_OBS_SIZE (106) + FC_REWARD_FEATURES (19) + FC_ACTION_MASK_SIZE (166) = 291
  *
  * The PufferLib adapter does NOT expose this full buffer directly. It exposes:
  *   FC_PUFFER_OBS_SIZE = FC_POLICY_OBS_SIZE + mask(heads 0-4 only)
@@ -296,7 +296,7 @@ static const int FC_ACTION_DIMS[FC_NUM_ACTION_HEADS] = FC_ACT_SIZES;
  *   reward_feat  = full_obs[FC_REWARD_START:FC_REWARD_START + FC_REWARD_FEATURES]
  *   action_mask  = full_obs[FC_TOTAL_OBS:FC_TOTAL_OBS + FC_ACTION_MASK_SIZE]
  */
-#define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 290 */
+#define FC_OBS_SIZE             (FC_TOTAL_OBS + FC_ACTION_MASK_SIZE)  /* 291 */
 
 /* ======================================================================== */
 /* Normalization divisors                                                     */

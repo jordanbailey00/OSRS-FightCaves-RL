@@ -12,8 +12,8 @@ int fc_npc_melee_max_hit(int str_level, int str_bonus);
 
 /* Player combat */
 int fc_player_def_roll(const FcPlayer* p, int attack_style);
-int fc_player_ranged_attack_roll(const FcPlayer* p);
-int fc_player_ranged_max_hit(const FcPlayer* p);
+int fc_player_ranged_attack_roll(const FcPlayer* p, const FcNpc* target);
+int fc_player_ranged_max_hit(const FcPlayer* p, const FcNpc* target);
 
 /* PvM prayer: returns 1 if prayer blocks the attack style (100% block) */
 int fc_prayer_blocks_style(int prayer, int attack_style);
@@ -23,7 +23,7 @@ int fc_distance_to_npc(int px, int py, const FcNpc* npc);
 
 /* Hit delay */
 int fc_melee_hit_delay(void);
-int fc_ranged_hit_delay(int distance);  /* player crossbow */
+int fc_ranged_hit_delay(int distance);  /* player ranged projectile */
 int fc_magic_hit_delay(int distance);   /* generic magic fallback */
 int fc_npc_hit_delay(int npc_type, int attack_style, int distance);  /* per-NPC exact timing */
 

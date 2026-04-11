@@ -82,6 +82,12 @@ void my_init(Env* env, Dict* kwargs) {
     env->shape_pot_safe_prayer_threshold = item ? (float)item->value : defaults.shape_pot_safe_prayer_threshold;
     item = dict_get_unsafe(kwargs, "shape_pot_no_threat_penalty");
     env->shape_pot_no_threat_penalty = item ? (float)item->value : defaults.shape_pot_no_threat_penalty;
+    item = dict_get_unsafe(kwargs, "shape_low_prayer_pot_threshold");
+    env->shape_low_prayer_pot_threshold = item ? (float)item->value : defaults.shape_low_prayer_pot_threshold;
+    item = dict_get_unsafe(kwargs, "shape_low_prayer_no_pot_penalty");
+    env->shape_low_prayer_no_pot_penalty = item ? (float)item->value : defaults.shape_low_prayer_no_pot_penalty;
+    item = dict_get_unsafe(kwargs, "shape_low_prayer_pot_reward");
+    env->shape_low_prayer_pot_reward = item ? (float)item->value : defaults.shape_low_prayer_pot_reward;
     item = dict_get_unsafe(kwargs, "shape_wrong_prayer_penalty");
     env->shape_wrong_prayer_penalty = item ? (float)item->value : defaults.shape_wrong_prayer_penalty;
     item = dict_get_unsafe(kwargs, "shape_npc_specific_prayer_bonus");

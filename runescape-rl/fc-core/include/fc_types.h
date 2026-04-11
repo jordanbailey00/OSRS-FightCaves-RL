@@ -179,6 +179,9 @@ typedef struct {
     int ranged_level;
     int prayer_level;
     int magic_level;
+    int weapon_kind;
+    int weapon_speed;
+    int weapon_range;
 
     /* Equipment bonuses (exact values from Void 634 cache item definitions) */
     int ranged_attack_bonus;

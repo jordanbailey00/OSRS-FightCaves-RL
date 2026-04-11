@@ -742,12 +742,12 @@ static int dbg_draw_panel_tabs(const FcState* state,
         for (int s = 0; s < FC_OBS_NPC_SLOTS; s++) {
             int base = FC_OBS_NPC_START + s * FC_OBS_NPC_STRIDE;
             if (obs[base + FC_NPC_VALID] < 0.5f) continue;
-            snprintf(buf, sizeof(buf), "[%d] hp:%.2f d:%.2f los:%.0f st:%.2f",
+            snprintf(buf, sizeof(buf), "[%d] hp:%.2f d:%.2f st:%.2f pd:%.2f",
                      s,
                      obs[base + FC_NPC_HP],
                      obs[base + FC_NPC_DISTANCE],
-                     obs[base + FC_NPC_LOS],
-                     obs[base + FC_NPC_EFFECTIVE_STYLE]);
+                     obs[base + FC_NPC_EFFECTIVE_STYLE],
+                     obs[base + FC_NPC_PENDING_STYLE]);
             DrawText(buf, x, by, 7, DBG_COL_LABEL); by += lh - 2;
         }
 
@@ -809,9 +809,9 @@ static int dbg_draw_panel_tabs(const FcState* state,
                  reward_runtime->ticks_in_wave,
                  reward_runtime->ticks_since_attack);
         DrawText(buf, x, by, 8, dbg_reward_color(b->total)); by += sh;
-        snprintf(buf, sizeof(buf), "grace:%d noatk:%+.2f stall:%d",
+        snprintf(buf, sizeof(buf), "grace:%d lowpray<=%.0f%% stall:%d",
                  reward_params->shape_not_attacking_grace_ticks,
-                 reward_params->shape_not_attacking_penalty,
+                 reward_params->shape_low_prayer_pot_threshold * 100.0f,
                  reward_params->shape_wave_stall_start);
         DrawText(buf, x, by, 8, DBG_COL_LABEL); by += sh;
         snprintf(buf, sizeof(buf), "threat any:%d imm:%d melee:%d",
@@ -838,6 +838,8 @@ static int dbg_draw_panel_tabs(const FcState* state,
                 {"food_safe", b->food_safe},
                 {"pot_waste", b->pot_waste},
                 {"pot_safe", b->pot_safe},
+                {"lowpray", b->low_prayer_no_pot},
+                {"pot_low", b->low_prayer_pot},
                 {"danger_ok", b->correct_danger_prayer},
                 {"danger_bad_w", b->wrong_danger_prayer_weight},
                 {"danger_bad_s", b->wrong_danger_prayer_shape},

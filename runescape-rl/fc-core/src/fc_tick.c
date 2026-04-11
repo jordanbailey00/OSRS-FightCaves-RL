@@ -264,7 +264,7 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
             p->approach_target = 0;
         } else {
             int dist = fc_distance_to_npc(p->x, p->y, target);
-            int weapon_range = 7;  /* rune crossbow */
+            int weapon_range = p->weapon_range;
 
             if (dist > weapon_range && p->approach_target && p->route_idx >= p->route_len) {
                 /* Walk toward the NPC center. The greedy pathfinder will head
@@ -304,13 +304,13 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
 
             if (dist <= weapon_range && p->attack_timer <= 0) {
                 /* In range — fire attack */
-                int att_roll = fc_player_ranged_attack_roll(p);
+                int att_roll = fc_player_ranged_attack_roll(p, target);
                 const FcNpcStats* tstats = fc_npc_get_stats(target->npc_type);
                 int def_roll = fc_npc_def_roll(tstats->def_level, tstats->def_bonus);
                 float chance = fc_hit_chance(att_roll, def_roll);
 
                 int hit = (fc_rng_float(state) < chance) ? 1 : 0;
-                int max_hit = fc_player_ranged_max_hit(p);
+                int max_hit = fc_player_ranged_max_hit(p, target);
                 int damage = hit ? fc_rng_int(state, max_hit + 1) : 0;
 
                 int delay = fc_ranged_hit_delay(dist);
@@ -319,7 +319,7 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                                      damage, delay, ATTACK_RANGED, -1, 0);
 
                 state->attack_attempt_this_tick = 1;
-                p->attack_timer = 5;
+                p->attack_timer = p->weapon_speed;
                 p->ammo_count--;
                 p->hit_landed_this_tick = 1;  /* flag for viewer hitsplat */
             }

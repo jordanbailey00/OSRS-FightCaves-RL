@@ -34,6 +34,9 @@ typedef struct {
     float shape_pot_waste_scale;
     float shape_pot_safe_prayer_threshold;
     float shape_pot_no_threat_penalty;
+    float shape_low_prayer_pot_threshold;
+    float shape_low_prayer_no_pot_penalty;
+    float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
@@ -82,6 +85,8 @@ typedef struct {
     float food_safe;
     float pot_waste;
     float pot_safe;
+    float low_prayer_no_pot;
+    float low_prayer_pot;
 
     float correct_danger_prayer;
     float wrong_danger_prayer_weight;
@@ -131,6 +136,9 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_pot_waste_scale = -1.2f;
     params.shape_pot_safe_prayer_threshold = 1.0f;
     params.shape_pot_no_threat_penalty = 0.0f;
+    params.shape_low_prayer_pot_threshold = 0.60f;
+    params.shape_low_prayer_no_pot_penalty = -0.01f;
+    params.shape_low_prayer_pot_reward = 0.15f;
     params.shape_wrong_prayer_penalty = -1.25f;
     params.shape_npc_specific_prayer_bonus = 1.5f;
     params.shape_npc_melee_penalty = -0.3f;
@@ -149,6 +157,25 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_not_attacking_grace_ticks = 2;
 
     return params;
+}
+
+static inline int fc_reward_low_prayer_threshold(
+        const FcPlayer* p, const FcRewardParams* params) {
+    int max_prayer_points;
+    int threshold_points;
+
+    if (p->max_prayer <= 0 || params->shape_low_prayer_pot_threshold <= 0.0f) {
+        return 0;
+    }
+
+    max_prayer_points = p->max_prayer / 10;
+    if (max_prayer_points <= 0) return 0;
+
+    threshold_points =
+        (int)(params->shape_low_prayer_pot_threshold * (float)max_prayer_points);
+    if (threshold_points < 0) threshold_points = 0;
+    if (threshold_points > max_prayer_points) threshold_points = max_prayer_points;
+    return threshold_points * 10;
 }
 
 static inline void fc_reward_runtime_reset(FcRewardRuntime* runtime) {
@@ -259,6 +286,7 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     if (out.raw[FC_RWD_PRAYER_POT_USED] > 0.0f) {
         int pre_prayer = state->pre_drink_prayer;
         int max_prayer = p->max_prayer;
+        int low_prayer_threshold = fc_reward_low_prayer_threshold(p, params);
         if (pre_prayer >= max_prayer) {
             out.pot_waste += params->shape_pot_full_waste_penalty;
         } else {
@@ -276,6 +304,10 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
                     out.pot_safe += params->shape_pot_no_threat_penalty;
                 }
             }
+        }
+
+        if (low_prayer_threshold > 0 && pre_prayer <= low_prayer_threshold) {
+            out.low_prayer_pot = params->shape_low_prayer_pot_reward;
         }
     }
 
@@ -364,6 +396,17 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.unnecessary_prayer = params->shape_unnecessary_prayer_penalty;
     }
 
+    {
+        int low_prayer_threshold = fc_reward_low_prayer_threshold(p, params);
+        if (low_prayer_threshold > 0 &&
+            out.raw[FC_RWD_PRAYER_POT_USED] <= 0.0f &&
+            p->prayer_doses_remaining > 0 &&
+            p->potion_timer <= 0 &&
+            p->current_prayer <= low_prayer_threshold) {
+            out.low_prayer_no_pot = params->shape_low_prayer_no_pot_penalty;
+        }
+    }
+
     out.total =
         out.damage_dealt +
         out.attack_attempt +
@@ -378,6 +421,8 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.food_safe +
         out.pot_waste +
         out.pot_safe +
+        out.low_prayer_no_pot +
+        out.low_prayer_pot +
         out.correct_danger_prayer +
         out.wrong_danger_prayer_weight +
         out.wrong_danger_prayer_shape +

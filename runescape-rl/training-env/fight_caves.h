@@ -144,6 +144,9 @@ typedef struct FightCaves {
     float shape_pot_waste_scale;
     float shape_pot_safe_prayer_threshold;
     float shape_pot_no_threat_penalty;
+    float shape_low_prayer_pot_threshold;
+    float shape_low_prayer_no_pot_penalty;
+    float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
@@ -225,6 +228,9 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_pot_waste_scale = env->shape_pot_waste_scale;
     params.shape_pot_safe_prayer_threshold = env->shape_pot_safe_prayer_threshold;
     params.shape_pot_no_threat_penalty = env->shape_pot_no_threat_penalty;
+    params.shape_low_prayer_pot_threshold = env->shape_low_prayer_pot_threshold;
+    params.shape_low_prayer_no_pot_penalty = env->shape_low_prayer_no_pot_penalty;
+    params.shape_low_prayer_pot_reward = env->shape_low_prayer_pot_reward;
     params.shape_wrong_prayer_penalty = env->shape_wrong_prayer_penalty;
     params.shape_npc_specific_prayer_bonus = env->shape_npc_specific_prayer_bonus;
     params.shape_npc_melee_penalty = env->shape_npc_melee_penalty;

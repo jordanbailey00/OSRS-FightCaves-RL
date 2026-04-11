@@ -107,6 +107,9 @@ static void init_player(FcPlayer* p) {
     p->ranged_level = FC_PLAYER_RANGED_LVL;
     p->prayer_level = FC_PLAYER_PRAYER_LVL;
     p->magic_level = FC_PLAYER_MAGIC_LVL;
+    p->weapon_kind = FC_PLAYER_WEAPON_KIND;
+    p->weapon_speed = FC_PLAYER_WEAPON_SPEED;
+    p->weapon_range = FC_PLAYER_WEAPON_RANGE;
     p->ranged_attack_bonus = FC_EQUIP_RANGED_ATK;
     p->ranged_strength_bonus = FC_EQUIP_RANGED_STR;
     p->defence_stab = FC_EQUIP_DEF_STAB;
@@ -357,7 +360,8 @@ void fc_write_obs(const FcState* state, float* out) {
     player[FC_OBS_PLAYER_PRAYER]    = (p->max_prayer > 0) ? (float)p->current_prayer / (float)p->max_prayer : 0.0f;
     player[FC_OBS_PLAYER_X]         = (float)p->x / (float)FC_ARENA_WIDTH;
     player[FC_OBS_PLAYER_Y]         = (float)p->y / (float)FC_ARENA_HEIGHT;
-    player[FC_OBS_PLAYER_ATK_TIMER] = (float)p->attack_timer / 5.0f;  /* typical max attack speed */
+    player[FC_OBS_PLAYER_ATK_TIMER] = (p->weapon_speed > 0)
+        ? (float)p->attack_timer / (float)p->weapon_speed : 0.0f;
     player[FC_OBS_PLAYER_PRAY_MEL]  = (p->prayer == PRAYER_PROTECT_MELEE) ? 1.0f : 0.0f;
     player[FC_OBS_PLAYER_PRAY_RNG]  = (p->prayer == PRAYER_PROTECT_RANGE) ? 1.0f : 0.0f;
     player[FC_OBS_PLAYER_PRAY_MAG]  = (p->prayer == PRAYER_PROTECT_MAGIC) ? 1.0f : 0.0f;
