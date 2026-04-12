@@ -1,21 +1,17 @@
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
+FROM nvidia/cuda:12.8.1-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CUDA_HOME=/usr/local/cuda
 ENV PATH=/opt/runescape-rl-venv/bin:/usr/local/cuda/bin:${PATH}
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 ENV VIRTUAL_ENV=/opt/runescape-rl-venv
+ENV PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
-    file \
-    git \
-    git-lfs \
-    jq \
     libgl1 \
-    libglib2.0-0 \
     libice6 \
     libsm6 \
     libx11-6 \
@@ -27,16 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     openssh-server \
     pkg-config \
-    python-is-python3 \
     python3 \
     python3-dev \
     python3-pip \
     python3-venv \
-    rsync \
-    tmux \
-    unzip \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
+    && ln -sf /usr/bin/python3 /usr/local/bin/python && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 RUN python3 -m venv "${VIRTUAL_ENV}"
 
