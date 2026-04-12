@@ -25,6 +25,10 @@ if [ ! -f "${STAGED_WARM_CKPT}" ]; then
     exit 1
 fi
 
+if [ ! -x "${VENV_ROOT}/bin/python" ]; then
+    runpod-install-runtime
+fi
+
 mkdir -p "${RUNTIME_WARM_DIR}" "${RUNTIME_LOGS}/fight_caves" "${RUNTIME_WANDB}"
 if [ ! -f "${RUNTIME_WARM_CKPT}" ]; then
     cp "${STAGED_WARM_CKPT}" "${RUNTIME_WARM_CKPT}"

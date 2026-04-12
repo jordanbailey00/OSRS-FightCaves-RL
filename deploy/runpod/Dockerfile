@@ -30,22 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/local/bin/python && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-RUN python3 -m venv "${VIRTUAL_ENV}"
-
-COPY requirements.txt /tmp/runpod-requirements.txt
-
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install --index-url https://download.pytorch.org/whl/cu128 'torch==2.11.0' && \
-    python -m pip install --no-cache-dir -r /tmp/runpod-requirements.txt && \
-    python - <<'PY'
-import torch
-import numpy
-import pybind11
-print("torch", torch.__version__)
-print("torch_cuda", torch.version.cuda)
-print("numpy", numpy.__version__)
-print("pybind11", pybind11.__version__)
-PY
+COPY requirements.txt /opt/runpod/requirements.txt
 
 RUN mkdir -p /var/run/sshd /root/.ssh /workspace /runpod-volume && \
     chmod 700 /root/.ssh && \
@@ -62,11 +47,13 @@ RUN mkdir -p /var/run/sshd /root/.ssh /workspace /runpod-volume && \
 
 COPY entrypoint.sh /usr/local/bin/runpod-entrypoint
 COPY bootstrap_from_volume.sh /usr/local/bin/runpod-bootstrap
+COPY install_python_env.sh /usr/local/bin/runpod-install-runtime
 COPY verify_gpu_stack.sh /usr/local/bin/runpod-verify
 
 RUN chmod +x \
     /usr/local/bin/runpod-entrypoint \
     /usr/local/bin/runpod-bootstrap \
+    /usr/local/bin/runpod-install-runtime \
     /usr/local/bin/runpod-verify
 
 WORKDIR /workspace
