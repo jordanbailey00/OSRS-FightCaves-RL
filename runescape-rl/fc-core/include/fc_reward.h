@@ -237,10 +237,13 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         const FcState* state, const FcRewardParams* params, FcRewardRuntime* runtime) {
     FcRewardBreakdown out;
     const FcPlayer* p = &state->player;
+    int prayer_reward_idle;
 
     memset(&out, 0, sizeof(out));
     fc_write_reward_features(state, out.raw);
     out.threat_ctx = fc_reward_collect_threat_context(state, params);
+    prayer_reward_idle =
+        (runtime->ticks_since_attack >= 1 && out.raw[FC_RWD_ATTACK_ATTEMPT] <= 0.0f);
 
     out.damage_dealt = out.raw[FC_RWD_DAMAGE_DEALT] * params->w_damage_dealt;
     out.attack_attempt = out.raw[FC_RWD_ATTACK_ATTEMPT] * params->w_attack_attempt;
@@ -314,8 +317,10 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         }
     }
 
-    out.correct_danger_prayer =
-        out.raw[FC_RWD_CORRECT_DANGER_PRAY] * params->w_correct_danger_prayer;
+    if (!prayer_reward_idle) {
+        out.correct_danger_prayer =
+            out.raw[FC_RWD_CORRECT_DANGER_PRAY] * params->w_correct_danger_prayer;
+    }
     out.wrong_danger_prayer_weight =
         out.raw[FC_RWD_WRONG_DANGER_PRAY] * params->w_wrong_danger_prayer;
     out.wrong_danger_prayer_shape =
@@ -324,7 +329,8 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     {
         int prayer = p->hit_locked_prayer_this_tick;
         int src_type = p->hit_source_npc_type;
-        if (p->hit_landed_this_tick && p->hit_blocked_this_tick &&
+        if (!prayer_reward_idle &&
+            p->hit_landed_this_tick && p->hit_blocked_this_tick &&
             prayer != PRAYER_NONE) {
             if (src_type == NPC_KET_ZEK && prayer == PRAYER_PROTECT_MAGIC) {
                 out.npc_specific_prayer = params->shape_npc_specific_prayer_bonus;

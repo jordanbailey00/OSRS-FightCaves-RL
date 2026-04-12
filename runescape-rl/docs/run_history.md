@@ -11,6 +11,223 @@ Formatting note:
 
 ---
 
+## v25.1 (2026-04-12, completed)
+
+Actual run:
+- `zyhv95mi`
+- local run log:
+  - [zyhv95mi.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/zyhv95mi.json)
+
+Status:
+- completed normally
+
+Goal:
+- keep the `v25` recipe intact
+- change only the blocked-prayer reward logic so the agent cannot keep farming
+  correct-prayer rewards while sitting attack-ready and idle
+- preserve all `v25` LOS/healer correctness fixes and all `v24` / `v22.1`
+  config values
+
+Config versus `v25`:
+- no `.ini` delta
+- identical to `v25` in:
+  - warm-start checkpoint
+  - corrected `Masori (f) + TBow` combat model
+  - observation contract
+  - reward-conversion weights
+  - `7/10` kiting band
+  - low-prayer shaping zeroed
+  - LOS/healer correctness fixes
+  - Jad-heal penalty
+  - PPO/runtime recipe
+- only intended behavior delta:
+  - when the agent has been attack-ready and idle for 1 full tick, the blocked
+    correct-prayer rewards stop applying
+  - those rewards immediately re-enable on the next attack attempt
+
+Exact difference versus `v25`:
+- no config-key change
+- code-only reward gate:
+  - `correct_danger_prayer` is suppressed while the attack-ready idle state is
+    active
+  - `npc_specific_prayer_bonus` is also suppressed during that same idle state
+  - the gate clears immediately when `attack_attempt_this_tick > 0`
+- implementation detail:
+  - reuses the existing `runtime->ticks_since_attack`
+  - no new long-lived state/config surface added
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=0.0`, `shape_low_prayer_pot_reward=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`zyhv95mi`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2552.5s`
+- throughput:
+  - `1.99M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 60.16`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_return = 30942.22`
+- `episode_length = 8045.71`
+- `reached_wave_30 = 1.0`
+- `cleared_wave_30 = 1.0`
+- `reached_wave_31 = 1.0`
+- `reached_wave_63 = 0.1329`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.7217`
+- `prayer_uptime_melee = 0.1901`
+- `prayer_uptime_range = 0.3171`
+- `prayer_uptime_magic = 0.2145`
+- `correct_prayer = 2378.29`
+- `wrong_prayer_hits = 247.14`
+- `no_prayer_hits = 25.94`
+- `damage_blocked = 179323.41`
+- `dmg_taken_avg = 6053.22`
+- `prayer_switches = 2867.40`
+- `attack_when_ready_rate = 0.9504`
+- `pots_used = 30.60`
+- `avg_prayer_on_pot = 0.5937`
+- `pots_wasted = 10.37`
+- `food_eaten = 10.43`
+- `avg_hp_on_food = 0.5360`
+- `food_wasted = 0.77`
+- `tokxil_melee_ticks = 2.10`
+- `ketzek_melee_ticks = 3.10`
+
+Key progression points:
+- sampled `wave_reached >= 30` by `629.1M`
+- sampled `wave_reached >= 35` by `629.1M`
+- sampled `wave_reached >= 40` by `629.1M`
+- sampled `wave_reached >= 45` by `629.1M`
+- sampled `wave_reached >= 50` by `629.1M`
+- sampled `wave_reached >= 55` by `1.876B`
+- sampled `wave_reached >= 60` by `1.876B`
+- sampled `max_wave = 63` by `1.876B`
+- best sampled average-wave window was around `3.126B`:
+  - `wave_reached = 61.18`
+  - `episode_return = 31638.7`
+  - `reached_wave_63 = 0.5394`
+- highest sampled `reached_wave_63` was earlier, around `1.876B`:
+  - `reached_wave_63 = 0.6099`
+  - `jad_kill_rate = 0.0003`
+- the run then held a stable `60-61` wave plateau through the back half:
+  - `4.377B`: `wave_reached = 60.47`, `reached_wave_63 = 0.1379`
+  - final: `wave_reached = 60.16`, `reached_wave_63 = 0.1329`
+- nearest eval checkpoints to the important windows:
+  - early breakout:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/zyhv95mi/000000525336576.bin`
+  - first `60+` / first `max_wave = 63` / highest `reached_wave_63` window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/zyhv95mi/0000001836056576.bin`
+  - best average-wave plateau:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/zyhv95mi/0000003094347776.bin`
+  - late stable plateau:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/zyhv95mi/0000004352638976.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/zyhv95mi/0000004999610368.bin`
+
+Comparison to `v25` (`yf24fz84`):
+- `wave_reached: 60.16 vs 45.12`
+- `episode_return: 30942.2 vs 17260.3`
+- `episode_length: 8046 vs 6101`
+- `reached_wave_63: 0.1329 vs 0.0`
+- `damage_blocked: 179323 vs 98075`
+- `wrong_prayer_hits: 247.1 vs 317.6`
+- `no_prayer_hits: 25.9 vs 55.0`
+- `attack_when_ready_rate: 0.9504 vs 0.4953`
+- `prayer_uptime: 0.7217 vs 0.8298`
+- `food_eaten: 10.43 vs 18.37`
+- `food_wasted: 0.77 vs 9.29`
+- `pots_used: 30.60 vs 28.01`
+- `avg_prayer_on_pot: 0.5937 vs 0.5055`
+- `pots_wasted: 10.37 vs 6.40`
+
+Comparison to `v24` (`h2kpwkdk`):
+- `wave_reached: 60.16 vs 61.97`
+- `episode_return: 30942.2 vs 32277.4`
+- `episode_length: 8046 vs 8581`
+- `reached_wave_63: 0.1329 vs 0.3582`
+- `jad_kill_rate: 0.0 vs 0.0149`
+- `damage_blocked: 179323 vs 187217`
+- `wrong_prayer_hits: 247.1 vs 281.5`
+- `no_prayer_hits: 25.9 vs 37.5`
+- `attack_when_ready_rate: 0.9504 vs 0.7500`
+- `prayer_switches: 2867.4 vs 651.3`
+- `prayer_uptime_magic: 0.2145 vs 0.5296`
+- `avg_prayer_on_pot: 0.5937 vs 0.3760`
+- `pots_wasted: 10.37 vs 3.07`
+- `food_eaten: 10.43 vs 8.01`
+- `food_wasted: 0.77 vs 1.33`
+
+Analysis:
+- `v25.1` is a major recovery from `v25` and the reward-gate change clearly
+  fixed the passive blocked-prayer farming behavior
+- the strongest evidence is attack tempo:
+  - `attack_when_ready_rate` nearly doubled from `0.495 -> 0.950`
+  - the run immediately recovered a stable `60+` wave regime instead of
+    collapsing into the mid-40s
+- survivability also recovered strongly:
+  - `damage_blocked` rebounded to near-`v24`
+  - both `wrong_prayer_hits` and `no_prayer_hits` improved materially
+  - food waste collapsed from `9.29 -> 0.77`
+- the run now looks like a high-pressure, high-tempo policy that reaches Jad
+  often under the corrected LOS/healer rules, but still burns too much prayer
+  and does not yet convert that reach into final kills in the aggregate
+
+Important interpretation note:
+- `v24` is not a clean Jad reference anymore because it still benefited from
+  the pre-fix Italy-rock wall-shot bug
+- so the `v25.1` vs `v24` Jad gap is real in metrics, but not fully
+  apples-to-apples on encounter correctness
+- the more meaningful comparison is:
+  - `v25.1` kept the corrected mechanics from `v25`
+  - then almost completely recovered the lost frontier from the idle-gate fix
+
+Findings:
+- the idle blocked-prayer reward gate is a keeper
+- the remaining regression signature is no longer attack idleness
+- the remaining weak point is prayer/resource efficiency:
+  - prayer switching is extremely high
+  - magic-prayer uptime is still much lower than `v24`
+  - prayer pots are still consumed too early and too wastefully
+- the run appears to be solving the corrected mechanics by over-switching and
+  over-flicking rather than by learning a cleaner Jad/healer resource pattern
+
+Recommendation for `v25.2`:
+- keep `v25.1` code intact:
+  - keep the idle blocked-prayer gate
+  - keep the LOS symmetry fix
+  - keep the Yt-HurKot aggro fix
+  - keep the Jad-heal penalty
+- do not touch attack-tempo shaping next; that part is now working
+- make `v25.2` a small resource-discipline experiment only
+  - strongest candidate: increase prayer-pot waste punishment
+  - specifically, retune only:
+    - `shape_pot_full_waste_penalty`
+    - and/or `shape_pot_waste_scale`
+- reason:
+  - `v25.1` already recovered the offensive/tempo side
+  - the largest remaining metric regressions are `avg_prayer_on_pot`,
+    `pots_wasted`, and excessive prayer switching
+  - targeting potion waste is the narrowest next step that addresses the
+    current failure signature without undoing the successful idle-gate fix
+
+Suggested `v25.2` framing:
+- treat `v25.1` as the new corrected-mechanics baseline
+- run one minimal pot-discipline ablation first before touching any broader
+  prayer or combat rewards
+
+---
+
 ## v25 (2026-04-12, completed)
 
 Actual run:

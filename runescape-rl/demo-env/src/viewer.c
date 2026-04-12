@@ -10,7 +10,7 @@
  *   P           — drink prayer potion        R        — reset episode
  *   Tab         — cycle attack target        A        — toggle auto/manual
  *   O or D*     — toggle debug overlay       G        — grid  C — collision
- *   4/5         — camera presets             Q/Esc    — quit
+ *   4/5         — camera presets             L        — toggle camera lock
  *   Scroll      — zoom                       Right-drag — orbit camera
  *
  *   * D only toggles the overlay when not being used for east movement.
@@ -165,6 +165,7 @@ typedef struct {
     int auto_mode;       /* 1 = random actions, 0 = human control */
     Camera3D camera;
     float cam_yaw, cam_pitch, cam_dist;
+    int camera_locked;
     int actions[FC_NUM_ACTION_HEADS];
     uint32_t seed, last_hash;
     int episode_count;
@@ -1056,13 +1057,9 @@ static float ground_y(ViewerState* v, int tile_x, int tile_y) {
     return 0.0f;
 }
 
-/* ======================================================================== */
-/* Scene drawing                                                             */
-/* ======================================================================== */
-
-static void draw_scene(ViewerState* v) {
-    /* Camera follows player with same interpolation */
-    float cx = FC_ARENA_WIDTH*0.5f, cy = -(FC_ARENA_HEIGHT*0.5f);
+static Vector3 camera_follow_target(const ViewerState* v) {
+    float cx = FC_ARENA_WIDTH * 0.5f;
+    float cy = -(FC_ARENA_HEIGHT * 0.5f);
     if (v->entity_count > 0) {
         float t = v->tick_frac;
         float pcx = v->prev_player_x + 0.5f;
@@ -1072,11 +1069,21 @@ static void draw_scene(ViewerState* v) {
         cx = pcx + (ccx - pcx) * t;
         cy = -(pcy + (ccy - pcy) * t);
     }
-    v->camera.target = (Vector3){cx, 0.5f, cy};
+    return (Vector3){cx, 0.5f, cy};
+}
+
+/* ======================================================================== */
+/* Scene drawing                                                             */
+/* ======================================================================== */
+
+static void draw_scene(ViewerState* v) {
+    if (v->camera_locked) {
+        v->camera.target = camera_follow_target(v);
+    }
     v->camera.position = (Vector3){
-        cx + v->cam_dist*cosf(v->cam_pitch)*sinf(v->cam_yaw),
+        v->camera.target.x + v->cam_dist*cosf(v->cam_pitch)*sinf(v->cam_yaw),
         v->cam_dist*sinf(v->cam_pitch),
-        cy + v->cam_dist*cosf(v->cam_pitch)*cosf(v->cam_yaw) };
+        v->camera.target.z + v->cam_dist*cosf(v->cam_pitch)*cosf(v->cam_yaw) };
     BeginMode3D(v->camera);
 
     /* Terrain + objects */
@@ -1334,12 +1341,13 @@ static void draw_header(ViewerState* v) {
     char b[128];
     char speed_label[32];
     const char* mode = v->policy_pipe ? "REPLAY" : (v->auto_mode ? "AUTO" : "PLAY");
+    const char* cam_mode = v->camera_locked ? "LOCK" : "FREE";
     format_speed_label(v, speed_label, sizeof(speed_label));
     snprintf(b,sizeof(b),"Fight Caves — Wave %d/%d  [%s]",
         v->state.current_wave, FC_NUM_WAVES, mode);
     text_s(b,10,4,16,COL_TEXT_YELLOW);
-    snprintf(b,sizeof(b),"Ep:%d Seed:%u Tick:%d %s",
-        v->episode_count, v->seed, v->state.tick, speed_label);
+    snprintf(b,sizeof(b),"Ep:%d Seed:%u Tick:%d %s Cam:%s",
+        v->episode_count, v->seed, v->state.tick, speed_label, cam_mode);
     text_s(b,10,22,10,COL_TEXT_DIM);
     FcPlayer* p=&v->state.player;
     snprintf(b,sizeof(b),"HP %d/%d  Pray %d/%d",
@@ -2172,8 +2180,10 @@ int main(int argc, char** argv) {
     v.active_loadout = FC_ACTIVE_LOADOUT;
     v.attack_target = -1;
     v.cam_yaw = 0; v.cam_pitch = 0.8f; v.cam_dist = 30;
+    v.camera_locked = 1;
     v.camera.up = (Vector3){0,1,0}; v.camera.fovy = 32;
     v.camera.projection = CAMERA_PERSPECTIVE;
+    v.camera.target = (Vector3){FC_ARENA_WIDTH * 0.5f, 0.5f, -(FC_ARENA_HEIGHT * 0.5f)};
 
     v.terrain = load_terrain(&v);
     v.objects = load_objects_with_terrain(v.terrain);
@@ -2365,6 +2375,12 @@ int main(int argc, char** argv) {
             if (IsKeyPressed(KEY_DOWN)) cycle_policy_replay_speed(&v, -1);
         }
         if (IsKeyPressed(KEY_R)) reset_ep(&v);
+        if (IsKeyPressed(KEY_L)) {
+            if (v.camera_locked) {
+                v.camera.target = camera_follow_target(&v);
+            }
+            v.camera_locked = !v.camera_locked;
+        }
 
         /* Toggle keys */
         /* Auto mode removed — was too easy to accidentally toggle with 'A' key.
@@ -2812,9 +2828,9 @@ int main(int argc, char** argv) {
         draw_test_overlay(&v);
 
         /* Status bar */
-        const char* status = v.paused ? "PAUSED — [Space] resume, [Right] step, use side-panel TPS buttons" :
+        const char* status = v.paused ? "PAUSED — [Space] resume, [Right] step, [L] camera lock, use side-panel TPS buttons" :
                              v.auto_mode ? "AUTO mode — [A] switch to manual" :
-                             "Left-click:move  Click NPC:attack  1/2/3:pray  F:eat  P:pot  side-panel TPS";
+                             "Left-click:move  Click NPC:attack  1/2/3:pray  F:eat  P:pot  L:camera lock  side-panel TPS";
         DrawText(status, 10, WINDOW_H-14, 10, CLITERAL(Color){80,80,90,255});
 
         /* Big centered pause prompt */

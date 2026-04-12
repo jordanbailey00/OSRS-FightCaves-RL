@@ -621,6 +621,66 @@ static void test_jad_healer_response(void) {
 }
 
 /* ====================================================================== */
+/* Test 9: Ready-idle prayer reward gating                                */
+/* ====================================================================== */
+
+static void test_ready_idle_prayer_gate(void) {
+    printf("\n=== Ready-Idle Prayer Gate ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+
+    init_manual_test_state(&state);
+    fc_npc_spawn(&state.npcs[0], NPC_KET_ZEK, 12, 10, 0);
+    state.player.hit_landed_this_tick = 1;
+    state.player.hit_blocked_this_tick = 1;
+    state.player.hit_locked_prayer_this_tick = PRAYER_PROTECT_MAGIC;
+    state.player.hit_source_npc_type = NPC_KET_ZEK;
+    state.correct_danger_prayer = 1;
+
+    fc_reward_runtime_reset(&runtime);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Correct-prayer rewards apply before ready-idle state");
+    if (fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer - params.shape_npc_specific_prayer_bonus) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    runtime.ticks_since_attack = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Correct-prayer rewards are suppressed while ready-idle");
+    if (fabsf(b.correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    state.attack_attempt_this_tick = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Attack attempt immediately re-enables correct-prayer rewards");
+    if (fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer - params.shape_npc_specific_prayer_bonus) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
 /* Main                                                                    */
 /* ====================================================================== */
 
@@ -639,6 +699,7 @@ int main(void) {
     test_melee_safespot_gating();
     test_player_attack_requires_los();
     test_jad_healer_response();
+    test_ready_idle_prayer_gate();
 
     printf("\n============================================================\n");
     printf("RESULTS: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);

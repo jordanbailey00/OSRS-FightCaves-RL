@@ -2,6 +2,20 @@
 
 ## 2026-04-12
 
+- Added the `v25.1` blocked-prayer idle gate in [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h):
+  - when the agent has been attack-ready and idle for 1 full tick, the
+    blocked correct-prayer rewards stop applying
+  - the gate clears immediately on the next attack attempt
+  - reused the existing `ticks_since_attack` runtime instead of adding new
+    config/state surface
+- Added regression coverage in [runescape-rl/demo-env/tests/test_headless.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/tests/test_headless.c) for:
+  - correct-prayer rewards applying normally
+  - suppression while ready-idle
+  - immediate re-enable on attack attempt
+- Added a native viewer camera-lock toggle in [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c):
+  - `L` now toggles between follow-locked and free camera
+  - free camera keeps the current target and only uses right-drag orbit +
+    scroll zoom, which makes high-TPS replay inspection much less dizzying
 - Implemented the planned `v25` Jad/healer correctness fixes in [runescape-rl/fc-core/src/fc_tick.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_tick.c), [runescape-rl/fc-core/src/fc_combat.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_combat.c), [runescape-rl/fc-core/src/fc_npc.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_npc.c), and [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h):
   - player ranged attacks and auto-approach now require LOS to character targets, closing the Italy-rock Jad wall-shot bug
   - Yt-HurKot now always distracts on landed player hits, including `0`
@@ -29,22 +43,34 @@
   - parked the Runpod route after concluding the expected SPS gain is too small to justify the extra operational overhead for this sweep
 - What worked:
   - exact `v24` rerun removed the hidden-drift question and confirmed the `v22.1` recipe is still reproducible
+  - `v25.1` (`zyhv95mi`) cleanly recovered the `v25` collapse without backing out the LOS/healer correctness fixes
+  - the idle blocked-prayer gate did exactly what it was supposed to do:
+    - `attack_when_ready_rate` jumped from `0.495 -> 0.950`
+    - `wave_reached` recovered from `45.12 -> 60.16`
+    - `food_wasted` collapsed from `9.29 -> 0.77`
   - the Runpod volume/image/bootstrap path was made functional end-to-end
   - the cuDNN linker failure was isolated quickly and fixed in a way that covers both fresh pods and local trainer rebuilds
   - W&B sweep grouping/tagging is now explicit instead of relying on generated run ids
 - What didn't work:
   - the `v23` / `v23.1` reward-timing bundle did not preserve `v22.1` behavior
   - `v23.1` removed the direct flick exploit but still produced over-switching, near-full prayer potting, bad food timing, and poor attack tempo
+  - `v25.1` still does not convert corrected-mechanics Jad reaches into stable final kills in aggregate
+  - prayer/resource efficiency is now the dominant weakness:
+    - `prayer_switches` are far above `v24`
+    - `avg_prayer_on_pot` and `pots_wasted` are still materially worse than `v24`
   - the Runpod path was technically workable but not worth the added moving parts for the current sweep
 - Lessons learned:
   - exact control reruns are mandatory before treating a regression as hidden repo drift
   - flick rewards must be checked against real prayer-drain semantics and transition timing, not just the intended English description
+  - once the attack-tempo failure is fixed, the next bottleneck becomes much easier to see:
+    - in the corrected-mechanics branch, the blocker is now prayer/potion efficiency, not idle farming
   - preserve a clean baseline branch before adding sweep/deployment infrastructure
   - for the current box, simpler local sweeps beat a marginal-SPS remote path
 - Current state:
   - `v2codex` is the exact `v22.1/v24` baseline
   - `v2codex_v24.s` carries the `v24.s` sweep runner plus optional Runpod scaffolding
-  - active next step is the local `v24.s` ablation sweep, not Runpod
+  - `v25.1` is the current corrected-mechanics baseline
+  - active next step is `v25.2`, a minimal prayer-pot waste retune on top of `v25.1`
 
 ## 2026-04-11
 
