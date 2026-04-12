@@ -15,7 +15,10 @@
 #include "fc_types.h"
 #include "fc_contracts.h"
 #include "fc_api.h"
+#include "fc_combat.h"
 #include "fc_npc.h"
+#include "fc_pathfinding.h"
+#include "fc_reward.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -512,6 +515,112 @@ static void test_melee_safespot_gating(void) {
 }
 
 /* ====================================================================== */
+/* Test 7: Player ranged LOS gating                                        */
+/* ====================================================================== */
+
+static void test_player_attack_requires_los(void) {
+    printf("\n=== Player Ranged LOS Gating ===\n");
+
+    FcState state;
+    char err[128];
+    int actions[FC_NUM_ACTION_HEADS] = {0};
+
+    init_manual_test_state(&state);
+    state.walkable[11][10] = 0;  /* Italy-rock style blocker between player and Jad */
+
+    fc_npc_spawn(&state.npcs[0], NPC_TZTOK_JAD, 12, 10, 0);
+    state.player.attack_target_idx = 0;
+    state.player.approach_target = 1;
+    state.player.attack_timer = 0;
+    state.player.ammo_count = 50;
+
+    fc_step(&state, actions);
+
+    TEST("Player does not fire ranged attacks through blocked LOS");
+    if (state.npcs[0].num_pending_hits == 0) PASS();
+    else {
+        snprintf(err, sizeof(err), "queued %d pending hits", state.npcs[0].num_pending_hits);
+        FAIL(err);
+    }
+
+    TEST("Auto-approach replans to a tile that has LOS");
+    if (state.player.route_len > 0) {
+        int ri = state.player.route_len - 1;
+        int rx = state.player.route_x[ri];
+        int ry = state.player.route_y[ri];
+        int has_los = fc_has_los_to_npc(rx, ry,
+                                        state.npcs[0].x, state.npcs[0].y,
+                                        state.npcs[0].size, state.walkable);
+        int rdist = fc_distance_to_npc(rx, ry, &state.npcs[0]);
+        if (has_los && rdist <= state.player.weapon_range) PASS();
+        else {
+            snprintf(err, sizeof(err), "endpoint=(%d,%d) dist=%d los=%d", rx, ry, rdist, has_los);
+            FAIL(err);
+        }
+    } else {
+        FAIL("no route planned");
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
+/* Test 8: Jad healer penalty + aggro                                      */
+/* ====================================================================== */
+
+static void test_jad_healer_response(void) {
+    printf("\n=== Jad Healer Response ===\n");
+
+    char err[128];
+
+    FcState heal;
+    init_manual_test_state(&heal);
+    fc_npc_spawn(&heal.npcs[0], NPC_TZTOK_JAD, 20, 20, 0);
+    fc_npc_spawn(&heal.npcs[1], NPC_YT_HURKOT, 16, 20, 1);
+    heal.npcs[0].current_hp -= 100;
+    heal.npcs[1].heal_timer = 0;
+
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    fc_reward_runtime_reset(&runtime);
+    params.shape_jad_heal_penalty = -0.1f;
+
+    fc_npc_tick(&heal, 1);
+    FcRewardBreakdown b = fc_reward_compute_breakdown(&heal, &params, &runtime);
+
+    TEST("Yt-HurKot heal proc increments Jad-heal counter");
+    if (heal.jad_heal_procs_this_tick == 1) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_heal_procs_this_tick = %d", heal.jad_heal_procs_this_tick);
+        FAIL(err);
+    }
+
+    TEST("Jad-heal penalty fires once per successful heal proc");
+    if (fabsf(b.jad_heal_penalty + 0.1f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_heal_penalty = %.4f", b.jad_heal_penalty);
+        FAIL(err);
+    }
+
+    fc_destroy(&heal);
+
+    FcState distract;
+    init_manual_test_state(&distract);
+    fc_npc_spawn(&distract.npcs[0], NPC_YT_HURKOT, 12, 10, 0);
+    fc_queue_pending_hit(distract.npcs[0].pending_hits,
+                         &distract.npcs[0].num_pending_hits,
+                         FC_MAX_PENDING_HITS,
+                         0, 1, ATTACK_RANGED, -1, 0);
+    fc_resolve_npc_pending_hits(&distract, 0);
+
+    TEST("0-damage player hit still distracts Yt-HurKot");
+    if (distract.npcs[0].healer_distracted == 1) PASS();
+    else FAIL("healer_distracted did not flip");
+
+    fc_destroy(&distract);
+}
+
+/* ====================================================================== */
 /* Main                                                                    */
 /* ====================================================================== */
 
@@ -528,6 +637,8 @@ int main(void) {
     test_determinism();
     test_multi_episode();
     test_melee_safespot_gating();
+    test_player_attack_requires_los();
+    test_jad_healer_response();
 
     printf("\n============================================================\n");
     printf("RESULTS: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);

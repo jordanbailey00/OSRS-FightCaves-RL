@@ -5,14 +5,57 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 TRAIN_SH="$ROOT_DIR/train.sh"
 WARM_START_CKPT="/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin"
+WANDB_GROUP="${WANDB_GROUP:-v24_s_redo}"
+
+TEMP_CONFIGS=()
+
+cleanup() {
+    if [ "${#TEMP_CONFIGS[@]}" -gt 0 ]; then
+        rm -f "${TEMP_CONFIGS[@]}"
+    fi
+}
+
+trap cleanup EXIT
+
+materialize_config() {
+    local base_config="$1"
+    local label="$2"
+
+    if [ -z "${TIMESTEPS_OVERRIDE:-}" ]; then
+        printf '%s\n' "$base_config"
+        return
+    fi
+
+    local tmp_config
+    tmp_config="$(mktemp "${TMPDIR:-/tmp}/fc_${label}_XXXXXX.ini")"
+    awk -v steps="$TIMESTEPS_OVERRIDE" '
+        BEGIN { in_train = 0; replaced = 0 }
+        /^\[train\]/ { in_train = 1; print; next }
+        /^\[/ { in_train = 0 }
+        in_train && $1 == "total_timesteps" {
+            print "total_timesteps = " steps
+            replaced = 1
+            next
+        }
+        { print }
+        END {
+            if (!replaced) {
+                exit 2
+            }
+        }
+    ' "$base_config" > "$tmp_config"
+    TEMP_CONFIGS+=("$tmp_config")
+    printf '%s\n' "$tmp_config"
+}
 
 usage() {
     cat <<'EOF'
 Usage:
-  bash run_v22_1_sweep.sh [--from LABEL] [--dry-run] [--no-wandb] [--list]
+  bash run_v22_1_sweep.sh [--from LABEL] [--timesteps STEPS] [--dry-run] [--no-wandb] [--list]
 
 Options:
   --from LABEL   Resume from the named job label.
+  --timesteps N  Override train.total_timesteps for every job in the matrix.
   --dry-run      Print the jobs that would run without launching training.
   --no-wandb     Pass through --no-wandb to train.sh.
   --list         Print the ordered job labels and exit.
@@ -63,6 +106,7 @@ WARM_FLAGS=(
 )
 
 FROM_LABEL=""
+TIMESTEPS_OVERRIDE="${SWEEP_TOTAL_TIMESTEPS:-}"
 DRY_RUN=0
 NO_WANDB=0
 LIST_ONLY=0
@@ -72,6 +116,11 @@ while [ "$#" -gt 0 ]; do
         --from)
             [ "$#" -ge 2 ] || { echo "Missing value for --from" >&2; exit 1; }
             FROM_LABEL="$2"
+            shift 2
+            ;;
+        --timesteps)
+            [ "$#" -ge 2 ] || { echo "Missing value for --timesteps" >&2; exit 1; }
+            TIMESTEPS_OVERRIDE="$2"
             shift 2
             ;;
         --dry-run)
@@ -132,28 +181,41 @@ for i in "${!LABELS[@]}"; do
     fi
 
     label="${LABELS[$i]}"
-    config="${CONFIGS[$i]}"
+    base_config="${CONFIGS[$i]}"
     warm="${WARM_FLAGS[$i]}"
+    config="$base_config"
+
+    if [ "$DRY_RUN" -ne 1 ]; then
+        config="$(materialize_config "$base_config" "$label")"
+    fi
 
     echo
     echo "=== [$((i + 1))/${#LABELS[@]}] $label ==="
-    echo "config: $config"
+    echo "config: $base_config"
+    if [ -n "$TIMESTEPS_OVERRIDE" ]; then
+        echo "timesteps_override: $TIMESTEPS_OVERRIDE"
+    fi
+    echo "wandb_group: $WANDB_GROUP"
+    echo "wandb_tag: $label"
     if [ "$warm" -eq 1 ]; then
         echo "warm_start: $WARM_START_CKPT"
     else
         echo "warm_start: none"
     fi
 
-    cmd=(bash "$TRAIN_SH")
+    cmd=(bash "$TRAIN_SH" --wandb-group "$WANDB_GROUP" --tag "$label")
     if [ "$NO_WANDB" -eq 1 ]; then
         cmd+=(--no-wandb)
     fi
 
     if [ "$DRY_RUN" -eq 1 ]; then
         if [ "$warm" -eq 1 ]; then
-            printf 'CONFIG_PATH=%q LOAD_MODEL_PATH=%q ' "$config" "$WARM_START_CKPT"
+            printf 'CONFIG_PATH=%q LOAD_MODEL_PATH=%q ' "$base_config" "$WARM_START_CKPT"
         else
-            printf 'CONFIG_PATH=%q ' "$config"
+            printf 'CONFIG_PATH=%q ' "$base_config"
+        fi
+        if [ -n "$TIMESTEPS_OVERRIDE" ]; then
+            printf 'SWEEP_TOTAL_TIMESTEPS=%q ' "$TIMESTEPS_OVERRIDE"
         fi
         if [ "$i" -eq "$start_idx" ]; then
             printf 'FORCE_BACKEND_REBUILD=1 '

@@ -188,8 +188,11 @@ else
         ARCH=$NVCC_ARCH
     elif command -v nvidia-smi &>/dev/null; then
         GPU_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.')
-        ARCH=${GPU_CC:+sm_$GPU_CC}
-        ARCH=${ARCH:-native}
+        if printf '%s' "$GPU_CC" | grep -Eq '^[0-9]+$'; then
+            ARCH="sm_$GPU_CC"
+        else
+            ARCH="native"
+        fi
     else
         ARCH=native
     fi

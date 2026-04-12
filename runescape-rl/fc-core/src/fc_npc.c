@@ -281,9 +281,13 @@ static void yt_hurkot_tick(FcState* state, FcNpc* npc) {
             if (dist <= 5) {
                 /* Within heal range — heal Jad */
                 if (jad->current_hp < jad->max_hp) {
+                    int before = jad->current_hp;
                     jad->current_hp += npc->heal_amount;
                     if (jad->current_hp > jad->max_hp) {
                         jad->current_hp = jad->max_hp;
+                    }
+                    if (jad->current_hp > before) {
+                        state->jad_heal_procs_this_tick++;
                     }
                 }
             } else {

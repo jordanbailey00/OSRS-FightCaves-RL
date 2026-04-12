@@ -2,21 +2,26 @@
 
 This file is the code-audited reference for the current Fight Caves RL setup. Historical runs and comparisons now live in [run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md).
 
-## Current Checked-In Config (`v21.3`)
+## Current Checked-In Config (`v25`)
 
 This is the active repo config in:
 - [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini)
 - [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini)
 
-This checked-in baseline is the planned `v21.3` run config.
+This checked-in baseline is the planned `v25` run config.
 
-Compared with the `v21.2` run config, it keeps the same PPO stack and reward weights,
-keeps the corrected `Masori (f) + Twisted bow` combat model and the wider `7/10`
-kiting band from `v22.1`, and adds only a narrow low-prayer rescue rule:
-- `shape_low_prayer_pot_threshold: 0.0 -> 0.05`
-- `shape_low_prayer_no_pot_penalty: -0.01`
-- `shape_low_prayer_pot_reward: 0.0`
-- no checkpoint warm-start
+Compared with the `v24` / `v22.1` control rerun, it keeps the same PPO stack,
+reward-conversion weights, corrected `Masori (f) + Twisted bow` combat model,
+wider `7/10` kiting band, and warm-start checkpoint, while making three narrow changes:
+- explicitly zero the inert low-prayer shaping cluster:
+  - `shape_low_prayer_pot_threshold = 0.0`
+  - `shape_low_prayer_no_pot_penalty = 0.0`
+  - `shape_low_prayer_pot_reward = 0.0`
+- add a small Jad-heal penalty:
+  - `shape_jad_heal_penalty = -0.1`
+- fix two correctness bugs in code:
+  - player ranged attacks now require LOS to character targets
+  - Yt-HurKot always distracts on landed player hits, including `0`
 
 It still keeps the non-learning infrastructure improvements added around `v21.1`:
 - reward math centralized through the shared `fc_reward.h` helper so viewer and training use the same breakdown
@@ -60,8 +65,8 @@ shape_pot_full_waste_penalty = -6.5
 shape_pot_waste_scale = -1.2
 shape_pot_safe_prayer_threshold = 1.0
 shape_pot_no_threat_penalty = 0.0
-shape_low_prayer_pot_threshold = 0.05
-shape_low_prayer_no_pot_penalty = -0.01
+shape_low_prayer_pot_threshold = 0.0
+shape_low_prayer_no_pot_penalty = 0.0
 shape_low_prayer_pot_reward = 0.0
 shape_wrong_prayer_penalty = -1.25
 shape_npc_specific_prayer_bonus = 1.5
@@ -77,6 +82,7 @@ shape_kiting_reward = 1.0
 shape_kiting_min_dist = 7
 shape_kiting_max_dist = 10
 shape_unnecessary_prayer_penalty = -0.2
+shape_jad_heal_penalty = -0.1
 shape_resource_threat_window = 2
 curriculum_wave = 0
 curriculum_pct = 0.0
@@ -108,25 +114,26 @@ hidden_size = 256
 num_layers = 2
 ```
 
-## Reference Delta (`v21.3` vs `v21.2`)
+## Reference Delta (`v25` vs `v24`)
 
-`v21.3` starts from the `v21.2` config with these deltas:
+`v25` starts from the exact `v24` / `v22.1` control path with these deltas:
 
-- `shape_low_prayer_pot_threshold = 0.05`
-- `shape_low_prayer_no_pot_penalty = -0.01`
+- `shape_low_prayer_pot_threshold = 0.0`
+- `shape_low_prayer_no_pot_penalty = 0.0`
 - `shape_low_prayer_pot_reward = 0.0`
-- keep the corrected `Masori (f) + Twisted bow` combat model from `v22.1`
-- keep the `7/10` kiting band from `v22.1`
+- `shape_jad_heal_penalty = -0.1`
+- player ranged fire / approach requires LOS to character targets
+- Yt-HurKot distraction triggers on any landed player hit, including `0`
 
-Everything else remains at the `v21.2` reward/training values:
+Everything else remains at the `v24` reward/training values:
 
 ```ini
 [env]
-w_damage_dealt = 0.5
-w_attack_attempt = 0.1
+w_damage_dealt = 0.7
+w_attack_attempt = 0.2
 w_damage_taken = -0.6
-w_npc_kill = 3.0
-w_wave_clear = 10.0
+w_npc_kill = 3.5
+w_wave_clear = 15.0
 w_jad_damage = 2.0
 w_jad_kill = 50.0
 w_player_death = -20.0
@@ -150,8 +157,8 @@ shape_pot_full_waste_penalty = -6.5
 shape_pot_waste_scale = -1.2
 shape_pot_safe_prayer_threshold = 1.0
 shape_pot_no_threat_penalty = 0.0
-shape_low_prayer_pot_threshold = 0.05
-shape_low_prayer_no_pot_penalty = -0.01
+shape_low_prayer_pot_threshold = 0.0
+shape_low_prayer_no_pot_penalty = 0.0
 shape_low_prayer_pot_reward = 0.0
 shape_wrong_prayer_penalty = -1.25
 shape_npc_specific_prayer_bonus = 1.5
@@ -167,6 +174,7 @@ shape_kiting_reward = 1.0
 shape_kiting_min_dist = 7
 shape_kiting_max_dist = 10
 shape_unnecessary_prayer_penalty = -0.2
+shape_jad_heal_penalty = -0.1
 shape_resource_threat_window = 2
 curriculum_wave = 0
 curriculum_pct = 0.0
@@ -198,10 +206,8 @@ hidden_size = 256
 num_layers = 2
 ```
 
-Relative to the previous checked-in `v22.1` config, `v21.3` removes:
-- the `v22.1` reward retune
-- the `v22.1` zero-prayer potion-teaching settings
-- checkpoint warm-start
+Relative to `v24`, `v25` does not touch the reward-retune, the kiting band, or the warm-start path.
+It only trims the low-prayer shaping cluster and adds the targeted Jad/healer correctness terms above.
 
 ## Status Legend
 
@@ -279,12 +285,12 @@ Relative to the previous checked-in `v22.1` config, `v21.3` removes:
   Prayer fraction threshold for the safe-potion logic.
 - <span style="color:#2563eb">LIVE / OFF</span> `shape_pot_no_threat_penalty`
   Extra penalty for drinking above the safe threshold with no threat active. Live path, currently `0.0`.
-- <span style="color:#16a34a">ACTIVE NOW</span> `shape_low_prayer_pot_threshold`
-  Low-prayer teaching threshold, expressed as a fraction of max prayer and floored to whole prayer points before use. Current value `0.0` means the signal only fires at exact zero prayer.
-- <span style="color:#16a34a">ACTIVE NOW</span> `shape_low_prayer_no_pot_penalty`
-  Small penalty when the player is at or below the low-prayer threshold, can drink, still has doses, and does not drink.
-- <span style="color:#16a34a">ACTIVE NOW</span> `shape_low_prayer_pot_reward`
-  Small reward when a prayer potion dose is consumed at or below the low-prayer threshold.
+- <span style="color:#2563eb">LIVE / OFF</span> `shape_low_prayer_pot_threshold`
+  Low-prayer teaching threshold, expressed as a fraction of max prayer and floored to whole prayer points before use. Current value `0.0` disables the low-prayer path in the current code.
+- <span style="color:#2563eb">LIVE / OFF</span> `shape_low_prayer_no_pot_penalty`
+  Penalty when the player is at or below the low-prayer threshold, can drink, still has doses, and does not drink. Current config explicitly sets this to `0.0`.
+- <span style="color:#2563eb">LIVE / OFF</span> `shape_low_prayer_pot_reward`
+  Reward when a prayer potion dose is consumed at or below the low-prayer threshold. Current config explicitly sets this to `0.0`.
 - <span style="color:#16a34a">ACTIVE NOW</span> `shape_wrong_prayer_penalty`
   Extra shaping penalty layered on top of the resolved wrong-danger prayer event.
 - <span style="color:#16a34a">ACTIVE NOW</span> `shape_npc_specific_prayer_bonus`
@@ -303,6 +309,8 @@ Relative to the previous checked-in `v22.1` config, `v21.3` removes:
   Reward for dealing damage while keeping distance within the configured kiting band.
 - <span style="color:#16a34a">ACTIVE NOW</span> `shape_unnecessary_prayer_penalty`
   Per-tick penalty for leaving prayer on when no threat exists.
+- <span style="color:#16a34a">ACTIVE NOW</span> `shape_jad_heal_penalty`
+  Per-proc penalty when a Yt-HurKot heal successfully restores Jad HP. Intended to nudge the policy toward killing or trapping healers without adding a large Jad-specific reward bundle.
 - <span style="color:#16a34a">ACTIVE NOW</span> `shape_resource_threat_window`
   Lookahead window, in ticks, used by threat-aware food/pot shaping.
 - <span style="color:#16a34a">ACTIVE NOW</span> `shape_kiting_min_dist`

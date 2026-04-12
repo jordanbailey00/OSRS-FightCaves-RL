@@ -106,6 +106,8 @@ void my_init(Env* env, Dict* kwargs) {
     env->shape_kiting_reward = item ? (float)item->value : defaults.shape_kiting_reward;
     item = dict_get_unsafe(kwargs, "shape_unnecessary_prayer_penalty");
     env->shape_unnecessary_prayer_penalty = item ? (float)item->value : defaults.shape_unnecessary_prayer_penalty;
+    item = dict_get_unsafe(kwargs, "shape_jad_heal_penalty");
+    env->shape_jad_heal_penalty = item ? (float)item->value : defaults.shape_jad_heal_penalty;
     item = dict_get_unsafe(kwargs, "shape_resource_threat_window");
     env->shape_resource_threat_window = item ? (int)item->value : defaults.shape_resource_threat_window;
     item = dict_get_unsafe(kwargs, "shape_kiting_min_dist");

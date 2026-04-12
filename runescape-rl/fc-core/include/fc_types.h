@@ -371,6 +371,7 @@ typedef struct {
     int prayer_potion_used_this_tick;
     int pre_eat_hp;                 /* HP before eating (for reward threshold check) */
     int pre_drink_prayer;           /* prayer before drinking (for reward threshold check) */
+    int jad_heal_procs_this_tick;   /* number of Yt-HurKot heal procs that restored Jad HP */
 
     /* Episode-level analytics (cumulative, zeroed on fc_reset via memset) */
     int ep_ticks_praying;       /* ticks with any prayer active */

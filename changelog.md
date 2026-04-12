@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-04-12
+
+- Implemented the planned `v25` Jad/healer correctness fixes in [runescape-rl/fc-core/src/fc_tick.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_tick.c), [runescape-rl/fc-core/src/fc_combat.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_combat.c), [runescape-rl/fc-core/src/fc_npc.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src/fc_npc.c), and [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h):
+  - player ranged attacks and auto-approach now require LOS to character targets, closing the Italy-rock Jad wall-shot bug
+  - Yt-HurKot now always distracts on landed player hits, including `0`
+  - added `shape_jad_heal_penalty` as a small per-proc penalty when healers successfully restore Jad HP
+- Synced the active `v25` recipe/docs in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md), and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md).
+- Added regression coverage in [runescape-rl/demo-env/tests/test_headless.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/tests/test_headless.c) for:
+  - player ranged LOS gating
+  - Jad-heal penalty firing
+  - Yt-HurKot distraction on `0` damage hits
+- Analyzed and documented `v23` (`yq3tbole`), `v23.1` (`fdzlxlwm`), `v24` (`h2kpwkdk`), and planned `v24.s` in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md); tagged W&B runs `v23`, `v23.1`, and `v24`.
+- Root-caused the `v23` resource-collapse regression:
+  - `shape_one_tick_prayer_block_bonus` was paying on prayer-to-prayer transitions, not just exact `1-tick -> OFF` flicks
+  - that rewarded drain-heavy prayer switching and drove near-full prayer-pot usage
+  - `v23.1` narrowed the bonus to `1-tick -> OFF` only; it recovered some progression but remained a clear regression from `v22.1`
+- Restored the exact `v22.1` code/config path for `v24` in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), and the shared training/viewer surfaces:
+  - reran `h2kpwkdk` and reproduced `721zk2cg` exactly on the current codebase
+  - committed the clean rollback point `v22.1/v24`
+- Staged the `v24.s` subtractive ablation sweep in [runescape-rl/config/sweeps/v22_1](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1):
+  - eight `3B` configs: warm/cold control, `no_low_prayer`, `no_reward_retune`, and `both_off`
+  - sequential runner now stamps W&B `group=v24_sweep` plus per-run tags so the matrix is identifiable after the fact
+- Built and validated a Runpod path on `v2codex_v24.s`:
+  - trimmed the staged volume payload down to the warm-start checkpoint plus a small training export
+  - added a custom CUDA image, mounted-volume bootstrap, runtime install script, and GPU verification script under [deploy/runpod](/home/joe/projects/runescape-rl/codex3/deploy/runpod)
+  - hardened cuDNN setup in both [install_python_env.sh](/home/joe/projects/runescape-rl/codex3/deploy/runpod/install_python_env.sh) and [runescape-rl/training-env/build.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/build.sh) after the first pod exposed the missing `libcudnn.so` linker target
+  - parked the Runpod route after concluding the expected SPS gain is too small to justify the extra operational overhead for this sweep
+- What worked:
+  - exact `v24` rerun removed the hidden-drift question and confirmed the `v22.1` recipe is still reproducible
+  - the Runpod volume/image/bootstrap path was made functional end-to-end
+  - the cuDNN linker failure was isolated quickly and fixed in a way that covers both fresh pods and local trainer rebuilds
+  - W&B sweep grouping/tagging is now explicit instead of relying on generated run ids
+- What didn't work:
+  - the `v23` / `v23.1` reward-timing bundle did not preserve `v22.1` behavior
+  - `v23.1` removed the direct flick exploit but still produced over-switching, near-full prayer potting, bad food timing, and poor attack tempo
+  - the Runpod path was technically workable but not worth the added moving parts for the current sweep
+- Lessons learned:
+  - exact control reruns are mandatory before treating a regression as hidden repo drift
+  - flick rewards must be checked against real prayer-drain semantics and transition timing, not just the intended English description
+  - preserve a clean baseline branch before adding sweep/deployment infrastructure
+  - for the current box, simpler local sweeps beat a marginal-SPS remote path
+- Current state:
+  - `v2codex` is the exact `v22.1/v24` baseline
+  - `v2codex_v24.s` carries the `v24.s` sweep runner plus optional Runpod scaffolding
+  - active next step is the local `v24.s` ablation sweep, not Runpod
+
 ## 2026-04-11
 
 - Added `v22.1` recovery docs and follow-up tooling in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md), [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md), [runescape-rl/config/benchmarks](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/benchmarks), [runescape-rl/config/sweeps/v22_1](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1), and [runescape-rl/docs/training_config_matrix_v20.2_v21_v21.2.csv](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/training_config_matrix_v20.2_v21_v21.2.csv).

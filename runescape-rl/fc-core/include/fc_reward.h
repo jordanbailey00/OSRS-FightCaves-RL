@@ -46,6 +46,7 @@ typedef struct {
     float shape_not_attacking_penalty;
     float shape_kiting_reward;
     float shape_unnecessary_prayer_penalty;
+    float shape_jad_heal_penalty;
 
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
@@ -98,6 +99,7 @@ typedef struct {
     float not_attacking;
     float kiting;
     float unnecessary_prayer;
+    float jad_heal_penalty;
 
     float invalid_action;
     float movement;
@@ -148,6 +150,7 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_not_attacking_penalty = -0.01f;
     params.shape_kiting_reward = 1.0f;
     params.shape_unnecessary_prayer_penalty = -0.2f;
+    params.shape_jad_heal_penalty = 0.0f;
 
     params.shape_resource_threat_window = 2;
     params.shape_kiting_min_dist = 5;
@@ -396,6 +399,11 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.unnecessary_prayer = params->shape_unnecessary_prayer_penalty;
     }
 
+    if (state->jad_heal_procs_this_tick > 0) {
+        out.jad_heal_penalty =
+            params->shape_jad_heal_penalty * (float)state->jad_heal_procs_this_tick;
+    }
+
     {
         int low_prayer_threshold = fc_reward_low_prayer_threshold(p, params);
         if (low_prayer_threshold > 0 &&
@@ -433,6 +441,7 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.not_attacking +
         out.kiting +
         out.unnecessary_prayer +
+        out.jad_heal_penalty +
         out.invalid_action +
         out.movement +
         out.idle +

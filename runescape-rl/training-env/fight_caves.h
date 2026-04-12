@@ -156,6 +156,7 @@ typedef struct FightCaves {
     float shape_not_attacking_penalty;
     float shape_kiting_reward;
     float shape_unnecessary_prayer_penalty;
+    float shape_jad_heal_penalty;
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
     int shape_kiting_max_dist;
@@ -240,6 +241,7 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_not_attacking_penalty = env->shape_not_attacking_penalty;
     params.shape_kiting_reward = env->shape_kiting_reward;
     params.shape_unnecessary_prayer_penalty = env->shape_unnecessary_prayer_penalty;
+    params.shape_jad_heal_penalty = env->shape_jad_heal_penalty;
 
     params.shape_resource_threat_window = env->shape_resource_threat_window;
     params.shape_kiting_min_dist = env->shape_kiting_min_dist;

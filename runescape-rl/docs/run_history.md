@@ -11,169 +11,655 @@ Formatting note:
 
 ---
 
-## v24.s (2026-04-11, planned)
+## v25 (2026-04-12, completed)
+
+Actual run:
+- `yf24fz84`
+- local run log:
+  - [yf24fz84.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/yf24fz84.json)
+
+Status:
+- completed normally
+
+Goal:
+- keep the successful `v22.1` / `v24` recipe intact
+- remove only the inert low-prayer shaping cluster from the live config
+- fix the known Jad/healer correctness bugs before the next baseline retry
+- verify whether these cleanup/correctness changes preserve the strong `v24`
+  behavior
+
+Config versus `v24`:
+- identical to `v24` / `v22.1` in:
+  - warm-start checkpoint
+  - corrected `Masori (f) + TBow` combat model
+  - observation contract
+  - reward-conversion weights
+  - `7/10` kiting band
+  - PPO/runtime recipe
+- intended learning-behavior delta:
+  - disable the low-prayer potion shaping cluster
+  - add a small penalty when Yt-HurKot successfully heals Jad
+- intended correctness delta:
+  - player ranged attacks now require LOS, so Jad can no longer be hit from
+    an in-range / no-LOS Italy-rock tile
+  - Yt-HurKot now always distracts on landed player hits, including 0s
+
+Exact difference versus `v24`:
+- low-prayer shaping:
+  - `shape_low_prayer_pot_threshold: 0.0 -> 0.0`
+  - `shape_low_prayer_no_pot_penalty: -0.01 -> 0.0`
+  - `shape_low_prayer_pot_reward: 0.15 -> 0.0`
+- Jad/healer shaping:
+  - `shape_jad_heal_penalty: 0.0 -> -0.1`
+- code-path fixes:
+  - player ranged fire and auto-approach now require LOS symmetry with NPCs
+  - Yt-HurKot distraction now triggers on any landed player hit, including 0s
+
+Important implementation note:
+- these keys are kept explicitly in the `.ini` and set to `0.0`
+- they are not deleted from config because deleting them would fall back to the
+  non-zero defaults in `fc_reward_default_params()` and would re-enable the
+  feature unintentionally
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_safe_hp_threshold=1.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_safe_prayer_threshold=1.0`, `shape_low_prayer_pot_threshold=0.0`, `shape_low_prayer_no_pot_penalty=0.0`, `shape_low_prayer_pot_reward=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`yf24fz84`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2633.1s`
+- throughput:
+  - `1.96M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 45.12`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_return = 17260.33`
+- `episode_length = 6101.04`
+- `reached_wave_30 = 0.9886`
+- `cleared_wave_30 = 0.9829`
+- `reached_wave_31 = 0.9829`
+- `reached_wave_63 = 0.0`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.8298`
+- `prayer_uptime_melee = 0.2451`
+- `prayer_uptime_range = 0.3690`
+- `prayer_uptime_magic = 0.2157`
+- `correct_prayer = 1730.0`
+- `wrong_prayer_hits = 317.55`
+- `no_prayer_hits = 54.95`
+- `damage_blocked = 98074.67`
+- `dmg_taken_avg = 6122.69`
+- `prayer_switches = 1345.63`
+- `attack_when_ready_rate = 0.4953`
+- `pots_used = 28.01`
+- `avg_prayer_on_pot = 0.5055`
+- `pots_wasted = 6.40`
+- `food_eaten = 18.37`
+- `avg_hp_on_food = 0.7356`
+- `food_wasted = 9.29`
+- `tokxil_melee_ticks = 10.07`
+- `ketzek_melee_ticks = 10.07`
+
+Key progression points:
+- sampled `wave_reached >= 30` by `725.4M`
+- sampled `wave_reached >= 35` by `725.4M`
+- sampled `wave_reached >= 40` by `725.4M`
+- sampled `wave_reached >= 45` by `725.4M`
+- sampled `wave_reached >= 50` by `725.4M`
+- sampled `wave_reached >= 55` by `725.4M`
+- sampled `max_wave = 63` by `1.817B`
+- best sampled window was around `1.817B`:
+  - `wave_reached = 59.37`
+  - `episode_return = 29922.4`
+  - `reached_wave_63 = 0.4668`
+  - `jad_kill_rate = 0.0007`
+- after that peak, the run decayed continuously:
+  - `3.126B`: `wave_reached = 50.56`, `reached_wave_63 = 0.0001`
+  - `4.376B`: `wave_reached = 48.11`, `reached_wave_63 = 0.0`
+  - final: `wave_reached = 45.12`, `reached_wave_63 = 0.0`
+- nearest eval checkpoints to the important windows:
+  - early breakout / first `55+` window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yf24fz84/0000000735051776.bin`
+  - peak window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yf24fz84/0000001836056576.bin`
+  - post-peak decay:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yf24fz84/0000003146776576.bin`
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yf24fz84/0000004352638976.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/yf24fz84/0000004999610368.bin`
+
+Comparison to `v24` (`h2kpwkdk`):
+- `score: 0.0 vs 0.0`
+- `wave_reached: 45.12 vs 61.97`
+- `max_wave: 63 vs 63`
+- `episode_return: 17260.3 vs 32277.4`
+- `episode_length: 6101 vs 8581`
+- `reached_wave_63: 0.0 vs 0.3582`
+- `jad_kill_rate: 0.0 vs 0.0149`
+- `prayer_uptime: 0.8298 vs 0.7345`
+- `prayer_uptime_magic: 0.2157 vs 0.5296`
+- `damage_blocked: 98075 vs 187217`
+- `prayer_switches: 1345.6 vs 651.3`
+- `attack_when_ready_rate: 0.4953 vs 0.7500`
+- `pots_used: 28.01 vs 31.36`
+- `avg_prayer_on_pot: 0.5055 vs 0.3760`
+- `pots_wasted: 6.40 vs 3.07`
+- `food_eaten: 18.37 vs 8.01`
+- `food_wasted: 9.29 vs 1.33`
+
+Analysis:
+- `v25` is a clear regression from `v24`
+- the early/mid-run frontier was briefly strong:
+  - by `725M`, it was already sampling `55+` average wave and reaching Jad
+  - by `1.817B`, it hit `max_wave = 63` and `reached_wave_63 = 0.4668`
+- but the policy never converted that into reliable Jad kills and then decayed
+  across the second half of training
+- the final metric pattern looks like a more defensive but less effective
+  policy:
+  - much higher overall prayer uptime
+  - much lower magic-prayer uptime
+  - much more prayer switching
+  - much lower attack tempo
+  - much more food usage and food waste
+  - worse potion timing than `v24`
+
+Findings:
+- the low-prayer config cleanup was expected to be inert
+- so the meaningful behavior change in `v25` is most likely coming from the
+  LOS/healer correctness bundle, not from zeroing the low-prayer weights
+- the run strongly suggests that removing the invalid Jad Italy-rock attack
+  path and adding real healer pressure changed the learned Jad solution enough
+  that the old warm-start no longer transfers cleanly
+- this is a correctness improvement, but it is not a free one; it changed the
+  effective task enough to knock down the old `v24` policy
+
+Recommendation:
+- do not treat `v25` as the new baseline
+- use replay on the `735M`, `1.836B`, `3.147B`, and `4.353B` checkpoints to
+  inspect:
+  - whether Jad progress is now failing specifically on healer management
+  - whether the LOS fix caused broader combat-positioning regressions outside
+    Jad
+  - whether the large attack-tempo drop is coming from route settling around
+    LOS-constrained firing tiles
+- if the goal is to preserve `v24` while fixing correctness, the next ablation
+  question is not low-prayer; it is which part of the LOS/healer correctness
+  bundle is responsible for the regression
+
+---
+
+## v24.s_redo (2026-04-12, completed)
+
+Purpose:
+- preserve the original `v24.s` historical record below, but rerun the same
+  8-job matrix with the warm-start path actually working before spending the
+  full overnight `3B` budget
+
+Historical note:
+- the original `v24.s` section below remains unchanged as the record of the
+  first attempt and the infrastructure bug it uncovered
+- `v24.s_redo` is the corrected rerun path
+
+What was fixed before the redo:
+- compiled train mode now loads `load_model_path`
+  - `pufferlib_4/pufferlib/pufferl.py`
+  - both `_train(...)` and `_train_worker(...)` now call
+    `backend.load_weights(...)` when a train-time warm-start checkpoint is
+    provided
+- the sweep runner now supports `--timesteps`
+  - the exact same 8-job matrix can be run at `100M` for validation, then at
+    `3B` for the real redo, without maintaining a second sweep config tree
+- the sweep runner now emits stable W&B grouping/tagging
+  - group: `v24_s_redo`
+  - tag: exact matrix label
+- trainer backend arch detection was hardened
+  - `training-env/build.sh` now validates `nvidia-smi` compute capability
+    output before constructing `sm_*`, preventing bad fallback strings from
+    turning into invalid CUDA arch flags
+
+Validation matrix:
+- same 8 jobs as `v24.s`
+- same config families
+- same warm-start checkpoint for nominal warm runs:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+- validation budget:
+  - `100,000,000` timesteps per run
+- W&B group:
+  - `v24_s_redo`
+
+Validation runs:
+- `yptis3c1`
+  - `warm_control`
+- `gzll8i4d`
+  - `cold_control`
+- `oqpudmvi`
+  - `warm_no_low_prayer`
+- `tolxjdbi`
+  - `cold_no_low_prayer`
+- `j3ps2dxz`
+  - `warm_no_reward_retune`
+- `kqa052uh`
+  - `cold_no_reward_retune`
+- `u8vpv9l6`
+  - `warm_no_reward_retune_no_low_prayer`
+- `rk9du0b6`
+  - `cold_no_reward_retune_no_low_prayer`
+
+Validation check:
+- passed
+- direct proof the warm-start path is now active:
+  - training output printed:
+    - `Loaded weights from /home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`
+  - the warm and cold runs no longer collapse to the same metrics
+
+100M validation results:
+
+| label | id | init | wave_reached | max_wave | cleared_wave_30 | reached_wave_63 | prayer_uptime_magic | damage_blocked | prayer_switches | attack_when_ready_rate | pots_used | avg_prayer_on_pot | pots_wasted | episode_return |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| warm_control | `yptis3c1` | warm | `50.55` | `63` | `1.0` | `0.0054` | `0.0849` | `50161` | `2314.7` | `0.8171` | `0` | `0.0` | `0` | `21022.1` |
+| cold_control | `gzll8i4d` | cold | `18.37` | `25` | `0.0` | `0.0` | `0.0011` | `1699` | `287.6` | `0.8297` | `32` | `0.9879` | `32` | `2443.5` |
+| warm_no_low_prayer | `oqpudmvi` | warm | `50.55` | `63` | `1.0` | `0.0054` | `0.0849` | `50161` | `2314.7` | `0.8171` | `0` | `0.0` | `0` | `21022.1` |
+| cold_no_low_prayer | `tolxjdbi` | cold | `18.37` | `25` | `0.0` | `0.0` | `0.0011` | `1699` | `287.6` | `0.8297` | `32` | `0.9879` | `32` | `2443.5` |
+| warm_no_reward_retune | `j3ps2dxz` | warm | `48.95` | `63` | `1.0` | `0.0` | `0.0837` | `48094` | `2218.8` | `0.8271` | `0` | `0.0` | `0` | `13608.3` |
+| cold_no_reward_retune | `kqa052uh` | cold | `17.96` | `24` | `0.0` | `0.0` | `0.0011` | `1610` | `289.1` | `0.8444` | `32` | `0.9888` | `32` | `1499.5` |
+| warm_no_reward_retune_no_low_prayer | `u8vpv9l6` | warm | `48.95` | `63` | `1.0` | `0.0` | `0.0837` | `48094` | `2218.8` | `0.8271` | `0` | `0.0` | `0` | `13608.3` |
+| cold_no_reward_retune_no_low_prayer | `rk9du0b6` | cold | `17.96` | `24` | `0.0` | `0.0` | `0.0011` | `1610` | `289.1` | `0.8444` | `32` | `0.9888` | `32` | `1499.5` |
+
+What the validation proved:
+- the sweep is now configured correctly
+  - warm-start runs are genuinely warm-started
+  - cold runs are genuinely cold
+  - tags/groups are applied correctly
+  - the 8-job matrix is executing in the intended order
+- the original identical warm/cold pairs in `v24.s` were an infrastructure
+  bug, not a real learning result
+
+Read of the 100M screen:
+- warm vs cold is the dominant axis
+  - warm runs immediately jump into the high-wave regime
+  - cold runs remain early and burn prayer pots immediately
+- low-prayer shaping still looks inert
+  - `warm_control` and `warm_no_low_prayer` are effectively identical
+  - `cold_control` and `cold_no_low_prayer` are effectively identical
+- reward-retune still matters
+  - removing it lowers warm-started `wave_reached`
+    - `50.55 -> 48.95`
+  - removing it lowers warm-started `episode_return`
+    - `21022.1 -> 13608.3`
+  - removing it also hurts cold-start early progress
+    - `18.37 -> 17.96`
+    - `25 -> 24` max wave
+
+Observations:
+- the warm-started validation runs used `0` prayer pots across the 100M window
+  - this is consistent with the checkpoint already carrying the strong
+    prayer-control behavior
+- cold runs still immediately exhibit the same failure pattern seen before:
+  - `pots_used = 32`
+  - `avg_prayer_on_pot ≈ 0.988`
+  - `pots_wasted = 32`
+- low-prayer shaping is still the cleanest removal candidate
+- reward-retune should remain in the config for now
+
+Recommendation after the validation:
+- proceed with the full corrected `3B` redo suite
+- keep the matrix identical to `v24.s`
+- do **not** change the reward families again before the redo finishes
+- after the corrected `3B` redo:
+  - if low-prayer still remains inert in both warm and cold regimes, remove it
+    from the live recipe next
+
+3B redo runs:
+- `up075ayt`
+  - `warm_control`
+- `03kfflix`
+  - `cold_control`
+- `kkntnky8`
+  - `warm_no_low_prayer`
+- `vrf1fzky`
+  - `cold_no_low_prayer`
+- `95900x57`
+  - `warm_no_reward_retune`
+- `i563rr5k`
+  - `cold_no_reward_retune`
+- `jne1c6dd`
+  - `warm_no_reward_retune_no_low_prayer`
+- `t0y0be73`
+  - `cold_no_reward_retune_no_low_prayer`
+
+Completion status:
+- completed through the full corrected 8-run matrix
+- all 8 completed runs are in W&B group:
+  - `v24_s_redo`
+- each completed run carries the expected exact tag
+- setup correctness checks passed:
+  - warm runs have `load_model_path = u58coupx/0000001311768576.bin`
+  - cold runs have `load_model_path = null`
+  - warm and cold now diverge sharply, confirming the train-mode checkpoint fix
+    is functioning
+- there are two extra crashed runs in the same W&B group:
+  - `ytmwunek`
+  - `11jsdb8w`
+  - these were from the manually interrupted launch during setup verification
+    and are excluded from the final analysis
+
+3B redo results:
+
+| label | id | init | score | wave_reached | max_wave | cleared_wave_30 | reached_wave_63 | jad_kill_rate | prayer_uptime_magic | damage_blocked | prayer_switches | attack_when_ready_rate | pots_used | avg_prayer_on_pot | pots_wasted | episode_return |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| warm_control | `up075ayt` | warm | `0.00259` | `59.06` | `63` | `1.0` | `0.1458` | `0.00694` | `0.4084` | `129918` | `330.2` | `0.7388` | `30.78` | `0.4216` | `2.84` | `28652.2` |
+| cold_control | `03kfflix` | cold | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` | `7141.8` |
+| warm_no_low_prayer | `kkntnky8` | warm | `0.00259` | `59.06` | `63` | `1.0` | `0.1458` | `0.00694` | `0.4084` | `129918` | `330.2` | `0.7388` | `30.78` | `0.4216` | `2.84` | `28652.2` |
+| cold_no_low_prayer | `vrf1fzky` | cold | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` | `7141.8` |
+| warm_no_reward_retune | `95900x57` | warm | `0.0` | `37.59` | `63` | `0.8961` | `0.0` | `0.0` | `0.1288` | `65959` | `1113.0` | `0.3010` | `24.03` | `0.3834` | `2.82` | `8244.8` |
+| cold_no_reward_retune | `i563rr5k` | cold | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` | `5216.6` |
+| warm_no_reward_retune_no_low_prayer | `jne1c6dd` | warm | `0.0` | `37.59` | `63` | `0.8961` | `0.0` | `0.0` | `0.1288` | `65959` | `1113.0` | `0.3010` | `24.03` | `0.3834` | `2.82` | `8244.8` |
+| cold_no_reward_retune_no_low_prayer | `t0y0be73` | cold | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` | `5216.6` |
+
+What the corrected 3B suite shows:
+- the sweep now went correctly
+  - the warm/cold axis is real
+  - the `load_model_path` fix worked
+  - the original `v24.s` collapse was purely an infrastructure issue
+- the matrix again collapsed to only two distinct signatures along the
+  low-prayer axis
+  - `warm_control` == `warm_no_low_prayer`
+  - `cold_control` == `cold_no_low_prayer`
+  - `warm_no_reward_retune` == `warm_no_reward_retune_no_low_prayer`
+  - `cold_no_reward_retune` == `cold_no_reward_retune_no_low_prayer`
+- this is now a trustworthy result, not a setup bug
+
+Main findings:
+- `low_prayer` shaping is inert in both warm and cold regimes
+  - removing it produced effectively identical results at `3B`
+  - warm family:
+    - `59.06` vs `59.06` wave reached
+    - `0.1458` vs `0.1458` reached wave 63
+    - `0.00694` vs `0.00694` jad kill rate
+  - cold family:
+    - `29.01` vs `29.01` wave reached
+    - `0.1970` vs `0.1970` cleared wave 30
+    - `16.22` vs `16.22` pots wasted
+- `reward_retune` remains important
+  - warm-started:
+    - `wave_reached: 59.06 -> 37.59`
+    - `reached_wave_63: 0.1458 -> 0.0`
+    - `jad_kill_rate: 0.00694 -> 0.0`
+    - `prayer_uptime_magic: 0.4084 -> 0.1288`
+    - `damage_blocked: 129918 -> 65959`
+    - `prayer_switches: 330 -> 1113`
+    - `attack_when_ready_rate: 0.7388 -> 0.3010`
+    - `episode_return: 28652.2 -> 8244.8`
+  - cold-started:
+    - `wave_reached: 29.01 -> 29.80` improved slightly
+    - but `cleared_wave_30: 0.1970 -> 0.0489` collapsed
+    - `max_wave: 34 -> 33`
+    - `prayer_uptime_magic: 0.0083 -> 0.0`
+    - `attack_when_ready_rate: 0.5426 -> 0.5914`
+    - `episode_return: 7141.8 -> 5216.6`
+  - interpretation:
+    - removing the reward-retune cluster does not stop the agent from reaching
+      the late-20s, but it cripples conversion beyond wave 30 and heavily
+      degrades the warm-started high-wave behavior
+
+Observations:
+- the warm-start effect is still enormous
+  - `warm_control` is in the frontier regime
+  - `cold_control` remains stuck around the late-20s / low-30s regime
+  - this sweep confirms the current recipe still relies heavily on the
+    `u58coupx` checkpoint for high-wave performance
+- `warm_control` is meaningfully weaker than the full `v24` / `v22.1` control
+  because this sweep stops at `3B`, not `5B`
+  - `wave_reached: 59.06 vs 61.97`
+  - `reached_wave_63: 0.1458 vs 0.3582`
+  - `jad_kill_rate: 0.00694 vs 0.0149`
+  - but it is clearly in the same regime and tracks the expected trajectory
+- the reward-retune-off warm runs look qualitatively unstable
+  - they still touch `max_wave = 63`, but without stable prayer control or
+    consistent conversion into Jad kills
+  - the huge jump in prayer switches (`330 -> 1113`) together with the major
+    drop in attack tempo (`0.739 -> 0.301`) is the clearest regression signal
+- cold runs continue to exhibit poor prayer potion usage
+  - even the control family still uses around `30` pots at `avg_prayer_on_pot
+    ≈ 0.684`
+  - this remains a cold-start weakness, but it is separate from the config
+    trimming question
+
+Recommendation:
+- remove the full low-prayer cluster next
+  - this is now the clearest safe trim
+  - both the `100M` validation and the corrected `3B` redo agree on this
+- keep the reward-retune cluster
+  - do **not** remove `w_damage_dealt`, `w_attack_attempt`, `w_npc_kill`, or
+    `w_wave_clear` as a group
+- if the goal remains “shrink config while preserving `v22.1` behavior,” the
+  next clean step is:
+  - `v25 = v24/v22.1 minus low_prayer shaping`
+- if you want to keep trimming after that:
+  - do not remove the reward-retune cluster wholesale
+  - instead test individual trims inside the still-useful recipe
+
+Bottom line:
+- the corrected sweep worked
+- the original `v24.s` conclusion about low-prayer being inert was correct, but
+  only now is it trustworthy under a real warm/cold split
+- the main live takeaway is simple:
+  - drop `low_prayer`
+  - keep `reward_retune`
+  - checkpoint dependence is still strong
+
+Current state:
+- `v24.s_redo` is complete
+- the section now contains both:
+  - the `100M` validation proving the setup fix
+  - the final corrected `3B` sweep results
+- no further sweep rerun is needed for this question
+
+---
+
+## v24.s (2026-04-12, completed with a validity issue)
 
 Actual runs:
-- TBD
+- `6h5qnmjp`
+  - `warm_control`
+- `o7uzpppa`
+  - `cold_control`
+- `kngi2ik3`
+  - `warm_no_low_prayer`
+- `rrcabwv8`
+  - `cold_no_low_prayer`
+- `tv3uimai`
+  - `warm_no_reward_retune`
+- `d7cmxvwx`
+  - `cold_no_reward_retune`
+- `5sqv1hhk`
+  - `warm_no_reward_retune_no_low_prayer`
+- `1k4uygff`
+  - `cold_no_reward_retune_no_low_prayer`
+
+Status:
+- completed through the full 8-run matrix
+- all runs reached the planned `3B` budget
+- W&B group used:
+  - `v24_sweep`
+- per-run W&B tags used:
+  - the exact matrix labels above
 
 Goal:
 - trim the successful `v22.1` recipe down to the smallest config that still
   preserves its behavior
-- do this with controlled ablations, not broad hyperparameter search
-- separate two questions that are easy to mix up:
-  - what can be removed while keeping the strong `v22.1` warm-start behavior?
-  - which parts of the recipe, if any, still help without a warm-start?
+- answer two questions:
+  - what can be removed from the `v22.1` recipe?
+  - does any of that still help without warm-start?
 
-Why this exists:
-- the active config has become too large to reason about comfortably
-- the right next step is not a generic LR/entropy sweep
-- the right next step is a subtractive ablation sweep around the best known
-  recipe
+Matrix that was launched:
+- initialization axis:
+  - nominal warm-start from `u58coupx/0000001311768576.bin`
+  - nominal cold-start from scratch
+- reward axis:
+  - `control`
+  - `no_low_prayer`
+  - `no_reward_retune`
+  - `no_reward_retune_no_low_prayer`
 
-Recommended method:
-- use manual ablation sweeps, not broad random/Bayesian sweeps
-- keep the `v22.1` codepath, corrected combat model, and PPO stack fixed
-- remove clusters first, then split winning clusters into individual knobs
-- use shorter screening budgets before committing to full `5B` reruns
+Critical validity issue:
+- the configs and W&B labels were applied correctly
+- however, the compiled `_C` training backend does **not** consume
+  `load_model_path` during `train`
+- evidence in code:
+  - `train.sh` threads `LOAD_MODEL_PATH` into CLI args
+  - the slow Python backend in
+    [torch_pufferl.py](/home/joe/projects/runescape-rl/codex3/pufferlib_4/pufferlib/torch_pufferl.py:499)
+    does load `args['load_model_path']`
+  - the compiled backend used by normal training creates its trainer in
+    [bindings.cu](/home/joe/projects/runescape-rl/codex3/pufferlib_4/src/bindings.cu:308)
+    and never reads `load_model_path`
+  - the compiled backend only exposes `load_weights(...)` as a callable API;
+    `_train` does not invoke it for train mode
+- practical result:
+  - the `warm` and `cold` runs in this sweep were all effectively cold-start
+  - the warm/cold axis of this sweep is therefore invalid
+- this also means prior nominal warm-start training runs launched through the
+  compiled trainer should be reinterpreted with caution until this is fixed
 
-Existing repo support:
-- the repo already has a `v22.1` manual ablation scaffold:
-  - [README.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/README.md:1)
-  - [run_v22_1_sweep.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh:1)
-- existing config matrix:
-  - control
-  - reward retune OFF
-  - low-prayer shaping OFF
-  - both OFF
-- existing initialization axis:
-  - warm-start from `u58coupx/0000001311768576.bin`
-  - cold-start from scratch
+What remains valid:
+- the reward configs themselves were applied correctly
+- the sweep still gives a valid **cold-start 3B ablation screen** for:
+  - `low_prayer shaping ON/OFF`
+  - `reward_retune ON/OFF`
 
-Recommended sweep order:
+Exact config groups actually compared:
 
-Phase 0: exact control rerun
-- run `v24` first as the exact `v22.1` control
-- this answers the variance / hidden-drift question before trimming anything
+Control family:
+- `w_damage_dealt = 0.7`
+- `w_attack_attempt = 0.2`
+- `w_npc_kill = 3.5`
+- `w_wave_clear = 15.0`
 
-Phase 1: warm-start cluster screen
-- this is the highest-value first sweep
-- run only the warm-start half of the existing `2 x 4` matrix
-- budget:
-  - `3B` steps each
-  - expected runtime roughly `27-32m` per run on the current box
-  - total roughly `110-130m`
-- runs:
-  - `warm_control`
-  - `warm_no_low_prayer`
-  - `warm_no_reward_retune`
-  - `warm_no_reward_retune_no_low_prayer`
-- what this answers:
-  - whether the low-prayer rescue shaping matters at all
-  - whether the reward-retune cluster matters at all
-  - whether both can be removed together while keeping warm-start performance
-- this is the correct first sweep if the immediate goal is:
-  - smallest config that still reproduces `v22.1`-style behavior
+Low-prayer cluster:
+- ON:
+  - `shape_low_prayer_no_pot_penalty = -0.01`
+  - `shape_low_prayer_pot_reward = 0.15`
+- OFF:
+  - `shape_low_prayer_no_pot_penalty = 0.0`
+  - `shape_low_prayer_pot_reward = 0.0`
 
-Phase 2: cold-start dependency screen
-- run the cold-start half only after the warm-start screen
-- budget:
-  - `3B` steps each
-  - another `110-130m`
-- runs:
-  - `cold_control`
-  - `cold_no_low_prayer`
-  - `cold_no_reward_retune`
-  - `cold_no_reward_retune_no_low_prayer`
-- what this answers:
-  - whether the same trimmed recipe still helps from scratch
-  - whether warm-start is carrying most of the observed `v22.1` gains
-- what it does **not** answer:
-  - it will not magically produce a strong no-warm-start recipe if all cold
-    runs are weak
-  - it only tells you whether the current recipe family transfers without the
-    checkpoint
+Reward-retune-OFF family:
+- `w_damage_dealt = 0.5`
+- `w_attack_attempt = 0.1`
+- `w_npc_kill = 3.0`
+- `w_wave_clear = 10.0`
 
-Phase 3: one-at-a-time trimming inside the winning cluster
-- only do this after Phase 1 narrows the search space
-- if `warm_no_low_prayer` matches control:
-  - split the low-prayer cluster next
-  - test:
-    - `shape_low_prayer_no_pot_penalty`
-    - `shape_low_prayer_pot_reward`
-    - the exact-zero threshold itself
-- if `warm_no_reward_retune` matches control:
-  - split the reward-retune cluster next
-  - test:
-    - `w_damage_dealt`
-    - `w_attack_attempt`
-    - `w_npc_kill`
-    - `w_wave_clear`
-- recommended budget for this phase:
-  - `1.5B-2.25B` per run
-- this is where you start removing knobs one by one
-- do not start here before Phase 1, or you will waste time
+Results table:
 
-Best use of a `4-6h` window:
-- if you want maximum information today:
-  - run `v24` control
-  - run the 4 warm-start ablations
-  - run the 4 cold-start ablations
-- that is the cleanest full first-pass answer set
-- if you want maximum efficiency toward a minimal warm-start recipe:
-  - run `v24` control
-  - run only the 4 warm-start ablations
-  - then spend the remaining time on the first `2-4` one-at-a-time trims from
-    the winning cluster
+| label | id | nominal init | score | wave_reached | max_wave | cleared_wave_30 | reached_wave_63 | jad_kill_rate | prayer_uptime_magic | damage_blocked | prayer_switches | attack_when_ready_rate | pots_used | avg_prayer_on_pot | pots_wasted |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| warm_control | `6h5qnmjp` | warm | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` |
+| cold_control | `o7uzpppa` | cold | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` |
+| warm_no_low_prayer | `kngi2ik3` | warm | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` |
+| cold_no_low_prayer | `rrcabwv8` | cold | `0.0` | `29.01` | `34` | `0.1970` | `0.0` | `0.0` | `0.0083` | `16133` | `126.8` | `0.5426` | `30.05` | `0.6839` | `16.22` |
+| warm_no_reward_retune | `tv3uimai` | warm | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0000` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` |
+| cold_no_reward_retune | `d7cmxvwx` | cold | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0000` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` |
+| warm_no_reward_retune_no_low_prayer | `5sqv1hhk` | warm | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0000` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` |
+| cold_no_reward_retune_no_low_prayer | `1k4uygff` | cold | `0.0` | `29.80` | `33` | `0.0489` | `0.0` | `0.0` | `0.0000` | `20508` | `628.7` | `0.5914` | `26.36` | `0.5923` | `10.46` |
 
-How to interpret outcomes:
-- if `warm_no_low_prayer` is near control:
-  - low-prayer rescue shaping is a good removal candidate
-- if `warm_no_reward_retune` is near control:
-  - the reward-retune cluster is a good removal candidate
-- if only `warm_control` works:
-  - `v22.1` is compact enough already in the places that matter most
-- if cold runs all lag badly:
-  - the sweep still helped, but the answer is:
-    - current `v22.1` performance still relies heavily on warm-start
-- if one cold variant materially beats `cold_control`:
-  - that variant is the best starting point for a later no-warm-path branch
+Observed collapse pattern:
+- the sweep did **not** produce eight distinct outcomes
+- it produced only **two** distinct result signatures:
+  - control-family signature:
+    - `control`
+    - `no_low_prayer`
+  - reward-retune-off signature:
+    - `no_reward_retune`
+    - `no_reward_retune_no_low_prayer`
+- within each signature:
+  - warm/cold were effectively identical
+  - low-prayer ON/OFF was effectively identical
 
-Metrics to rank by:
-- primary:
-  - `wave_reached`
-  - `reached_wave_63`
-  - `jad_kill_rate`
-- secondary:
-  - `prayer_uptime_magic`
-  - `damage_blocked`
-  - `attack_when_ready_rate`
-  - `avg_prayer_on_pot`
-  - `pots_wasted`
-- do not rank by a single metric in isolation
+What worked:
+- the sweep runner itself worked
+- configs were applied correctly
+- W&B grouping/tagging worked
+- the cold-start `3B` screen answered one real question:
+  - the low-prayer cluster had no measurable effect in this budget/regime
 
-Recommended commands:
-- preview the existing 8-run matrix:
-  - `bash /home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh --dry-run`
-- run the full existing matrix:
-  - `bash /home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/run_v22_1_sweep.sh`
-- if only doing the warm-start half, run these four manually:
-  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_control.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin FORCE_BACKEND_REBUILD=1 bash train.sh`
-  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_low_prayer.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
-  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_reward_retune.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
-  - `CONFIG_PATH=/home/joe/projects/runescape-rl/codex3/runescape-rl/config/sweeps/v22_1/fight_caves_v22_1_no_reward_retune_no_low_prayer.ini LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin bash train.sh`
+What did not work:
+- the nominal warm-start axis was invalid because compiled training ignored
+  `load_model_path`
+- the sweep therefore did **not** answer the checkpoint-dependence question
+- the `3B` budget was too short to reproduce the `v22.1` frontier regardless;
+  all runs remained in the late-20s / low-30s regime
 
-Answer to the warm-path question:
-- this sweep **will help answer** whether a trimmed `v22.1`-style recipe still
-  helps without warm-start
-- this sweep will **not by itself guarantee** a strong no-warm-path recipe
-- if all cold runs are poor, the next step is a separate cold-start
-  optimization branch after the warm-start recipe has already been minimized
+Main read:
+- `low_prayer shaping` appears inert in this screen
+  - `control` and `no_low_prayer` were effectively identical
+  - `no_reward_retune` and `no_reward_retune_no_low_prayer` were effectively
+    identical
+  - interpretation:
+    - at `3B` cold-start, the agent is not learning in a regime where the
+      low-prayer rescue terms materially change behavior
+- `reward_retune` still matters
+  - removing it did **not** improve real progress
+  - the reward-retune-off family:
+    - touched `wave 30` more often (`0.853 vs 0.625`)
+    - but cleared `wave 30` far less often (`0.0489 vs 0.1970`)
+    - had lower `max_wave` (`33 vs 34`)
+    - had much lower `episode_return` (`5216.6 vs 7141.8`)
+    - collapsed magic-prayer usage to `0.0`
+  - interpretation:
+    - the reward-retune cluster looks important for converting late-20s
+      progress into actual wave-30 clears
+    - it should be kept for now
 
-Status:
-- planned
+Observations:
+- none of the `3B` runs reached the `v22.1` frontier regime
+- all runs had `score = 0.0`, `reached_wave_63 = 0.0`, `jad_kill_rate = 0.0`
+- even the better control-family runs still showed resource slop:
+  - `pots_used = 30.05`
+  - `avg_prayer_on_pot = 0.684`
+  - `pots_wasted = 16.22`
+- this means the `3B` screen is mainly useful for eliminating clearly inert
+  knobs, not for proving recipe sufficiency
 
-Results:
-- TBD
+Recommendations:
+- keep the reward-retune cluster for now
+  - do **not** remove `w_damage_dealt`, `w_attack_attempt`, `w_npc_kill`, or
+    `w_wave_clear` yet
+- low-prayer shaping is the first removal candidate
+  - the current evidence says it is safe to test dropping that cluster next
+  - but treat this as a `3B` cold-start finding, not yet a final `5B`
+    frontier conclusion
+- before doing any future warm/cold sweep:
+  - fix compiled train-mode warm-start so `_C.create_pufferl` actually loads
+    `load_model_path`
+  - then rerun the smallest sanity check:
+    - `warm_control`
+    - `cold_control`
+  - only after those diverge meaningfully should the warm/cold axis be trusted
+- next efficient path:
+  - either:
+    - run a `5B` exact ablation of `low_prayer OFF` against the `v24` control
+    - or:
+      - fix train-mode warm-start first, then rerun just the 4 nominal
+        warm-started ablations
+
+Bottom line:
+- this sweep did **not** validate warm-start dependence
+- it **did** show that the low-prayer cluster is probably removable before the
+  reward-retune cluster
+- it also uncovered a larger infrastructure bug:
+  - compiled training has likely been ignoring `LOAD_MODEL_PATH` entirely
+  - that should be fixed before any future checkpoint-attribution claims are
+    treated as settled
 
 ---
 
@@ -636,10 +1122,12 @@ Checkpoint notes:
 
 ---
 
-## v21.3 (2026-04-10, planned)
+## v21.3 (2026-04-10, completed but needs to be analyze)
 
 Actual run:
-- TBD
+- qiddrsmv
+Path
+- jordanbaileypmp-georgia-institute-of-technology/puffer4/runs/qiddrsmv
 
 Goal:
 - return to the `v21.2` learning recipe as the planning baseline

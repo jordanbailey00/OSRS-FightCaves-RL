@@ -361,8 +361,8 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
                 state->jad_damage_this_tick += h->damage;
             }
 
-            /* Yt-HurKot: player attack distracts healer */
-            if (npc->npc_type == NPC_YT_HURKOT && h->damage > 0) {
+            /* Yt-HurKot: any landed player attack distracts healer, including 0s. */
+            if (npc->npc_type == NPC_YT_HURKOT) {
                 npc->healer_distracted = 1;
             }
 

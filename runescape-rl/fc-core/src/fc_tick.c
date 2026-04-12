@@ -49,6 +49,7 @@ static void clear_per_tick_flags(FcState* state) {
     state->prayer_potion_used_this_tick = 0;
     state->pre_eat_hp = 0;
     state->pre_drink_prayer = 0;
+    state->jad_heal_procs_this_tick = 0;
 
     FcPlayer* p = &state->player;
     p->damage_taken_this_tick = 0;
@@ -265,16 +266,19 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
         } else {
             int dist = fc_distance_to_npc(p->x, p->y, target);
             int weapon_range = p->weapon_range;
+            int has_los = fc_has_los_to_npc(
+                p->x, p->y, target->x, target->y, target->size, state->walkable);
 
-            if (dist > weapon_range && p->approach_target && p->route_idx >= p->route_len) {
+            if ((dist > weapon_range || !has_los) &&
+                p->approach_target && p->route_idx >= p->route_len) {
                 /* Walk toward the NPC center. The greedy pathfinder will head
                  * straight toward the target. The route consumer in the movement
-                 * section will stop once we're in range (checked next tick). */
+                 * section will stop once we're in range with LOS (checked next tick). */
                 int npc_cx = target->x + target->size / 2;
                 int npc_cy = target->y + target->size / 2;
                 p->route_len = fc_pathfind_bfs(p->x, p->y, npc_cx, npc_cy,
                                                 state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
-                /* Trim the route to stop at weapon range */
+                /* Trim the route to the first tile that can actually fire. */
                 for (int ri = 0; ri < p->route_len; ri++) {
                     int rx = p->route_x[ri], ry = p->route_y[ri];
                     /* Chebyshev distance to nearest NPC footprint tile */
@@ -283,7 +287,9 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                     int rdx = (rx > nx) ? rx - nx : nx - rx;
                     int rdy = (ry > ny) ? ry - ny : ny - ry;
                     int rdist = (rdx > rdy) ? rdx : rdy;
-                    if (rdist <= weapon_range) {
+                    if (rdist <= weapon_range &&
+                        fc_has_los_to_npc(rx, ry, target->x, target->y,
+                                          target->size, state->walkable)) {
                         p->route_len = ri + 1;  /* stop here */
                         break;
                     }
@@ -302,7 +308,7 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                 }
             }
 
-            if (dist <= weapon_range && p->attack_timer <= 0) {
+            if (dist <= weapon_range && has_los && p->attack_timer <= 0) {
                 /* In range — fire attack */
                 int att_roll = fc_player_ranged_attack_roll(p, target);
                 const FcNpcStats* tstats = fc_npc_get_stats(target->npc_type);
