@@ -217,16 +217,30 @@ else
         $PRECISION $RENDER_NVCC_FLAGS -O2 --threads 0 \
         src/bindings.cu -o build/bindings.o
 
-    # Find cuDNN from PyTorch's bundled copy if not system-installed
+    # Find cuDNN from PyTorch's bundled copy if not system-installed.
+    # Some wheels only ship versioned sonames (for example libcudnn.so.9)
+    # without the linker-facing libcudnn.so symlink.
     VENV_CUDNN=$(python -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
     if [ -z "$CUDNN_LFLAG" ] && [ -n "$VENV_CUDNN" ]; then
         CUDNN_LFLAG="$VENV_CUDNN"
     fi
 
+    CUDNN_LINK_INPUT="-lcudnn"
+    if [ -n "$CUDNN_LFLAG" ]; then
+        CUDNN_LIB_DIR="${CUDNN_LFLAG#-L}"
+        if [ ! -e "$CUDNN_LIB_DIR/libcudnn.so" ]; then
+            VERSIONED_CUDNN=$(find "$CUDNN_LIB_DIR" -maxdepth 1 -name 'libcudnn.so.*' | sort | head -n 1)
+            if [ -n "$VERSIONED_CUDNN" ]; then
+                CUDNN_LINK_INPUT="$VERSIONED_CUDNN"
+                echo "Using versioned cuDNN link target: $VERSIONED_CUDNN"
+            fi
+        fi
+    fi
+
     ${CXX:-g++} -shared -fPIC -fopenmp \
         build/bindings.o "$STATIC_LIB" "$RAYLIB_A" \
         -L"$CUDA_HOME/lib64" $CUDNN_LFLAG \
-        -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand -lcudnn \
+        -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand $CUDNN_LINK_INPUT \
         -lgomp -O2 $RENDER_LIBS \
         -Bsymbolic-functions \
         -o "$OUTPUT"
