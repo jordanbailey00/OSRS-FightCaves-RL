@@ -76,10 +76,10 @@ Current recommendation:
   - so this run is specifically testing whether the checkpoint was better than
     the recipe, not whether the recipe itself should come back
 
-## v25.5a (2026-04-13, planned)
+## v25.5a (2026-04-13, completed)
 
 Status:
-- planned
+- completed normally
 
 Goal:
 - keep the stronger `v25.4` recipe and the `v25.5` checkpoint-refresh structure
@@ -122,10 +122,101 @@ Reasoning:
 - `v25.5a` narrows the shaping to the two events that matter most:
   reaching wave `63` and killing Jad
 
-Current recommendation:
-- this is the correct immediate follow-up to `v25.5`
-- if this still fails to improve wave-63 / Jad conversion, the next cleaner
-  experiment is `v26` cold-start rather than adding more milestone ladder terms
+Backend notes:
+- wave number is already present in the observation as `FC_OBS_META_WAVE`
+- only `shape_reach_wave_63_bonus` and `shape_jad_kill_bonus` were active
+- `shape_reach_wave_60_bonus`, `61`, and `62` were zeroed
+
+Actual run:
+- `wiee1ezs`
+- local run log:
+  - [wiee1ezs.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/wiee1ezs.json)
+
+Results (`wiee1ezs`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2613.1s`
+- throughput:
+  - `1.89M SPS`
+
+Final metrics:
+- `wave_reached = 58.59`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_length = 7525`
+- `reached_wave_63 = 0.1438`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime_melee = 0.242`
+- `prayer_uptime_range = 0.274`
+- `prayer_uptime_magic = 0.251`
+- `correct_prayer = 2543.95`
+- `wrong_prayer_hits = 310.50`
+- `no_prayer_hits = 15.16`
+- `prayer_switches = 3045.48`
+- `damage_blocked = 176691.8`
+- `dmg_taken_avg = 5359.38`
+- `attack_when_ready_rate = 0.9634`
+- `pots_used = 30.4`
+- `avg_prayer_on_pot = 0.5666`
+- `pots_wasted = 10.05`
+- `food_eaten = 7.35`
+- `food_wasted = 0.50`
+
+Key sampled progression:
+- strongest sampled `jad_kill_rate` window:
+  - around `394M`:
+    - `wave_reached = 59.29`
+    - `reached_wave_63 = 0.1190`
+    - `jad_kill_rate = 0.01190`
+- strongest sampled `reached_wave_63` / `wave_reached` window:
+  - around `451M`:
+    - `wave_reached = 62.82`
+    - `reached_wave_63 = 0.9174`
+    - `jad_kill_rate = 0.0`
+- nearest eval checkpoints to the important windows:
+  - best sampled Jad window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/wiee1ezs/0000000368050176.bin`
+  - best sampled wave-63 access window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/wiee1ezs/0000000472907776.bin`
+
+Comparison to `v25.5`:
+- sampled and final metrics were numerically identical to `sluy9lmm`
+- both runs used the same warm-start:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000001888485376.bin`
+- practical outcome:
+  - narrowing the ladder from `60/61/62/63 + Jad` to only `63 + Jad` did not
+    produce any observable behavioral change under this seed/checkpoint
+
+Comparison to `v25.4`:
+- final late-game stability remained better than `v25.4`
+  - `reached_wave_63: 0.1438 vs 0.0397`
+  - `wave_reached: 58.59 vs 56.95`
+- but the best frontier windows still did not clearly exceed the best
+  `v25.4` windows once the full W&B history is considered
+- `v25.4` remains the stronger checkpoint-source run
+
+Analysis:
+- `v25.5a` is effectively a duplicate of `v25.5`
+- there is no evidence that removing the `wave 60-62` bonuses changed the
+  optimization path in any meaningful way
+- the strongest interpretation is that the late-wave milestone shaping itself
+  is not the main lever right now
+- the bigger signal continues to be checkpoint quality:
+  - `v25.4` produced the best modern checkpoint windows of this line
+  - both `v25.5` and `v25.5a` were better as checkpoint-refresh experiments
+    than as new reward-discovery runs
+
+Recommendation:
+- do not spend more runs on milestone-ladder variants right now
+- keep `7qhjnxa2` as the best checkpoint-source run from this branch
+- current best checkpoint candidate remains:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000000368050176.bin`
+- next highest-value runs remain:
+  - `v26` cold-start on the `v25.4` / `v25.5a` recipe
+  - `v26.1` warm-start from the best `v26` checkpoint
+- keep `v25.6` as a lower-priority diagnostic only
 
 ## v25.5 (2026-04-12, completed)
 

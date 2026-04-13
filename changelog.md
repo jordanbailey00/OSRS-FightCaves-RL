@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-04-13
+
+- Completed and analyzed `v25.5a` (`wiee1ezs`) in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md):
+  - same warm-start as `v25.5`:
+    - `7qhjnxa2/0000001888485376.bin`
+  - narrowed the late-wave milestone shaping to only:
+    - `shape_reach_wave_63_bonus = 100.0`
+    - `shape_jad_kill_bonus = 500.0`
+  - result: no observable change versus `v25.5`; sampled and final metrics
+    were numerically identical under this seed/checkpoint
+- Re-queried fuller W&B history for the modern checkpoint-refresh runs:
+  - confirmed `7qhjnxa2` is still the strongest checkpoint-source run in this
+    line
+  - identified the best practical checkpoint candidate as:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000000368050176.bin`
+- Synced docs around the current late-`v25` state:
+  - `run_history.md`
+  - `rl_config.md`
+  - `daily_recap.md`
+- W&B tags now cover the full late-`v25` line:
+  - `v25`
+  - `v25.1`
+  - `v25.2`
+  - `v25.3`
+  - `v25.4`
+  - `v25.5`
+  - `v25.5a`
+
 ## 2026-04-12
 
 - Added the `v25.1` blocked-prayer idle gate in [runescape-rl/fc-core/include/fc_reward.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/include/fc_reward.h):
