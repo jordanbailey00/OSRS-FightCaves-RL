@@ -7,9 +7,888 @@ Formatting note:
 - recent sections now include `Exact active config` snapshots
 - these list all non-zero training-shaping values plus semantically important
   zero-valued keys when the zero itself materially changes behavior
-  (for example `shape_low_prayer_pot_threshold = 0.0` or `load_model_path = null`)
+  (for example `w_correct_jad_prayer = 2.0` or `load_model_path = null`)
 
 ---
+
+## v26.1 (2026-04-12, planned)
+
+Status:
+- planned
+- only launch after `v26` produces a clearly better frontier checkpoint than
+  the old `u58coupx` warm-start
+
+Goal:
+- test whether a checkpoint trained under the corrected modern mechanics is a
+  better warm-start than `u58coupx`
+
+Recommended plan:
+- use the exact same recipe as `v26`
+- warm-start from the best `v26` checkpoint rather than the final checkpoint
+- choose the checkpoint by late-wave behavior, not just by final average wave
+
+Checkpoint selection rule:
+- prefer the earliest `v26` checkpoint that shows stable `55+ / 60+` behavior
+  with real `wave 63` reps and clean pre-Jad wave control
+- if multiple checkpoints are close, prefer the one with the highest
+  `reached_wave_63` and best replay quality rather than the highest final
+  `wave_reached`
+
+Current recommendation:
+- keep this run on the roadmap
+- do not choose the checkpoint source until `v26` is complete
+- target recipe should remain identical to `v25.2` / `v25.4` unless a later
+  run clearly establishes a better baseline
+
+## v25.6 (2026-04-12, planned)
+
+Status:
+- planned
+
+Goal:
+- isolate whether the `v25.3` checkpoint itself was more useful than the
+  `v25.3` recipe
+- keep the checkpoint-refresh structure from `v25.4`, but use the strongest
+  `v25.3` checkpoint and restore the `v25.3` melee generic-prayer reward change
+
+Planned recipe:
+- same scalar config as `v25.4`
+- same LOS fix
+- same healer aggro fix
+- same Jad-heal penalty
+- same `v25.1` ready-idle prayer gate
+- same `w_correct_jad_prayer = 2.0`
+- code-only delta versus `v25.4`:
+  - generic `correct_danger_prayer` would again apply to blocked melee hits
+- warm-start source:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000001888485376.bin`
+
+Why this checkpoint:
+- `6gi2pyei/0000001888485376.bin` was the best `v25.3` frontier window
+- it showed the strongest `wave_reached`, `reached_wave_63`, and the only
+  meaningful sampled Jad activity in that run
+
+Current recommendation:
+- keep this run as a secondary diagnostic
+- lower priority than `v25.5`, `v26`, and `v26.1`
+- rationale:
+  - `v25.3` as a recipe regressed
+  - so this run is specifically testing whether the checkpoint was better than
+    the recipe, not whether the recipe itself should come back
+
+## v25.5a (2026-04-13, planned)
+
+Status:
+- planned
+
+Goal:
+- keep the stronger `v25.4` recipe and the `v25.5` checkpoint-refresh structure
+- keep only the milestone rewards that are closest to the actual bottleneck:
+  reaching wave `63` and killing Jad
+- remove the broader wave `60-62` bonuses that appear to have improved generic
+  late-wave stability more than true wave-63 / Jad conversion
+
+Planned recipe:
+- same as `v25.5`
+- same warm-start:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000001888485376.bin`
+- additive per-episode milestone bonuses:
+  - `shape_reach_wave_60_bonus = 0.0`
+  - `shape_reach_wave_61_bonus = 0.0`
+  - `shape_reach_wave_62_bonus = 0.0`
+  - `shape_reach_wave_63_bonus = 100.0`
+  - `shape_jad_kill_bonus = 500.0`
+
+Diff versus `v25.5`:
+- `shape_reach_wave_60_bonus: 60.0 -> 0.0`
+- `shape_reach_wave_61_bonus: 90.0 -> 0.0`
+- `shape_reach_wave_62_bonus: 120.0 -> 0.0`
+- `shape_reach_wave_63_bonus: 200.0 -> 100.0`
+- `shape_jad_kill_bonus` stays `500.0`
+- all other config, code, and warm-start inputs remain identical
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000001888485376.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_jad_prayer=2.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_no_threat_penalty=0.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_no_threat_penalty=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_reach_wave_60_bonus=0.0`, `shape_reach_wave_61_bonus=0.0`, `shape_reach_wave_62_bonus=0.0`, `shape_reach_wave_63_bonus=100.0`, `shape_jad_kill_bonus=500.0`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Reasoning:
+- `v25.5` improved final late-wave stability but did not improve the strongest
+  wave-63 / Jad frontier windows
+- the broad `60-62` milestone bonuses appear to be paying too much for generic
+  late-game survival and not enough specifically for the rare states we care
+  about most
+- `v25.5a` narrows the shaping to the two events that matter most:
+  reaching wave `63` and killing Jad
+
+Current recommendation:
+- this is the correct immediate follow-up to `v25.5`
+- if this still fails to improve wave-63 / Jad conversion, the next cleaner
+  experiment is `v26` cold-start rather than adding more milestone ladder terms
+
+## v25.5 (2026-04-12, completed)
+
+Status:
+- completed normally
+
+Goal:
+- keep the stronger `v25.4` recipe intact
+- upweight late-wave trajectories so rare episodes that actually reach
+  waves `60-63` and kill Jad get more learning signal
+
+Planned recipe:
+- same as `v25.4`
+- warm-start from the strongest sampled frontier checkpoint in `v25.4`:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000001888485376.bin`
+- additive per-episode milestone bonuses:
+  - `shape_reach_wave_60_bonus = 60.0`
+  - `shape_reach_wave_61_bonus = 90.0`
+  - `shape_reach_wave_62_bonus = 120.0`
+  - `shape_reach_wave_63_bonus = 200.0`
+  - `shape_jad_kill_bonus = 500.0`
+- exact reward weights:
+  - `w_damage_dealt = 0.7`
+  - `w_attack_attempt = 0.2`
+  - `w_damage_taken = -0.6`
+  - `w_npc_kill = 3.5`
+  - `w_wave_clear = 15.0`
+  - `w_jad_damage = 2.0`
+  - `w_jad_kill = 50.0`
+  - `w_player_death = -20.0`
+  - `w_cave_complete = 100.0`
+  - `w_correct_jad_prayer = 2.0`
+  - `w_correct_danger_prayer = 0.25`
+  - `w_invalid_action = -0.1`
+  - `w_tick_penalty = -0.005`
+- exact shaping:
+  - `shape_food_full_waste_penalty = -6.5`
+  - `shape_food_waste_scale = -1.2`
+  - `shape_food_no_threat_penalty = 0.0`
+  - `shape_pot_full_waste_penalty = -6.5`
+  - `shape_pot_waste_scale = -1.2`
+  - `shape_pot_no_threat_penalty = 0.0`
+  - `shape_wrong_prayer_penalty = -1.25`
+  - `shape_npc_specific_prayer_bonus = 1.5`
+  - `shape_npc_melee_penalty = -0.3`
+  - `shape_wasted_attack_penalty = -0.1`
+  - `shape_wave_stall_start = 500`
+  - `shape_wave_stall_base_penalty = -0.5`
+  - `shape_wave_stall_ramp_interval = 50`
+  - `shape_wave_stall_cap = -2.0`
+  - `shape_not_attacking_grace_ticks = 2`
+  - `shape_not_attacking_penalty = -0.01`
+  - `shape_kiting_reward = 1.0`
+  - `shape_kiting_min_dist = 7`
+  - `shape_kiting_max_dist = 10`
+  - `shape_unnecessary_prayer_penalty = -0.2`
+  - `shape_jad_heal_penalty = -0.1`
+  - `shape_resource_threat_window = 2`
+- PPO/vector/policy:
+  - `total_agents = 4096`
+  - `num_buffers = 2`
+  - `total_timesteps = 5_000_000_000`
+  - `learning_rate = 0.0003`
+  - `anneal_lr = 0`
+  - `gamma = 0.999`
+  - `gae_lambda = 0.95`
+  - `clip_coef = 0.2`
+  - `vf_coef = 0.5`
+  - `ent_coef = 0.01`
+  - `max_grad_norm = 0.5`
+  - `horizon = 256`
+  - `minibatch_size = 4096`
+  - `hidden_size = 256`
+  - `num_layers = 2`
+
+Backend notes:
+- wave number is already present in the observation as `FC_OBS_META_WAVE`
+- the new bonuses pay on the actual wave-transition tick when the episode
+  enters waves `60`, `61`, `62`, and `63`
+- the Jad bonus pays on the Jad-death tick, even before the separate
+  cave-complete terminal signal fires
+
+Actual run:
+- `sluy9lmm`
+- local run log:
+  - [sluy9lmm.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/sluy9lmm.json)
+
+Results (`sluy9lmm`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2601.1s`
+- throughput:
+  - `1.90M SPS`
+
+Final metrics:
+- `wave_reached = 58.59`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_length = 7525`
+- `reached_wave_63 = 0.1438`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime_melee = 0.242`
+- `prayer_uptime_range = 0.274`
+- `prayer_uptime_magic = 0.251`
+- `correct_prayer = 2543.95`
+- `wrong_prayer_hits = 310.50`
+- `no_prayer_hits = 15.16`
+- `prayer_switches = 3045.48`
+- `damage_blocked = 176691.8`
+- `dmg_taken_avg = 5359.38`
+- `attack_when_ready_rate = 0.9634`
+- `pots_used = 30.4`
+- `avg_prayer_on_pot = 0.5666`
+- `pots_wasted = 10.05`
+- `food_eaten = 7.35`
+- `food_wasted = 0.50`
+
+Key sampled progression:
+- first sampled point around `628M` already showed a strong late-game plateau:
+  - `wave_reached = 59.63`
+  - `reached_wave_63 = 0.2246`
+  - `jad_kill_rate = 0.0000529`
+- strongest sampled `jad_kill_rate` window was later:
+  - around `3.126B`:
+    - `wave_reached = 59.13`
+    - `reached_wave_63 = 0.2377`
+    - `jad_kill_rate = 0.0002132`
+- nearest eval checkpoints to the important windows:
+  - early breakout / best sampled Jad window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/sluy9lmm/0000000630194176.bin`
+  - strongest sampled late-game plateau:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/sluy9lmm/0000001888485376.bin`
+  - best sampled `reached_wave_63` window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/sluy9lmm/0000003146776576.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/sluy9lmm/0000004999610368.bin`
+
+Progression versus `v25.4` (`7qhjnxa2`):
+- final late-game stability improved:
+  - `wave_reached: 58.59 vs 56.95`
+  - `reached_wave_63: 0.1438 vs 0.0397`
+  - `correct_prayer: 2543.95 vs 2288.13`
+  - `damage_blocked: 176691.8 vs 155482.0`
+  - `dmg_taken_avg: 5359.4 vs 6249.8`
+  - `food_eaten: 7.35 vs 15.63`
+  - `food_wasted: 0.50 vs 5.51`
+  - `no_prayer_hits: 15.16 vs 17.03`
+- but the best frontier windows regressed:
+  - `wave_reached` never reached the `60.5-61.0` sampled windows seen in `v25.4`
+  - `reached_wave_63` peaked at `0.2377` vs `0.4453`
+  - `jad_kill_rate` peaked at `0.0002132` vs `0.0013007`
+- prayer/resource churn also remained worse in some dimensions:
+  - `prayer_switches: 3045.5 vs 2545.7`
+  - `pots_wasted: 10.05 vs 8.86`
+
+Analysis:
+- the broad `60/61/62/63 + Jad` bonus ladder did change behavior
+- it appears to have improved generic late-game stability and damage control
+- but it did not improve the actual rare frontier events we care about most:
+  wave-63 conversion and Jad kills
+- the likely failure mode is that the wave `60-62` bonuses paid too much for
+  strong-but-not-frontier trajectories, nudging PPO toward “stable late-game”
+  rather than “push all the way into repeated Jad reps”
+- the final signature supports that:
+  - stronger blocking
+  - lower damage taken
+  - much better food discipline
+  - but lower true frontier conversion than `v25.4`
+
+Recommendation:
+- keep the `v25.4` checkpoint-refresh structure
+- remove the broad wave `60-62` milestone rewards
+- keep only:
+  - a smaller `wave 63` bonus
+  - the large Jad-kill bonus
+- that is the purpose of `v25.5a`
+
+Reasoning:
+- the current bottleneck is not basic survival any more
+- the current bottleneck is getting enough high-quality wave-63 / Jad
+  trajectories to stabilize the late-game policy
+- this run tests whether explicitly upweighting late-wave trajectories helps
+  preserve and amplify the rare strong episodes
+
+Current recommendation:
+- this is a reasonable experiment to run before `v26`
+- but it should be interpreted as trajectory upweighting, not as a true
+  curriculum replacement
+
+## v26 (2026-04-12, planned)
+
+Status:
+- planned
+
+Goal:
+- test whether the old `u58coupx` checkpoint is now holding the policy back
+- measure how the current late-`v25` mechanics learn from scratch without any
+  stale warm-start bias
+
+Recommended recipe:
+- cold start
+- use the strongest currently validated late-game recipe as the code/config
+  baseline
+
+Current recommendation:
+- use the exact `v25.2` / `v25.4` recipe with `load_model_path = null`
+- do not carry the `v25.3` melee-reward change into this run
+- this run is specifically about whether the stale `u58coupx` initialization is
+  still helping more than it hurts
+
+## v25.4 (2026-04-12, completed)
+
+Status:
+- completed normally
+
+Goal:
+- keep the strongest currently validated `v25.2` recipe intact
+- replace the stale `u58coupx` warm-start with a stronger checkpoint trained
+  under the newer LOS/healer/Jad reward mechanics
+- measure whether the old checkpoint is now anchoring the policy to outdated
+  behavior
+
+Why this is the chosen checkpoint:
+- `frt9a1j4/0000003146776576.bin` was the best sampled Jad/clear window in
+  `v25.2`
+- this is a better warm-start candidate than the best average-wave window
+  because it represents the strongest observed late-game conversion and Jad
+  behavior under the newer mechanics
+
+Config versus `v25.3`:
+- scalar `.ini` values remain unchanged
+- warm-start source changes:
+  - `u58coupx/0000001311768576.bin`
+  - ->
+  - `frt9a1j4/0000003146776576.bin`
+- code-only difference versus `v25.3`:
+  - remove the melee extension from the generic correct-prayer reward
+  - `correct_danger_prayer` returns to ranged/magic-only
+
+Exact difference versus `v25.3`:
+- same scalar config
+- same LOS fix
+- same healer aggro fix
+- same Jad-heal penalty
+- same `v25.1` ready-idle prayer gate
+- same `w_correct_jad_prayer = 2.0`
+- generic `correct_danger_prayer` no longer applies to blocked melee hits
+- warm-start path switches to:
+  - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000003146776576.bin`
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000003146776576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_jad_prayer=2.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_no_threat_penalty=0.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_no_threat_penalty=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Actual run:
+- `7qhjnxa2`
+- local run log:
+  - [7qhjnxa2.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/7qhjnxa2.json)
+
+Results (`7qhjnxa2`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2548.0s`
+- throughput:
+  - `1.90M SPS`
+
+Final metrics:
+- `wave_reached = 56.95`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_length = 7130`
+- `reached_wave_63 = 0.0397`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime_melee = 0.289`
+- `prayer_uptime_range = 0.283`
+- `prayer_uptime_magic = 0.235`
+- `correct_prayer = 2288.13`
+- `wrong_prayer_hits = 322.32`
+- `no_prayer_hits = 17.03`
+- `prayer_switches = 2545.70`
+- `damage_blocked = 155482.0`
+- `dmg_taken_avg = 6249.85`
+- `attack_when_ready_rate = 0.9653`
+- `pots_used = 30.6`
+- `avg_prayer_on_pot = 0.5740`
+- `pots_wasted = 8.86`
+- `food_eaten = 15.6`
+- `food_wasted = 5.51`
+
+Key progression points:
+- sampled `wave_reached >= 30` by `14.7M`
+- sampled `wave_reached >= 45` by `228.6M`
+- sampled `wave_reached >= 50` by `228.6M`
+- sampled `wave_reached >= 55` by `228.6M`
+- sampled `wave_reached >= 60` by `228.6M`
+- progression table showed a sustained `60-62.5` plateau from roughly
+  `228.6M` through `3.48B`
+- strongest sampled average-wave point in the progression table was around
+  `1.497B`:
+  - `wave_reached = 62.5`
+  - `episode_length = 8337`
+- strongest sampled frontier windows from the summary history:
+  - around `1.876B`:
+    - `wave_reached = 60.96`
+    - `reached_wave_63 = 0.4319`
+    - `jad_kill_rate = 0.000575`
+  - around `3.126B`:
+    - `wave_reached = 60.54`
+    - `reached_wave_63 = 0.4453`
+    - `jad_kill_rate = 0.000250`
+- nearest eval checkpoints to the important windows:
+  - early breakout:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000000630194176.bin`
+  - strongest sampled frontier window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000001888485376.bin`
+  - best sampled `reached_wave_63` window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000003146776576.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000004999610368.bin`
+
+Comparison to `v25.2` (`frt9a1j4`):
+- `v25.4` supports the checkpoint-refresh hypothesis
+- compared to `v25.2`, the refreshed warm-start improved the strongest sampled
+  late-game windows:
+  - `reached_wave_63: 0.4453 vs 0.4134`
+  - `jad_kill_rate: 0.000575 peak vs 0.000475 / 0.000685 windows`
+  - `attack_when_ready_rate: 0.9653 vs 0.9549` at final
+  - `correct_prayer: 2288.1 vs 2162.8` at final
+  - `avg_prayer_on_pot: 0.5740 vs 0.5833`
+  - `pots_wasted: 8.86 vs 9.79`
+- the final `wave_reached` was slightly lower:
+  - `56.95 vs 57.70`
+- but the mid-run frontier windows were stronger and more persistent
+
+Comparison to `v25.1` (`zyhv95mi`):
+- `v25.1` still has the best final late-game profile of the current line
+- but `v25.4` now looks much closer to `v25.1` than `v25.2` did in terms of
+  wave-63/Jad opportunity generation
+
+Analysis:
+- this run is a real positive result
+- the refreshed checkpoint appears to be better aligned with the modern
+  LOS/healer/Jad mechanics than the old `u58coupx` warm-start
+- the strongest evidence is not the final metric line; it is the sustained
+  `60-62.5` plateau and stronger `wave 63` windows through the middle of the
+  run
+- the run still decayed by the end, so the checkpoint refresh is helpful but
+  not sufficient on its own
+- this supports continuing with the checkpoint-refresh / cold-start plan
+
+What worked:
+- replacing `u58coupx` with the best `v25.2` checkpoint
+- keeping the stronger `v25.2` recipe instead of the weaker `v25.3` melee
+  variant
+
+What did not work:
+- the refreshed checkpoint alone did not solve late-run decay
+- final Jad conversion still was not stable
+
+Recommendation:
+- the overall direction is correct
+- `v25.5`, `v26`, and `v26.1` are all still reasonable next runs
+- current priority order:
+  - `v25.5`
+  - `v26`
+  - `v26.1`
+- rationale:
+  - `v25.4` suggests checkpoint refresh helps
+  - `v25.5` is now a reasonable targeted attempt to further upweight rare
+    late-wave trajectories under the stronger refreshed-warm-start setup
+  - `v26` / `v26.1` remain the cleanest answer to the stale-checkpoint
+    question
+
+## v25.3 (2026-04-12, completed)
+
+Actual run:
+- `6gi2pyei`
+- local run log:
+  - [6gi2pyei.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/6gi2pyei.json)
+
+Status:
+- completed normally
+
+Primary goal:
+- optimize pre-Jad waves so the policy reaches wave 63 / Jad more often
+- get more Jad repetitions by improving pre-Jad prayer correctness and
+  conversion, not by adding more Jad-only complexity
+
+Goal:
+- keep the full `v25.2` recipe intact
+- extend the generic correct-prayer reward so it also applies to successfully
+  blocked melee hits
+- keep Jad-specific reward, LOS/healer fixes, and the `v25.1` ready-idle gate
+  unchanged
+
+Config versus `v25.2`:
+- no scalar `.ini` delta
+- checked-in config surface was trimmed, but remaining live values were the
+  same as `v25.2`
+- intended behavior delta was code-only:
+  - the generic positive prayer reward path now applied to correctly blocked
+    melee hits as well as ranged/magic hits
+
+Code delta versus `v25.2`:
+- `correct_danger_prayer` was changed from ranged/magic-only to any correctly
+  blocked hit style:
+  - melee
+  - ranged
+  - magic
+- the same ready-idle gate still suppressed this positive reward if the agent
+  had been attack-ready and idle for 1 full tick
+- the NPC-specific bonus path remained separate:
+  - Tok-Xil / Ket-Zek / melee cave NPCs still kept
+    `shape_npc_specific_prayer_bonus`
+  - Jad still kept `w_correct_jad_prayer = 2.0`
+
+Exact difference versus `v25.2`:
+- no config-key change
+- code-only reward change:
+  - a correctly blocked melee hit newly received the generic
+    `w_correct_danger_prayer = 0.25`
+- resulting total positive blocked-prayer rewards when not idle became:
+  - melee cave NPCs currently in the NPC-specific set:
+    - `0.25 + 1.5 = 1.75`
+  - `Tok-Xil` / `Ket-Zek`:
+    - unchanged at `0.25 + 1.5 = 1.75`
+  - `Jad` ranged/magic:
+    - unchanged at `0.25 + 2.0 = 2.25`
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_jad_prayer=2.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_no_threat_penalty=0.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_no_threat_penalty=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`6gi2pyei`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2518.0s`
+- throughput:
+  - `1.94M SPS`
+
+Final metrics:
+- `wave_reached = 51.67`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_length = 6260`
+- `reached_wave_63 = 0.0`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime_melee = 0.228`
+- `prayer_uptime_range = 0.348`
+- `prayer_uptime_magic = 0.214`
+- `correct_prayer = 1590.43`
+- `wrong_prayer_hits = 234.31`
+- `no_prayer_hits = 16.19`
+- `prayer_switches = 1447.49`
+- `damage_blocked = 105902.99`
+- `dmg_taken_avg = 4441.15`
+- `attack_when_ready_rate = 0.8857`
+- `pots_used = 29.6`
+- `avg_prayer_on_pot = 0.6642`
+- `pots_wasted = 14.09`
+- `food_eaten = 20.0`
+- `food_wasted = 17.28`
+
+Key progression points:
+- sampled `wave_reached >= 45` by `629.1M`
+- sampled `wave_reached >= 55` by `1.876B`
+- sampled `wave_reached >= 59` by `1.876B`
+- first real `wave 63` window was also `1.876B`
+- best sampled window was around `1.876B`:
+  - `wave_reached = 59.14`
+  - `reached_wave_63 = 0.3144`
+  - `jad_kill_rate = 0.0000358`
+  - `attack_when_ready_rate = 0.9067`
+  - `damage_blocked = 150257.29`
+- after that, the run decayed steadily:
+  - `3.126B`: `wave_reached = 55.69`, `reached_wave_63 = 0.0377`
+  - `4.376B`: `wave_reached = 54.90`, `reached_wave_63 = 0.0901`
+  - final: `wave_reached = 51.67`, `reached_wave_63 = 0.0`
+- nearest eval checkpoints to the important windows:
+  - early breakout:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000000630194176.bin`
+  - best sampled frontier window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000001888485376.bin`
+  - post-peak decay:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000003146776576.bin`
+  - late partial recovery:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000004352638976.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/6gi2pyei/0000004999610368.bin`
+
+Comparison to `v25.2` (`frt9a1j4`):
+- final `wave_reached: 51.67 vs 57.70`
+- final `reached_wave_63: 0.0 vs 0.0588`
+- final `attack_when_ready_rate: 0.8857 vs 0.9549`
+- final `correct_prayer: 1590.4 vs 2162.8`
+- final `damage_blocked: 105903 vs 161546`
+- final `avg_prayer_on_pot: 0.6642 vs 0.5833`
+- final `pots_wasted: 14.09 vs 9.79`
+- final `food_wasted: 17.28 vs 2.20`
+- even the best `v25.3` window was weaker than the best `v25.2` windows:
+  - `wave_reached: 59.14 vs 60.42`
+  - `reached_wave_63: 0.3144 vs 0.4080 / 0.4134`
+  - `jad_kill_rate: 0.0000358 vs 0.0004748 / 0.0006846`
+
+Comparison to `v25.1` (`zyhv95mi`):
+- `v25.1` still has the strongest late-game profile of the `v25.x` line
+- `v25.3` underperformed `v25.1` both at peak and at the end
+
+Analysis:
+- this run strongly suggests the new melee generic prayer reward was a net
+  negative
+- the policy became more conservative, not more effective:
+  - fewer no-prayer hits and lower damage taken
+  - but much lower offensive tempo, much lower blocked-damage output, and much
+    worse resource quality
+- the likely failure mode is that rewarding blocked melee hits through the same
+  generic positive path made defensive melee prayer behavior too valuable
+  relative to staying aggressive and converting waves efficiently
+- the ready-idle gate was not enough to fully stop this; the policy still found
+  a more defensive attractor
+
+What worked:
+- the codebase is still capable of producing real `wave 63` / Jad windows under
+  the current LOS/healer/Jad logic
+- the best `v25.3` checkpoint is usable as a replay/debug target for studying
+  the collapse pattern
+
+What did not work:
+- keeping the `v25.2` recipe and simply adding melee into the generic prayer
+  reward
+- the change hurt both the ceiling and the stability of the run
+
+Recommendation:
+- the checkpoint-refresh idea is correct
+- the cold-start test is also correct
+- but I do not recommend carrying the `v25.3` melee-reward change into those
+  tests
+- the better next sequence is:
+  - `v25.4 = v25.2 recipe + frt9a1j4/0000003146776576.bin`
+  - `v26 = cold-start on exact v25.2 recipe`
+  - `v26.1 = warm-start from the best v26 checkpoint`
+- rationale:
+  - `v25.3` did not beat `v25.2` even at its best checkpoint, so it is a weak
+    base recipe for the checkpoint-refresh experiment
+  - `u58coupx` may still be stale, but `v25.3` does not isolate that question
+    cleanly because the recipe itself regressed
+
+## v25.2 (2026-04-12, completed)
+
+Actual run:
+- `frt9a1j4`
+- local run log:
+  - [frt9a1j4.json](/home/joe/projects/runescape-rl/codex3/pufferlib_4/logs/fight_caves/frt9a1j4.json)
+
+Status:
+- completed normally
+
+Goal:
+- keep the full `v25.1` recipe intact
+- add a real Jad-specific positive prayer reward so Jad blocks are rewarded
+  more strongly than other NPC prayer blocks
+- keep the reward timing correct for Jad's deferred prayer lock:
+  - no reward on attack-start tick
+  - no reward on prayer-lock tick
+  - reward only on resolve tick
+
+Config versus `v25.1`:
+- one `.ini` delta only:
+  - `w_correct_jad_prayer: 0.0 -> 2.0`
+- all other reward weights, shaping values, PPO/runtime values, warm-start,
+  observation contract, LOS/healer fixes, and the `v25.1` ready-idle prayer
+  gate are unchanged
+
+Code versus `v25.1`:
+- `w_correct_jad_prayer` is now fully wired through the reward stack:
+  - config parsing
+  - training-env parameter plumbing
+  - core reward computation
+  - viewer reward parsing / overlay
+- Jad-specific positive reward uses the same ready-idle gate as the other
+  positive blocked-prayer rewards
+- no change to Jad attack timing itself:
+  - Jad melee still snapshots prayer immediately and rewards on resolve tick
+  - Jad ranged/magic still locks prayer 1 tick after attack start and rewards
+    only on the later resolve tick using that locked prayer
+
+Exact difference versus `v25.1`:
+- `w_correct_jad_prayer = 2.0`
+- resulting positive blocked-prayer totals when not idle:
+  - `Tok-Xil` / `Ket-Zek`: `0.25 + 1.5 = 1.75`
+  - `Jad`: `0.25 + 2.0 = 2.25`
+- so Jad correct blocks now pay `0.5` more than the other prayer-critical NPCs
+
+Exact active config:
+- run setup: `load_model_path=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/u58coupx/0000001311768576.bin`, corrected `Masori (f) + TBow` combat model, `policy_obs=106`, `puffer_obs=142`
+- reward weights: `w_damage_dealt=0.7`, `w_attack_attempt=0.2`, `w_damage_taken=-0.6`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_damage=2.0`, `w_jad_kill=50.0`, `w_player_death=-20.0`, `w_cave_complete=100.0`, `w_correct_jad_prayer=2.0`, `w_correct_danger_prayer=0.25`, `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`
+- shaping: `shape_food_full_waste_penalty=-6.5`, `shape_food_waste_scale=-1.2`, `shape_food_no_threat_penalty=0.0`, `shape_pot_full_waste_penalty=-6.5`, `shape_pot_waste_scale=-1.2`, `shape_pot_no_threat_penalty=0.0`, `shape_wrong_prayer_penalty=-1.25`, `shape_npc_specific_prayer_bonus=1.5`, `shape_npc_melee_penalty=-0.3`, `shape_wasted_attack_penalty=-0.1`, `shape_wave_stall_start=500`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_ramp_interval=50`, `shape_wave_stall_cap=-2.0`, `shape_not_attacking_grace_ticks=2`, `shape_not_attacking_penalty=-0.01`, `shape_kiting_reward=1.0`, `shape_kiting_min_dist=7`, `shape_kiting_max_dist=10`, `shape_unnecessary_prayer_penalty=-0.2`, `shape_jad_heal_penalty=-0.1`, `shape_resource_threat_window=2`
+- runtime: `total_agents=4096`, `num_buffers=2`, `total_timesteps=5_000_000_000`, `learning_rate=0.0003`, `gamma=0.999`, `gae_lambda=0.95`, `clip_coef=0.2`, `vf_coef=0.5`, `ent_coef=0.01`, `max_grad_norm=0.5`, `horizon=256`, `minibatch_size=4096`, `hidden_size=256`, `num_layers=2`
+
+Results (`frt9a1j4`):
+- completed normally
+- final logged trainer step:
+  - `4,999,610,368 / 5,000,000,000`
+- runtime:
+  - `2553.1s`
+- throughput:
+  - `1.87M SPS`
+
+Final metrics:
+- `score = 0.0`
+- `cave_complete_rate = 0.0`
+- `wave_reached = 57.70`
+- `max_wave = 63`
+- `most_npcs_slayed = 277`
+- `episode_return = 28647.16`
+- `episode_length = 7512.73`
+- `reached_wave_30 = 0.9608`
+- `cleared_wave_30 = 0.9542`
+- `reached_wave_31 = 0.9542`
+- `reached_wave_63 = 0.0588`
+- `jad_kill_rate = 0.0`
+- `prayer_uptime = 0.7013`
+- `prayer_uptime_melee = 0.2203`
+- `prayer_uptime_range = 0.2524`
+- `prayer_uptime_magic = 0.2287`
+- `correct_prayer = 2162.81`
+- `wrong_prayer_hits = 325.44`
+- `no_prayer_hits = 26.51`
+- `damage_blocked = 161545.83`
+- `dmg_taken_avg = 6189.04`
+- `attack_when_ready_rate = 0.9549`
+- `pots_used = 27.90`
+- `avg_prayer_on_pot = 0.5833`
+- `pots_wasted = 9.79`
+- `food_eaten = 10.08`
+- `avg_hp_on_food = 0.5353`
+- `food_wasted = 2.20`
+- `tokxil_melee_ticks = 2.31`
+- `ketzek_melee_ticks = 3.20`
+
+Key progression points:
+- sampled `wave_reached >= 30` by `629.1M`
+- sampled `wave_reached >= 35` by `629.1M`
+- sampled `wave_reached >= 40` by `629.1M`
+- sampled `wave_reached >= 45` by `629.1M`
+- sampled `wave_reached >= 50` by `629.1M`
+- sampled `wave_reached >= 55` by `1.876B`
+- sampled `wave_reached >= 60` by `1.876B`
+- sampled `max_wave = 63` by `1.876B`
+- first non-zero `cave_complete_rate` window appeared by `1.876B`
+- best sampled average-wave window was around `1.876B`:
+  - `wave_reached = 60.42`
+  - `episode_return = 30778.45`
+  - `reached_wave_63 = 0.4080`
+  - `jad_kill_rate = 0.000475`
+  - `cave_complete_rate = 0.000340`
+- best sampled Jad / clear window was around `3.126B`:
+  - `wave_reached = 59.66`
+  - `episode_return = 30435.22`
+  - `reached_wave_63 = 0.4134`
+  - `jad_kill_rate = 0.000685`
+  - `cave_complete_rate = 0.000403`
+- the run decayed steadily after that:
+  - `4.376B`: `wave_reached = 58.98`, `reached_wave_63 = 0.1799`
+  - final: `wave_reached = 57.70`, `reached_wave_63 = 0.0588`
+- nearest eval checkpoints to the important windows:
+  - early breakout:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000000630194176.bin`
+  - first `60+` window / best average-wave window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000001888485376.bin`
+  - best sampled Jad / clear window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000003146776576.bin`
+  - late-decay window:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000004352638976.bin`
+  - final:
+    - `/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/frt9a1j4/0000004999610368.bin`
+
+Comparison to `v25.1` (`zyhv95mi`):
+- `wave_reached: 57.70 vs 60.16`
+- `episode_return: 28647.2 vs 30942.2`
+- `episode_length: 7512.7 vs 8045.7`
+- `reached_wave_63: 0.0588 vs 0.1329`
+- `damage_blocked: 161546 vs 179323`
+- `correct_prayer: 2162.8 vs 2378.3`
+- `wrong_prayer_hits: 325.4 vs 247.1`
+- `no_prayer_hits: 26.5 vs 25.9`
+- `attack_when_ready_rate: 0.9549 vs 0.9504`
+- `prayer_switches: 2678.1 vs 2867.4`
+- `pots_used: 27.9 vs 30.6`
+- `avg_prayer_on_pot: 0.5833 vs 0.5937`
+- `pots_wasted: 9.79 vs 10.37`
+- `food_eaten: 10.08 vs 10.43`
+- `food_wasted: 2.20 vs 0.77`
+
+Comparison to `v24` (`h2kpwkdk`):
+- `score: 0.0 vs 0.0217`
+- `cave_complete_rate: 0.0 vs 0.0217`
+- `wave_reached: 57.70 vs 61.97`
+- `reached_wave_63: 0.0588 vs 0.3582`
+- `jad_kill_rate: 0.0 vs 0.0149`
+- `damage_blocked: 161546 vs 187217`
+- `prayer_uptime_magic: 0.2287 vs 0.5296`
+- `prayer_switches: 2678.1 vs 651.3`
+- `avg_prayer_on_pot: 0.5833 vs 0.3760`
+- `pots_wasted: 9.79 vs 3.07`
+- `attack_when_ready_rate: 0.9549 vs 0.7500`
+
+Analysis:
+- `v25.2` did not improve the final policy over `v25.1`
+- the final run regressed materially on average wave, Jad-wave reach, blocked
+  damage, and overall prayer correctness
+- however, it did produce an important new signal:
+  - unlike `v25.1`, it sampled small but non-zero `cave_complete_rate`
+  - so the Jad-specific reward did appear to increase rare successful
+    late-game conversion in the mid-run windows
+- the problem is that this benefit was not stable and did not survive to the
+  final checkpoint
+
+Interpretation:
+- the extra Jad reward looks strong enough to create some early/mid-run
+  successful Jad trajectories
+- but at `2.0` it likely over-pulled the policy toward Jad-specific prayer
+  behavior at the expense of the rest of the cave
+- the final metric signature supports that:
+  - attack tempo remained excellent
+  - resource usage improved slightly versus `v25.1`
+  - but overall prayer correctness and blocked damage got worse
+  - the `60+` plateau weakened instead of strengthening
+
+Important correctness note:
+- `jad_kill_rate` and `cave_complete_rate` still diverge in this run
+- sampled windows show `jad_kill_rate > cave_complete_rate`
+- that should not happen if Jad death immediately implies cave completion
+- so the previously identified Jad/healer completion bug is still present and
+  still contaminates late-game analytics
+- `cave_complete_rate` remains the authoritative metric for actual clears
+
+Findings:
+- the Jad-specific reward is active and behaviorally meaningful
+- `w_correct_jad_prayer = 2.0` is too aggressive as a full-run setting
+- the current backend still has an unresolved correctness bug:
+  - Jad can die without the episode immediately terminating as cave complete
+- that bug matters more now because `v25.2` finally produced some real
+  corrected-mechanics clear signals, so metric/reporting fidelity is important
+
+Recommendation for `v25.3`:
+- first fix cave completion semantics:
+  - Jad death should immediately imply `TERMINAL_CAVE_COMPLETE`
+  - remaining Yt-HurKot healers should not keep the episode alive after Jad dies
+- after that, retest Jad reward at a smaller value
+  - recommended range: `0.5` to `1.0`
+  - keep all other `v25.1` / `v25.2` settings unchanged
+- do not keep `w_correct_jad_prayer = 2.0` as-is for the next full run
 
 ## v25.1 (2026-04-12, completed)
 

@@ -59,6 +59,20 @@ static void init_manual_test_state(FcState* state) {
     state->player.attack_target_idx = -1;
 }
 
+static void clear_manual_tick_signals(FcState* state) {
+    state->correct_jad_prayer = 0;
+    state->wrong_jad_prayer = 0;
+    state->correct_danger_prayer = 0;
+    state->wrong_danger_prayer = 0;
+    state->attack_attempt_this_tick = 0;
+    state->jad_heal_procs_this_tick = 0;
+
+    state->player.hit_source_npc_type = 0;
+    state->player.hit_locked_prayer_this_tick = 0;
+    state->player.hit_blocked_this_tick = 0;
+    state->player.hit_landed_this_tick = 0;
+}
+
 /* ====================================================================== */
 /* Test 1: Observation normalization                                       */
 /* ====================================================================== */
@@ -681,6 +695,163 @@ static void test_ready_idle_prayer_gate(void) {
 }
 
 /* ====================================================================== */
+/* Test 10: Jad prayer reward timing                                       */
+/* ====================================================================== */
+
+static void test_jad_prayer_reward_timing(void) {
+    printf("\n=== Jad Prayer Reward Timing ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+    FcPendingHit* queued;
+
+    init_manual_test_state(&state);
+    fc_npc_spawn(&state.npcs[0], NPC_TZTOK_JAD, 12, 10, 0);
+    state.player.prayer = PRAYER_PROTECT_MAGIC;
+    params.w_correct_jad_prayer = 2.0f;
+    fc_reward_runtime_reset(&runtime);
+
+    fc_queue_pending_hit(state.player.pending_hits,
+                         &state.player.num_pending_hits,
+                         FC_MAX_PENDING_HITS,
+                         97, 2, ATTACK_MAGIC, 0, 0);
+    queued = &state.player.pending_hits[0];
+    queued->prayer_snapshot = -1;
+    queued->prayer_lock_tick = state.tick + 1;
+
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Queued Jad attack gives no prayer reward before lock/resolve");
+    if (fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f",
+                 b.correct_jad_prayer, b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 1;
+    fc_resolve_player_pending_hits(&state);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Jad prayer lock tick still gives no reward before impact");
+    if (queued->prayer_snapshot == PRAYER_PROTECT_MAGIC &&
+        fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "snap=%d jad=%.4f danger=%.4f",
+                 queued->prayer_snapshot, b.correct_jad_prayer,
+                 b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 2;
+    fc_resolve_player_pending_hits(&state);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Jad prayer reward lands on resolve tick after deferred lock");
+    if (fabsf(b.correct_jad_prayer - 2.0f) < 0.0001f &&
+        fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        state.player.hit_landed_this_tick == 1 &&
+        state.player.hit_locked_prayer_this_tick == PRAYER_PROTECT_MAGIC) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f landed=%d prayer=%d",
+                 b.correct_jad_prayer, b.correct_danger_prayer,
+                 state.player.hit_landed_this_tick,
+                 state.player.hit_locked_prayer_this_tick);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 3;
+    state.correct_jad_prayer = 1;
+    state.correct_danger_prayer = 1;
+    state.player.hit_landed_this_tick = 1;
+    state.player.hit_blocked_this_tick = 1;
+    state.player.hit_locked_prayer_this_tick = PRAYER_PROTECT_MAGIC;
+    state.player.hit_source_npc_type = NPC_TZTOK_JAD;
+    runtime.ticks_since_attack = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Ready-idle gate suppresses Jad prayer reward just like other prayer rewards");
+    if (fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f",
+                 b.correct_jad_prayer, b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
+/* Test 11: Late-wave milestone and Jad kill bonuses                      */
+/* ====================================================================== */
+
+static void test_late_wave_and_jad_bonuses(void) {
+    printf("\n=== Late-Wave And Jad Bonuses ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+    float obs[FC_OBS_SIZE];
+
+    init_manual_test_state(&state);
+    fc_reward_runtime_reset(&runtime);
+    params.shape_reach_wave_60_bonus = 60.0f;
+    params.shape_reach_wave_61_bonus = 90.0f;
+    params.shape_reach_wave_62_bonus = 120.0f;
+    params.shape_reach_wave_63_bonus = 200.0f;
+    params.shape_jad_kill_bonus = 500.0f;
+
+    state.current_wave = 60;
+    state.wave_just_cleared = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Reaching wave 60 pays configured late-wave bonus");
+    if (fabsf(b.late_wave_bonus - 60.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "late_wave_bonus = %.4f", b.late_wave_bonus);
+        FAIL(err);
+    }
+
+    state.current_wave = 63;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Reaching wave 63 pays the wave-63 milestone bonus");
+    if (fabsf(b.late_wave_bonus - 200.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "late_wave_bonus = %.4f", b.late_wave_bonus);
+        FAIL(err);
+    }
+
+    state.jad_killed = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Jad death pays the configured extra Jad kill bonus");
+    if (fabsf(b.jad_kill_bonus - 500.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_kill_bonus = %.4f", b.jad_kill_bonus);
+        FAIL(err);
+    }
+
+    fc_write_obs(&state, obs);
+    TEST("Wave number is already present in observation metadata");
+    if (obs[FC_OBS_META_START + FC_OBS_META_WAVE] > 0.0f) PASS();
+    else {
+        snprintf(err, sizeof(err), "wave_obs = %.4f",
+                 obs[FC_OBS_META_START + FC_OBS_META_WAVE]);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
 /* Main                                                                    */
 /* ====================================================================== */
 
@@ -700,6 +871,8 @@ int main(void) {
     test_player_attack_requires_los();
     test_jad_healer_response();
     test_ready_idle_prayer_gate();
+    test_jad_prayer_reward_timing();
+    test_late_wave_and_jad_bonuses();
 
     printf("\n============================================================\n");
     printf("RESULTS: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);

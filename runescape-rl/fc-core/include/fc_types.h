@@ -374,14 +374,12 @@ typedef struct {
     int jad_heal_procs_this_tick;   /* number of Yt-HurKot heal procs that restored Jad HP */
 
     /* Episode-level analytics (cumulative, zeroed on fc_reset via memset) */
-    int ep_ticks_praying;       /* ticks with any prayer active */
     int ep_ticks_pray_melee;    /* ticks with protect melee active */
     int ep_ticks_pray_range;    /* ticks with protect range active */
     int ep_ticks_pray_magic;    /* ticks with protect magic active */
     int ep_correct_blocks;      /* hits correctly blocked by matching prayer */
     int ep_wrong_prayer_hits;   /* hits where prayer active but wrong type */
     int ep_no_prayer_hits;      /* hits where no prayer was active */
-    int ep_hits_total;          /* total hits resolved against player */
     int ep_damage_blocked;      /* total damage prevented by correct prayer */
     int ep_prayer_switches;     /* number of prayer changes */
     int ep_pots_used;           /* prayer pot doses consumed */
@@ -396,8 +394,6 @@ typedef struct {
     int ep_attack_ready_ticks;  /* ticks where attack cooldown was ready */
     int ep_attack_attempt_ticks;/* ready ticks where a real attack fired */
     int ep_reached_wave_30;     /* 1 if episode reached wave 30 */
-    int ep_cleared_wave_30;     /* 1 if episode cleared wave 30 */
-    int ep_reached_wave_31;     /* 1 if episode reached wave 31 */
     int ep_reached_wave_63;     /* 1 if episode reached Jad wave */
     int ep_jad_killed;          /* 1 if Jad died at any point this episode */
 } FcState;

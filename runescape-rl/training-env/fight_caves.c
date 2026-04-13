@@ -28,20 +28,16 @@ int main(void) {
         env.w_jad_kill = defaults.w_jad_kill;
         env.w_player_death = defaults.w_player_death;
         env.w_cave_complete = defaults.w_cave_complete;
+        env.w_correct_jad_prayer = defaults.w_correct_jad_prayer;
         env.w_correct_danger_prayer = defaults.w_correct_danger_prayer;
-        env.w_wrong_danger_prayer = defaults.w_wrong_danger_prayer;
         env.w_invalid_action = defaults.w_invalid_action;
-        env.w_movement = defaults.w_movement;
-        env.w_idle = defaults.w_idle;
         env.w_tick_penalty = defaults.w_tick_penalty;
 
         env.shape_food_full_waste_penalty = defaults.shape_food_full_waste_penalty;
         env.shape_food_waste_scale = defaults.shape_food_waste_scale;
-        env.shape_food_safe_hp_threshold = defaults.shape_food_safe_hp_threshold;
         env.shape_food_no_threat_penalty = defaults.shape_food_no_threat_penalty;
         env.shape_pot_full_waste_penalty = defaults.shape_pot_full_waste_penalty;
         env.shape_pot_waste_scale = defaults.shape_pot_waste_scale;
-        env.shape_pot_safe_prayer_threshold = defaults.shape_pot_safe_prayer_threshold;
         env.shape_pot_no_threat_penalty = defaults.shape_pot_no_threat_penalty;
         env.shape_wrong_prayer_penalty = defaults.shape_wrong_prayer_penalty;
         env.shape_npc_specific_prayer_bonus = defaults.shape_npc_specific_prayer_bonus;
@@ -83,10 +79,10 @@ int main(void) {
             env.actions[3] = (rand() % 8 == 0) ? (float)(rand() % 3) : 0.0f;
             env.actions[4] = (rand() % 8 == 0) ? (float)(rand() % 2) : 0.0f;
             c_step(&env);
+            total_reward += env.rewards[0];
             ep_ticks++;
         }
         total_ticks += ep_ticks;
-        total_reward += env.ep_return;
         if (env.state.current_wave > max_wave) max_wave = env.state.current_wave;
     }
 
@@ -100,8 +96,8 @@ int main(void) {
     printf("  Avg reward:  %.2f\n", total_reward / episodes);
     printf("  Max wave:    %d\n", max_wave);
     printf("  Time:        %.2fs\n", elapsed);
-    printf("  Log: score=%.1f ep_return=%.1f wave=%.1f n=%.0f\n",
-           env.log.score, env.log.episode_return, env.log.wave_reached, env.log.n);
+    printf("  Log: ep_len=%.1f wave=%.1f n=%.0f\n",
+           env.log.episode_length, env.log.wave_reached, env.log.n);
 
     c_close(&env);
     free(env.observations);

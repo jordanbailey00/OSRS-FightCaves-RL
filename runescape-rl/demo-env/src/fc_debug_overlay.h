@@ -394,8 +394,8 @@ static void dbg_draw_entity_info(const FcState* state, Camera3D camera) {
              p->total_damage_taken,
              p->total_food_eaten, p->total_potions_used, state->ep_prayer_switches);
     DrawText(buf, panel_x + 4, y, 10, DBG_COL_DIM); y += lh;
-    snprintf(buf, sizeof(buf), "Wave30:%d Clear30:%d Wave31:%d",
-             state->ep_reached_wave_30, state->ep_cleared_wave_30, state->ep_reached_wave_31);
+    snprintf(buf, sizeof(buf), "Wave30:%d Wave63:%d Jad:%d",
+             state->ep_reached_wave_30, state->ep_reached_wave_63, state->ep_jad_killed);
     DrawText(buf, panel_x + 4, y, 10, DBG_COL_DIM); y += lh;
 
     /* NPC info panels (compact, for each active NPC) */
@@ -809,9 +809,8 @@ static int dbg_draw_panel_tabs(const FcState* state,
                  reward_runtime->ticks_in_wave,
                  reward_runtime->ticks_since_attack);
         DrawText(buf, x, by, 8, dbg_reward_color(b->total)); by += sh;
-        snprintf(buf, sizeof(buf), "grace:%d lowpray<=%.0f%% stall:%d",
+        snprintf(buf, sizeof(buf), "grace:%d stall:%d",
                  reward_params->shape_not_attacking_grace_ticks,
-                 reward_params->shape_low_prayer_pot_threshold * 100.0f,
                  reward_params->shape_wave_stall_start);
         DrawText(buf, x, by, 8, DBG_COL_LABEL); by += sh;
         snprintf(buf, sizeof(buf), "threat any:%d imm:%d melee:%d",
@@ -835,13 +834,9 @@ static int dbg_draw_panel_tabs(const FcState* state,
                 {"death", b->player_death},
                 {"cave_done", b->cave_complete},
                 {"food_waste", b->food_waste},
-                {"food_safe", b->food_safe},
                 {"pot_waste", b->pot_waste},
-                {"pot_safe", b->pot_safe},
-                {"lowpray", b->low_prayer_no_pot},
-                {"pot_low", b->low_prayer_pot},
+                {"jad_ok", b->correct_jad_prayer},
                 {"danger_ok", b->correct_danger_prayer},
-                {"danger_bad_w", b->wrong_danger_prayer_weight},
                 {"danger_bad_s", b->wrong_danger_prayer_shape},
                 {"npc_pray", b->npc_specific_prayer},
                 {"melee_pen", b->melee_pressure},
@@ -851,9 +846,9 @@ static int dbg_draw_panel_tabs(const FcState* state,
                 {"kite", b->kiting},
                 {"pray_waste", b->unnecessary_prayer},
                 {"jad_heal", b->jad_heal_penalty},
+                {"late_wave", b->late_wave_bonus},
+                {"jad_bonus", b->jad_kill_bonus},
                 {"invalid", b->invalid_action},
-                {"movement", b->movement},
-                {"idle", b->idle},
                 {"tick_pen", b->tick_penalty},
             };
             int term_count = (int)(sizeof(terms) / sizeof(terms[0]));

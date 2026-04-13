@@ -50,7 +50,6 @@ float g_max_wave_ever = 0;
 float g_most_npcs_ever = 0;
 
 /* Per-logging-period analytics (accumulated across all envs, averaged in my_log) */
-float g_sum_prayer_uptime = 0;
 float g_sum_prayer_uptime_melee = 0;
 float g_sum_prayer_uptime_range = 0;
 float g_sum_prayer_uptime_magic = 0;
@@ -70,8 +69,6 @@ float g_sum_pots_wasted = 0;
 float g_sum_tokxil_melee_ticks = 0;
 float g_sum_ketzek_melee_ticks = 0;
 float g_sum_reached_wave_30 = 0;
-float g_sum_cleared_wave_30 = 0;
-float g_sum_reached_wave_31 = 0;
 float g_sum_reached_wave_63 = 0;
 float g_sum_jad_kill_rate = 0;
 float g_n_analytics = 0;
@@ -81,8 +78,6 @@ float g_n_analytics = 0;
 /* ======================================================================== */
 
 typedef struct {
-    float score;
-    float episode_return;
     float episode_length;
     float wave_reached;
     float n;  /* must be last */
@@ -123,30 +118,18 @@ typedef struct FightCaves {
     float w_jad_kill;
     float w_player_death;
     float w_cave_complete;
-    float w_food_used;
-    float w_food_used_well;
-    float w_prayer_pot_used;
     float w_correct_jad_prayer;
-    float w_wrong_jad_prayer;
-    float w_correct_danger_prayer;   /* correct prayer vs non-Jad NPCs */
-    float w_wrong_danger_prayer;     /* wrong/no prayer vs dangerous NPCs */
+    float w_correct_danger_prayer;   /* correct prayer vs ranged/magic danger hits */
     float w_invalid_action;
-    float w_movement;
-    float w_idle;
     float w_tick_penalty;
 
     /* Configurable shaping terms (kept separate from reward-feature weights) */
     float shape_food_full_waste_penalty;
     float shape_food_waste_scale;
-    float shape_food_safe_hp_threshold;
     float shape_food_no_threat_penalty;
     float shape_pot_full_waste_penalty;
     float shape_pot_waste_scale;
-    float shape_pot_safe_prayer_threshold;
     float shape_pot_no_threat_penalty;
-    float shape_low_prayer_pot_threshold;
-    float shape_low_prayer_no_pot_penalty;
-    float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
@@ -157,26 +140,20 @@ typedef struct FightCaves {
     float shape_kiting_reward;
     float shape_unnecessary_prayer_penalty;
     float shape_jad_heal_penalty;
+    float shape_reach_wave_60_bonus;
+    float shape_reach_wave_61_bonus;
+    float shape_reach_wave_62_bonus;
+    float shape_reach_wave_63_bonus;
+    float shape_jad_kill_bonus;
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
     int shape_kiting_max_dist;
     int shape_wave_stall_start;
     int shape_wave_stall_ramp_interval;
     int shape_not_attacking_grace_ticks;
-
-    /* Curriculum */
-    int curriculum_wave;         /* 0 = always wave 1, >0 = X% of episodes start at this wave */
-    float curriculum_pct;        /* fraction of episodes that start at curriculum_wave (0.0-1.0) */
-    int curriculum_wave_2;       /* optional second late-wave curriculum bucket */
-    float curriculum_pct_2;
-    int curriculum_wave_3;       /* optional third late-wave curriculum bucket */
-    float curriculum_pct_3;
-    int disable_movement;        /* 1 = force idle movement, agent can't walk/run */
     int ticks_since_attack;      /* ticks since agent last dealt damage */
     int ticks_in_wave;           /* ticks since current wave started */
 
-    /* Episode tracking */
-    float ep_return;
     int ep_length;
 
     /* RNG seed counter (increments each episode for variety) */
@@ -214,24 +191,17 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.w_jad_kill = env->w_jad_kill;
     params.w_player_death = env->w_player_death;
     params.w_cave_complete = env->w_cave_complete;
+    params.w_correct_jad_prayer = env->w_correct_jad_prayer;
     params.w_correct_danger_prayer = env->w_correct_danger_prayer;
-    params.w_wrong_danger_prayer = env->w_wrong_danger_prayer;
     params.w_invalid_action = env->w_invalid_action;
-    params.w_movement = env->w_movement;
-    params.w_idle = env->w_idle;
     params.w_tick_penalty = env->w_tick_penalty;
 
     params.shape_food_full_waste_penalty = env->shape_food_full_waste_penalty;
     params.shape_food_waste_scale = env->shape_food_waste_scale;
-    params.shape_food_safe_hp_threshold = env->shape_food_safe_hp_threshold;
     params.shape_food_no_threat_penalty = env->shape_food_no_threat_penalty;
     params.shape_pot_full_waste_penalty = env->shape_pot_full_waste_penalty;
     params.shape_pot_waste_scale = env->shape_pot_waste_scale;
-    params.shape_pot_safe_prayer_threshold = env->shape_pot_safe_prayer_threshold;
     params.shape_pot_no_threat_penalty = env->shape_pot_no_threat_penalty;
-    params.shape_low_prayer_pot_threshold = env->shape_low_prayer_pot_threshold;
-    params.shape_low_prayer_no_pot_penalty = env->shape_low_prayer_no_pot_penalty;
-    params.shape_low_prayer_pot_reward = env->shape_low_prayer_pot_reward;
     params.shape_wrong_prayer_penalty = env->shape_wrong_prayer_penalty;
     params.shape_npc_specific_prayer_bonus = env->shape_npc_specific_prayer_bonus;
     params.shape_npc_melee_penalty = env->shape_npc_melee_penalty;
@@ -242,6 +212,11 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_kiting_reward = env->shape_kiting_reward;
     params.shape_unnecessary_prayer_penalty = env->shape_unnecessary_prayer_penalty;
     params.shape_jad_heal_penalty = env->shape_jad_heal_penalty;
+    params.shape_reach_wave_60_bonus = env->shape_reach_wave_60_bonus;
+    params.shape_reach_wave_61_bonus = env->shape_reach_wave_61_bonus;
+    params.shape_reach_wave_62_bonus = env->shape_reach_wave_62_bonus;
+    params.shape_reach_wave_63_bonus = env->shape_reach_wave_63_bonus;
+    params.shape_jad_kill_bonus = env->shape_jad_kill_bonus;
 
     params.shape_resource_threat_window = env->shape_resource_threat_window;
     params.shape_kiting_min_dist = env->shape_kiting_min_dist;
@@ -251,47 +226,6 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_not_attacking_grace_ticks = env->shape_not_attacking_grace_ticks;
 
     return params;
-}
-
-static int fc_pick_curriculum_wave(FightCaves* env) {
-    const int waves[3] = {
-        env->curriculum_wave,
-        env->curriculum_wave_2,
-        env->curriculum_wave_3,
-    };
-    const float pcts[3] = {
-        env->curriculum_pct,
-        env->curriculum_pct_2,
-        env->curriculum_pct_3,
-    };
-
-    float roll = fc_rng_float(&env->state);
-    float cumulative = 0.0f;
-    for (int i = 0; i < 3; i++) {
-        if (waves[i] <= 1 || pcts[i] <= 0.0f) continue;
-        cumulative += pcts[i];
-        if (cumulative > 1.0f) cumulative = 1.0f;
-        if (roll < cumulative) {
-            return waves[i];
-        }
-    }
-
-    return 1;
-}
-
-static void fc_apply_curriculum_wave(FightCaves* env, int target_wave) {
-    if (target_wave <= 1) return;
-    if (target_wave > FC_NUM_WAVES) target_wave = FC_NUM_WAVES;
-
-    for (int i = 0; i < FC_MAX_NPCS; i++) {
-        env->state.npcs[i].active = 0;
-        env->state.npcs[i].is_dead = 0;
-    }
-    env->state.npcs_remaining = 0;
-    env->state.current_wave = target_wave;
-    fc_wave_spawn(&env->state, target_wave);
-    env->state.player.current_hp = env->state.player.max_hp;
-    env->state.player.current_prayer = env->state.player.max_prayer;
 }
 
 /* ======================================================================== */
@@ -324,11 +258,6 @@ void c_reset(FightCaves* env) {
     env->seed_counter++;
     fc_reset(&env->state, env->seed_counter);
 
-    /* Curriculum: optionally start at a later wave from one of several
-     * scaffold buckets. Any leftover probability starts from wave 1. */
-    fc_apply_curriculum_wave(env, fc_pick_curriculum_wave(env));
-
-    env->ep_return = 0.0f;
     env->ep_length = 0;
     env->ticks_since_attack = 0;
     env->ticks_in_wave = 0;
@@ -351,17 +280,12 @@ void c_step(FightCaves* env) {
     }
     /* Heads 5+6 (walk-to-tile) always 0 — not used in v1 */
 
-    /* Force idle movement if disabled */
-    if (env->disable_movement)
-        actions[0] = 0;  /* FC_MOVE_IDLE */
-
     /* Step the game simulation */
     fc_step(&env->state, actions);
 
     /* Compute reward */
     float reward = fc_puffer_compute_reward(env);
     env->rewards[0] = reward;
-    env->ep_return += reward;
     env->ep_length++;
 
     /* Write observations BEFORE checking terminal — agent must see
@@ -371,13 +295,9 @@ void c_step(FightCaves* env) {
     /* Check terminal */
     if (fc_is_terminal(&env->state)) {
         env->terminals[0] = 1.0f;
-        env->log.score += (env->state.terminal == TERMINAL_CAVE_COMPLETE) ? 1.0f : 0.0f;
-        env->log.episode_return += env->ep_return;
         env->log.episode_length += (float)env->ep_length;
         env->log.wave_reached += (float)env->state.current_wave;
         /* Analytics globals (averaged in my_log) */
-        g_sum_prayer_uptime += (env->ep_length > 0)
-            ? (float)env->state.ep_ticks_praying / (float)env->ep_length : 0.0f;
         g_sum_prayer_uptime_melee += (env->ep_length > 0)
             ? (float)env->state.ep_ticks_pray_melee / (float)env->ep_length : 0.0f;
         g_sum_prayer_uptime_range += (env->ep_length > 0)
@@ -406,8 +326,6 @@ void c_step(FightCaves* env) {
         g_sum_tokxil_melee_ticks += (float)env->state.ep_tokxil_melee_ticks;
         g_sum_ketzek_melee_ticks += (float)env->state.ep_ketzek_melee_ticks;
         g_sum_reached_wave_30 += (float)env->state.ep_reached_wave_30;
-        g_sum_cleared_wave_30 += (float)env->state.ep_cleared_wave_30;
-        g_sum_reached_wave_31 += (float)env->state.ep_reached_wave_31;
         g_sum_reached_wave_63 += (float)env->state.ep_reached_wave_63;
         g_sum_jad_kill_rate += (float)env->state.ep_jad_killed;
         g_n_analytics += 1.0f;

@@ -226,7 +226,6 @@ typedef struct {
     int policy_episode_limit; /* 0 = unlimited auto-reset, >0 = stop after N episodes */
     int policy_episode_count; /* number of completed policy-pipe episodes */
     int start_wave;     /* 0 = wave 1 (default), >0 = skip to this wave on reset */
-    int disable_movement; /* 1 = force idle movement */
     FcRewardParams reward_params;
     FcRewardRuntime reward_runtime;
     FcRewardBreakdown reward_breakdown;
@@ -287,23 +286,16 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "w_jad_kill") == 0) params->w_jad_kill = strtof(value, NULL);
     else if (strcmp(key, "w_player_death") == 0) params->w_player_death = strtof(value, NULL);
     else if (strcmp(key, "w_cave_complete") == 0) params->w_cave_complete = strtof(value, NULL);
+    else if (strcmp(key, "w_correct_jad_prayer") == 0) params->w_correct_jad_prayer = strtof(value, NULL);
     else if (strcmp(key, "w_correct_danger_prayer") == 0) params->w_correct_danger_prayer = strtof(value, NULL);
-    else if (strcmp(key, "w_wrong_danger_prayer") == 0) params->w_wrong_danger_prayer = strtof(value, NULL);
     else if (strcmp(key, "w_invalid_action") == 0) params->w_invalid_action = strtof(value, NULL);
-    else if (strcmp(key, "w_movement") == 0) params->w_movement = strtof(value, NULL);
-    else if (strcmp(key, "w_idle") == 0) params->w_idle = strtof(value, NULL);
     else if (strcmp(key, "w_tick_penalty") == 0) params->w_tick_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_food_full_waste_penalty") == 0) params->shape_food_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_food_waste_scale") == 0) params->shape_food_waste_scale = strtof(value, NULL);
-    else if (strcmp(key, "shape_food_safe_hp_threshold") == 0) params->shape_food_safe_hp_threshold = strtof(value, NULL);
     else if (strcmp(key, "shape_food_no_threat_penalty") == 0) params->shape_food_no_threat_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_full_waste_penalty") == 0) params->shape_pot_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_waste_scale") == 0) params->shape_pot_waste_scale = strtof(value, NULL);
-    else if (strcmp(key, "shape_pot_safe_prayer_threshold") == 0) params->shape_pot_safe_prayer_threshold = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_no_threat_penalty") == 0) params->shape_pot_no_threat_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_low_prayer_pot_threshold") == 0) params->shape_low_prayer_pot_threshold = strtof(value, NULL);
-    else if (strcmp(key, "shape_low_prayer_no_pot_penalty") == 0) params->shape_low_prayer_no_pot_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_low_prayer_pot_reward") == 0) params->shape_low_prayer_pot_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_specific_prayer_bonus") == 0) params->shape_npc_specific_prayer_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);
@@ -314,6 +306,11 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "shape_kiting_reward") == 0) params->shape_kiting_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_unnecessary_prayer_penalty") == 0) params->shape_unnecessary_prayer_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_jad_heal_penalty") == 0) params->shape_jad_heal_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_reach_wave_60_bonus") == 0) params->shape_reach_wave_60_bonus = strtof(value, NULL);
+    else if (strcmp(key, "shape_reach_wave_61_bonus") == 0) params->shape_reach_wave_61_bonus = strtof(value, NULL);
+    else if (strcmp(key, "shape_reach_wave_62_bonus") == 0) params->shape_reach_wave_62_bonus = strtof(value, NULL);
+    else if (strcmp(key, "shape_reach_wave_63_bonus") == 0) params->shape_reach_wave_63_bonus = strtof(value, NULL);
+    else if (strcmp(key, "shape_jad_kill_bonus") == 0) params->shape_jad_kill_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_resource_threat_window") == 0) params->shape_resource_threat_window = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_min_dist") == 0) params->shape_kiting_min_dist = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_max_dist") == 0) params->shape_kiting_max_dist = (int)strtol(value, NULL, 10);
@@ -477,8 +474,6 @@ static void print_policy_episode_summary(const ViewerState* v) {
     const FcState* s = &v->state;
     const FcPlayer* p = &s->player;
     int episode_length = s->tick;
-    float prayer_uptime = (episode_length > 0)
-        ? (float)s->ep_ticks_praying / (float)episode_length : 0.0f;
     float prayer_uptime_melee = (episode_length > 0)
         ? (float)s->ep_ticks_pray_melee / (float)episode_length : 0.0f;
     float prayer_uptime_range = (episode_length > 0)
@@ -491,18 +486,13 @@ static void print_policy_episode_summary(const ViewerState* v) {
         ? (float)s->ep_pot_pre_prayer_sum / ((float)s->ep_pots_used * (float)p->max_prayer) : 0.0f;
     float avg_hp_on_food = (s->ep_food_eaten > 0 && p->max_hp > 0)
         ? (float)s->ep_food_pre_hp_sum / ((float)s->ep_food_eaten * (float)p->max_hp) : 0.0f;
-    float score = (s->terminal == TERMINAL_CAVE_COMPLETE) ? 1.0f : 0.0f;
 
     fprintf(stderr,
         "[policy-pipe] episode_summary "
         "{\"episode\":%d,\"seed\":%u,\"terminal\":\"%s\","
-        "\"env/score\":%.1f,"
-        "\"env/episode_return\":null,"
         "\"env/episode_length\":%d,"
         "\"env/wave_reached\":%d,"
-        "\"env/max_wave\":%d,"
         "\"env/most_npcs_slayed\":%d,"
-        "\"env/prayer_uptime\":%.6f,"
         "\"env/prayer_uptime_melee\":%.6f,"
         "\"env/prayer_uptime_range\":%.6f,"
         "\"env/prayer_uptime_magic\":%.6f,"
@@ -522,18 +512,15 @@ static void print_policy_episode_summary(const ViewerState* v) {
         "\"env/tokxil_melee_ticks\":%d,"
         "\"env/ketzek_melee_ticks\":%d,"
         "\"env/reached_wave_30\":%d,"
-        "\"env/cleared_wave_30\":%d,"
-        "\"env/reached_wave_31\":%d,"
+        "\"env/reached_wave_63\":%d,"
+        "\"env/jad_kill_rate\":%d,"
         "\"env/n\":1.0}\n",
         v->policy_episode_count + 1,
         v->seed,
         fc_terminal_name(s->terminal),
-        score,
         episode_length,
         s->current_wave,
-        s->current_wave,
         s->total_npcs_killed,
-        prayer_uptime,
         prayer_uptime_melee,
         prayer_uptime_range,
         prayer_uptime_magic,
@@ -553,8 +540,8 @@ static void print_policy_episode_summary(const ViewerState* v) {
         s->ep_tokxil_melee_ticks,
         s->ep_ketzek_melee_ticks,
         s->ep_reached_wave_30,
-        s->ep_cleared_wave_30,
-        s->ep_reached_wave_31);
+        s->ep_reached_wave_63,
+        s->ep_jad_killed);
 }
 
 static void reset_ep(ViewerState* v) {
@@ -1997,21 +1984,6 @@ static void draw_panel(ViewerState* v) {
         controls_y = wy + 26;
     }
 
-    /* ---- Disable movement toggle ---- */
-    {
-        int toggle_y = controls_y;
-        Rectangle tog_r = { (float)(px + 8), (float)toggle_y, (float)(PANEL_WIDTH - 16), 18.0f };
-        int tog_hover = CheckCollisionPointRec(GetMousePosition(), tog_r);
-        DrawRectangleRec(tog_r, tog_hover ? COL_TAB_HOVER : COL_TAB_INACTIVE);
-        DrawRectangleLinesEx(tog_r, 1, COL_PANEL_BORDER);
-        const char* tog_label = v->disable_movement ? "Movement: OFF" : "Movement: ON";
-        Color tog_col = v->disable_movement ? CLITERAL(Color){255,80,80,255} : COL_TEXT_GREEN;
-        DrawText(tog_label, px + 14, toggle_y + 4, 10, tog_col);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && tog_hover)
-            v->disable_movement = !v->disable_movement;
-        controls_y = toggle_y + 24;
-    }
-
     /* ---- Loadout dropdown ---- */
     {
         int ly = controls_y;
@@ -2492,7 +2464,6 @@ int main(int argc, char** argv) {
                 prev_npc_hits[ni] = v.state.npcs[ni].num_pending_hits;
 
             /* Step simulation */
-            if (v.disable_movement) v.actions[0] = 0;
             fc_step(&v.state, v.actions);
             update_reward_breakdown(&v);
             v.tick_frac = 0.0f;

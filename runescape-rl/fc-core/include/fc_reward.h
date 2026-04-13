@@ -19,24 +19,17 @@ typedef struct {
     float w_jad_kill;
     float w_player_death;
     float w_cave_complete;
+    float w_correct_jad_prayer;
     float w_correct_danger_prayer;
-    float w_wrong_danger_prayer;
     float w_invalid_action;
-    float w_movement;
-    float w_idle;
     float w_tick_penalty;
 
     float shape_food_full_waste_penalty;
     float shape_food_waste_scale;
-    float shape_food_safe_hp_threshold;
     float shape_food_no_threat_penalty;
     float shape_pot_full_waste_penalty;
     float shape_pot_waste_scale;
-    float shape_pot_safe_prayer_threshold;
     float shape_pot_no_threat_penalty;
-    float shape_low_prayer_pot_threshold;
-    float shape_low_prayer_no_pot_penalty;
-    float shape_low_prayer_pot_reward;
     float shape_wrong_prayer_penalty;
     float shape_npc_specific_prayer_bonus;
     float shape_npc_melee_penalty;
@@ -47,6 +40,11 @@ typedef struct {
     float shape_kiting_reward;
     float shape_unnecessary_prayer_penalty;
     float shape_jad_heal_penalty;
+    float shape_reach_wave_60_bonus;
+    float shape_reach_wave_61_bonus;
+    float shape_reach_wave_62_bonus;
+    float shape_reach_wave_63_bonus;
+    float shape_jad_kill_bonus;
 
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
@@ -86,11 +84,9 @@ typedef struct {
     float food_safe;
     float pot_waste;
     float pot_safe;
-    float low_prayer_no_pot;
-    float low_prayer_pot;
 
+    float correct_jad_prayer;
     float correct_danger_prayer;
-    float wrong_danger_prayer_weight;
     float wrong_danger_prayer_shape;
     float npc_specific_prayer;
     float melee_pressure;
@@ -100,10 +96,10 @@ typedef struct {
     float kiting;
     float unnecessary_prayer;
     float jad_heal_penalty;
+    float late_wave_bonus;
+    float jad_kill_bonus;
 
     float invalid_action;
-    float movement;
-    float idle;
     float tick_penalty;
 
     float total;
@@ -123,24 +119,17 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.w_jad_kill = 50.0f;
     params.w_player_death = -20.0f;
     params.w_cave_complete = 100.0f;
+    params.w_correct_jad_prayer = 0.0f;
     params.w_correct_danger_prayer = 0.25f;
-    params.w_wrong_danger_prayer = 0.0f;
     params.w_invalid_action = -0.1f;
-    params.w_movement = 0.0f;
-    params.w_idle = 0.0f;
     params.w_tick_penalty = -0.005f;
 
     params.shape_food_full_waste_penalty = -6.5f;
     params.shape_food_waste_scale = -1.2f;
-    params.shape_food_safe_hp_threshold = 1.0f;
     params.shape_food_no_threat_penalty = 0.0f;
     params.shape_pot_full_waste_penalty = -6.5f;
     params.shape_pot_waste_scale = -1.2f;
-    params.shape_pot_safe_prayer_threshold = 1.0f;
     params.shape_pot_no_threat_penalty = 0.0f;
-    params.shape_low_prayer_pot_threshold = 0.60f;
-    params.shape_low_prayer_no_pot_penalty = -0.01f;
-    params.shape_low_prayer_pot_reward = 0.15f;
     params.shape_wrong_prayer_penalty = -1.25f;
     params.shape_npc_specific_prayer_bonus = 1.5f;
     params.shape_npc_melee_penalty = -0.3f;
@@ -151,6 +140,11 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_kiting_reward = 1.0f;
     params.shape_unnecessary_prayer_penalty = -0.2f;
     params.shape_jad_heal_penalty = 0.0f;
+    params.shape_reach_wave_60_bonus = 0.0f;
+    params.shape_reach_wave_61_bonus = 0.0f;
+    params.shape_reach_wave_62_bonus = 0.0f;
+    params.shape_reach_wave_63_bonus = 0.0f;
+    params.shape_jad_kill_bonus = 0.0f;
 
     params.shape_resource_threat_window = 2;
     params.shape_kiting_min_dist = 5;
@@ -160,25 +154,6 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_not_attacking_grace_ticks = 2;
 
     return params;
-}
-
-static inline int fc_reward_low_prayer_threshold(
-        const FcPlayer* p, const FcRewardParams* params) {
-    int max_prayer_points;
-    int threshold_points;
-
-    if (p->max_prayer <= 0 || params->shape_low_prayer_pot_threshold <= 0.0f) {
-        return 0;
-    }
-
-    max_prayer_points = p->max_prayer / 10;
-    if (max_prayer_points <= 0) return 0;
-
-    threshold_points =
-        (int)(params->shape_low_prayer_pot_threshold * (float)max_prayer_points);
-    if (threshold_points < 0) threshold_points = 0;
-    if (threshold_points > max_prayer_points) threshold_points = max_prayer_points;
-    return threshold_points * 10;
 }
 
 static inline void fc_reward_runtime_reset(FcRewardRuntime* runtime) {
@@ -279,12 +254,8 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
             out.food_waste += params->shape_food_waste_scale *
                 ((float)wasted / (float)shark_heal);
 
-            if (max_hp > 0) {
-                float hp_frac = (float)pre_hp / (float)max_hp;
-                if (!out.threat_ctx.imminent_threat &&
-                    hp_frac >= params->shape_food_safe_hp_threshold) {
-                    out.food_safe += params->shape_food_no_threat_penalty;
-                }
+            if (!out.threat_ctx.imminent_threat) {
+                out.food_safe += params->shape_food_no_threat_penalty;
             }
         }
     }
@@ -292,7 +263,6 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     if (out.raw[FC_RWD_PRAYER_POT_USED] > 0.0f) {
         int pre_prayer = state->pre_drink_prayer;
         int max_prayer = p->max_prayer;
-        int low_prayer_threshold = fc_reward_low_prayer_threshold(p, params);
         if (pre_prayer >= max_prayer) {
             out.pot_waste += params->shape_pot_full_waste_penalty;
         } else {
@@ -303,26 +273,18 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
             out.pot_waste += params->shape_pot_waste_scale *
                 ((float)wasted / (float)pot_restore);
 
-            if (max_prayer > 0) {
-                float prayer_frac = (float)pre_prayer / (float)max_prayer;
-                if (!out.threat_ctx.any_threat &&
-                    prayer_frac >= params->shape_pot_safe_prayer_threshold) {
-                    out.pot_safe += params->shape_pot_no_threat_penalty;
-                }
+            if (!out.threat_ctx.any_threat) {
+                out.pot_safe += params->shape_pot_no_threat_penalty;
             }
-        }
-
-        if (low_prayer_threshold > 0 && pre_prayer <= low_prayer_threshold) {
-            out.low_prayer_pot = params->shape_low_prayer_pot_reward;
         }
     }
 
     if (!prayer_reward_idle) {
+        out.correct_jad_prayer =
+            out.raw[FC_RWD_CORRECT_JAD_PRAY] * params->w_correct_jad_prayer;
         out.correct_danger_prayer =
             out.raw[FC_RWD_CORRECT_DANGER_PRAY] * params->w_correct_danger_prayer;
     }
-    out.wrong_danger_prayer_weight =
-        out.raw[FC_RWD_WRONG_DANGER_PRAY] * params->w_wrong_danger_prayer;
     out.wrong_danger_prayer_shape =
         out.raw[FC_RWD_WRONG_DANGER_PRAY] * params->shape_wrong_prayer_penalty;
 
@@ -375,8 +337,6 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     }
 
     out.invalid_action = out.raw[FC_RWD_INVALID_ACTION] * params->w_invalid_action;
-    out.movement = out.raw[FC_RWD_MOVEMENT] * params->w_movement;
-    out.idle = out.raw[FC_RWD_IDLE] * params->w_idle;
     out.tick_penalty = out.raw[FC_RWD_TICK_PENALTY] * params->w_tick_penalty;
 
     if (out.raw[FC_RWD_ATTACK_ATTEMPT] > 0.0f) {
@@ -410,15 +370,27 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
             params->shape_jad_heal_penalty * (float)state->jad_heal_procs_this_tick;
     }
 
-    {
-        int low_prayer_threshold = fc_reward_low_prayer_threshold(p, params);
-        if (low_prayer_threshold > 0 &&
-            out.raw[FC_RWD_PRAYER_POT_USED] <= 0.0f &&
-            p->prayer_doses_remaining > 0 &&
-            p->potion_timer <= 0 &&
-            p->current_prayer <= low_prayer_threshold) {
-            out.low_prayer_no_pot = params->shape_low_prayer_no_pot_penalty;
+    if (out.raw[FC_RWD_WAVE_CLEAR] > 0.0f) {
+        switch (state->current_wave) {
+            case 60:
+                out.late_wave_bonus += params->shape_reach_wave_60_bonus;
+                break;
+            case 61:
+                out.late_wave_bonus += params->shape_reach_wave_61_bonus;
+                break;
+            case 62:
+                out.late_wave_bonus += params->shape_reach_wave_62_bonus;
+                break;
+            case 63:
+                out.late_wave_bonus += params->shape_reach_wave_63_bonus;
+                break;
+            default:
+                break;
         }
+    }
+
+    if (out.raw[FC_RWD_JAD_KILL] > 0.0f) {
+        out.jad_kill_bonus = params->shape_jad_kill_bonus;
     }
 
     out.total =
@@ -435,10 +407,8 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.food_safe +
         out.pot_waste +
         out.pot_safe +
-        out.low_prayer_no_pot +
-        out.low_prayer_pot +
+        out.correct_jad_prayer +
         out.correct_danger_prayer +
-        out.wrong_danger_prayer_weight +
         out.wrong_danger_prayer_shape +
         out.npc_specific_prayer +
         out.melee_pressure +
@@ -448,9 +418,9 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.kiting +
         out.unnecessary_prayer +
         out.jad_heal_penalty +
+        out.late_wave_bonus +
+        out.jad_kill_bonus +
         out.invalid_action +
-        out.movement +
-        out.idle +
         out.tick_penalty;
 
     return out;

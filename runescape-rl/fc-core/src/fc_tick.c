@@ -508,8 +508,6 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     check_terminal(state);
 
     /* 8. Episode analytics */
-    if (state->player.prayer != PRAYER_NONE)
-        state->ep_ticks_praying++;
     if (state->player.prayer == PRAYER_PROTECT_MELEE)
         state->ep_ticks_pray_melee++;
     if (state->player.prayer == PRAYER_PROTECT_RANGE)
@@ -520,10 +518,6 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
         state->ep_prayer_switches++;
     if (state->current_wave >= 30)
         state->ep_reached_wave_30 = 1;
-    if (state->current_wave >= 31) {
-        state->ep_cleared_wave_30 = 1;
-        state->ep_reached_wave_31 = 1;
-    }
     if (state->current_wave >= 63)
         state->ep_reached_wave_63 = 1;
 

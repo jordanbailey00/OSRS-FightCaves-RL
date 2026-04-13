@@ -310,14 +310,15 @@ void fc_resolve_player_pending_hits(FcState* state) {
                 else state->wrong_jad_prayer = 1;
             }
 
-            /* Track prayer correctness for ranged/magic hits */
-            if (h->attack_style == ATTACK_RANGED || h->attack_style == ATTACK_MAGIC) {
+            /* Track generic prayer correctness for ranged/magic hits.
+             * Jad also has its own separate Jad-specific reward channel. */
+            if (h->attack_style == ATTACK_RANGED ||
+                h->attack_style == ATTACK_MAGIC) {
                 if (blocked) state->correct_danger_prayer = 1;
                 else state->wrong_danger_prayer = 1;
             }
 
             /* Episode-level hit analytics */
-            state->ep_hits_total++;
             if (locked_prayer != PRAYER_NONE) {
                 if (blocked) {
                     state->ep_correct_blocks++;

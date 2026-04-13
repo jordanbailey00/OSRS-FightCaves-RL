@@ -43,11 +43,7 @@ print(f'  SPS:            {s.get(\"SPS\", 0):.0f}')
 print(f'  wave_reached:   {s.get(\"env/wave_reached\", 0):.2f}')
 print(f'  max_wave:       {s.get(\"env/max_wave\", \"N/A\")}')
 print(f'  most_npcs_slayed: {s.get(\"env/most_npcs_slayed\", \"N/A\")}')
-print(f'  episode_return: {s.get(\"env/episode_return\", 0):.1f}')
 print(f'  episode_length: {s.get(\"env/episode_length\", 0):.0f}')
-print(f'  score:          {s.get(\"env/score\", 0):.0f}')
-if s.get('env/cave_complete_rate', None) is not None:
-    print(f'  cave_complete:  {s.get(\"env/cave_complete_rate\", 0):.4f}')
 if s.get('env/reached_wave_63', None) is not None:
     print(f'  reached_wave63: {s.get(\"env/reached_wave_63\", 0):.4f}')
 if s.get('env/jad_kill_rate', None) is not None:
@@ -62,10 +58,12 @@ print(f'  uptime:         {s.get(\"uptime\", 0):.0f}s ({s.get(\"uptime\", 0)/60:
 print()
 
 # Analytics (v14+)
-prayer_up = s.get('env/prayer_uptime', None)
-if prayer_up is not None:
+prayer_up_magic = s.get('env/prayer_uptime_magic', None)
+if prayer_up_magic is not None:
     print('=== ANALYTICS ===')
-    print(f'  prayer_uptime:     {prayer_up:.3f}')
+    print(f'  prayer_uptime_melee: {s.get(\"env/prayer_uptime_melee\", 0):.3f}')
+    print(f'  prayer_uptime_range: {s.get(\"env/prayer_uptime_range\", 0):.3f}')
+    print(f'  prayer_uptime_magic: {prayer_up_magic:.3f}')
     print(f'  correct_prayer:    {s.get(\"env/correct_prayer\", 0):.1f}')
     print(f'  dmg_taken_avg:     {s.get(\"env/dmg_taken_avg\", 0):.1f}')
     print(f'  pots_used:         {s.get(\"env/pots_used\", 0):.1f}')
@@ -74,11 +72,11 @@ if prayer_up is not None:
 
 # Progression
 print('=== PROGRESSION ===')
-print(f'{\"step\":>12} {\"wave\":>6} {\"return\":>10} {\"ep_len\":>8} {\"entropy\":>7} {\"clip\":>6} {\"val_loss\":>9} {\"policy\":>8}')
+print(f'{\"step\":>12} {\"wave\":>6} {\"ep_len\":>8} {\"entropy\":>7} {\"clip\":>6} {\"val_loss\":>9} {\"policy\":>8}')
 for i in range(0, len(h), max(1, len(h)//20)):
     row = h[i]
-    print(f'{row.get(\"_step\",0):>12} {row.get(\"env/wave_reached\",0):>6.1f} {row.get(\"env/episode_return\",0):>10.1f} {row.get(\"env/episode_length\",0):>8.0f} {row.get(\"loss/entropy\",0):>7.3f} {row.get(\"loss/clipfrac\",0):>6.3f} {row.get(\"loss/value\",0):>9.3f} {row.get(\"loss/policy\",0):>8.4f}')
+    print(f'{row.get(\"_step\",0):>12} {row.get(\"env/wave_reached\",0):>6.1f} {row.get(\"env/episode_length\",0):>8.0f} {row.get(\"loss/entropy\",0):>7.3f} {row.get(\"loss/clipfrac\",0):>6.3f} {row.get(\"loss/value\",0):>9.3f} {row.get(\"loss/policy\",0):>8.4f}')
 # Always print last row
 row = h[-1]
-print(f'{row.get(\"_step\",0):>12} {row.get(\"env/wave_reached\",0):>6.1f} {row.get(\"env/episode_return\",0):>10.1f} {row.get(\"env/episode_length\",0):>8.0f} {row.get(\"loss/entropy\",0):>7.3f} {row.get(\"loss/clipfrac\",0):>6.3f} {row.get(\"loss/value\",0):>9.3f} {row.get(\"loss/policy\",0):>8.4f}')
+print(f'{row.get(\"_step\",0):>12} {row.get(\"env/wave_reached\",0):>6.1f} {row.get(\"env/episode_length\",0):>8.0f} {row.get(\"loss/entropy\",0):>7.3f} {row.get(\"loss/clipfrac\",0):>6.3f} {row.get(\"loss/value\",0):>9.3f} {row.get(\"loss/policy\",0):>8.4f}')
 "
