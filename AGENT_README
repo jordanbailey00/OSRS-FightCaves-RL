@@ -1,0 +1,87 @@
+# AGENT README
+
+Repo root for this conversation:
+- `/home/joe/projects/runescape-rl/codex3`
+
+Actual project root:
+- `/home/joe/projects/runescape-rl/codex3/runescape-rl`
+
+What this repo is:
+- OSRS Fight Caves RL project.
+- Shared deterministic C gameplay core in `runescape-rl/fc-core/`.
+- Native playable/debug viewer in `runescape-rl/demo-env/`.
+- PufferLib training adapter in `runescape-rl/training-env/`.
+- Local training runtime/checkpoints/logs live under `pufferlib_4/`.
+
+Current state:
+- Active late-`v25` line.
+- Live checked-in config is `v25.5a`.
+- Best modern checkpoint-source run so far is `7qhjnxa2`.
+- Best practical checkpoint candidate right now:
+  - `pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000000368050176.bin`
+- Next likely runs:
+  - `v26` cold-start
+  - `v26.1` warm-start from best `v26` checkpoint
+
+Important files:
+- `runescape-rl/config/fight_caves.ini`
+  - single live training config
+- `runescape-rl/docs/run_history.md`
+  - canonical experiment history and analysis
+- `runescape-rl/docs/rl_config.md`
+  - current config/reference surface
+- `runescape-rl/changelog.md`
+  - chronological code/config changes
+- `runescape-rl/train.sh`
+  - main training launcher
+- `runescape-rl/analyze_run.sh`
+  - quick W&B run analysis helper
+- `runescape-rl/demo-env/eval_viewer.py`
+  - policy replay/eval launcher
+- `runescape-rl/DESIGN.md`
+  - architecture reference
+
+High-level architecture:
+- `fc-core/`
+  - deterministic Fight Caves simulation, contracts, combat, pathing, waves
+- `demo-env/`
+  - Raylib viewer, HUD, assets, replay tooling
+- `training-env/`
+  - PufferLib adapter, reward assembly, backend build glue
+- `pufferlib_4/`
+  - local runtime dependency tree, checkpoints, logs, W&B artifacts
+
+Dependencies:
+- Python 3.12
+- local venv at `runescape-rl/.venv`
+- PyTorch / NumPy / W&B / local PufferLib
+- CMake + C compiler
+- CUDA/cuDNN for GPU training
+- Raylib vendored in `runescape-rl/demo-env/raylib`
+
+Playable viewer:
+```bash
+cd /home/joe/projects/runescape-rl/codex3/runescape-rl
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j"$(nproc)"
+./build/demo-env/fc_viewer
+```
+
+Eval viewer:
+```bash
+cd /home/joe/projects/runescape-rl/codex3/runescape-rl
+python3 demo-env/eval_viewer.py --ckpt /absolute/path/to/checkpoint.bin --deterministic
+```
+
+Training:
+```bash
+cd /home/joe/projects/runescape-rl/codex3/runescape-rl
+FORCE_BACKEND_REBUILD=1 \
+LOAD_MODEL_PATH=/home/joe/projects/runescape-rl/codex3/pufferlib_4/checkpoints/fight_caves/7qhjnxa2/0000000368050176.bin \
+bash train.sh
+```
+
+Notes:
+- `train.sh` syncs `runescape-rl/config/fight_caves.ini` into `pufferlib_4/config/fight_caves.ini` before launch.
+- `demo-env/eval_viewer.py` is the current eval path; the old root `eval_viewer.py` is gone.
+- Source is lightweight; most disk usage is local runtime state in `runescape-rl/.venv` and `pufferlib_4/checkpoints/`.

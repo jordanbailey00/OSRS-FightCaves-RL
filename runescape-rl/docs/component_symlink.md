@@ -67,10 +67,8 @@ Demo-only files:
 - demo-only assets under `demo-env/assets/` other than the old duplicate collision map
 
 Tooling / launcher files that depend on the shared backend path:
-- `eval_viewer.py`
+- `demo-env/eval_viewer.py`
 - `train.sh`
-- `sweep_v18_2.sh`
-- `sweep_v18_3.sh`
 - top-level `CMakeLists.txt`
 
 
@@ -97,13 +95,14 @@ Training Puffer build path:
 
 Launcher/build integration:
 - `train.sh` rebuilds through `training-env/build.sh`
-- `sweep_v18_2.sh` rebuilds through `training-env/build.sh`
-- `sweep_v18_3.sh` rebuilds through `training-env/build.sh`
-- those scripts also verify that the compiled extension exposes the trainer API before deciding the backend is reusable
+- legacy `sweep_v18_*` helpers used the same rebuild path, but those scripts
+  are no longer kept at repo root
+- the current launch path verifies the compiled extension exposes the trainer
+  API before deciding the backend is reusable
 
 Eval/tooling integration:
-- `eval_viewer.py` reads contracts from `fc-core/include/fc_contracts.h`
-- `eval_viewer.py` prefers the local `pufferlib_4` checkout on `sys.path`
+- `demo-env/eval_viewer.py` reads contracts from `fc-core/include/fc_contracts.h`
+- `demo-env/eval_viewer.py` prefers the local `pufferlib_4` checkout on `sys.path`
 
 Shared asset path:
 - `FC_COLLISION_PATH` now points at `fc-core/assets/fightcaves.collision`
@@ -157,9 +156,9 @@ Validated after the refactor:
 - `cmake --build build` succeeds
 - `build/demo-env/test_headless` passes
 - `build/demo-env/fc_viewer` launches
-- `eval_viewer.py --ckpt latest --deterministic` loads a real policy and launches the viewer
+- `demo-env/eval_viewer.py --ckpt latest --deterministic` loads a real policy and launches the viewer
 - `train.sh` can run an isolated smoke-training job and emit a checkpoint
-- the fresh smoke checkpoint replays in `eval_viewer.py`
+- the fresh smoke checkpoint replays in `demo-env/eval_viewer.py`
 
 Smoke-test checkpoint used for end-to-end validation:
 - `/tmp/fc_shared_refactor_smoke_ckpts/fight_caves/1775676164356/0000000000065536.bin`

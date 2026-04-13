@@ -2,6 +2,25 @@
 
 ## 2026-04-13
 
+- Slimmed the repo layout and current working tree:
+  - moved `eval_viewer.py` to [runescape-rl/demo-env/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/eval_viewer.py)
+  - moved the changelog to [runescape-rl/changelog.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/changelog.md)
+  - removed stale top-level files and legacy helpers:
+    - root `README.md`
+    - legacy `sweep_v18_2.sh` / `sweep_v18_3.sh`
+    - old benchmark/sweep config trees under `runescape-rl/config/`
+    - old `training-env/tests` / `training-env/bench`
+    - local `raylib-5.5_linux_amd64` SDK drop
+    - stale root handoff/audit docs
+- Moved the prayer icon PNGs into `demo-env/assets/sprites/` and updated
+  [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c) to load them from the sprite directory.
+- Pruned old local training artifacts while preserving the last three days:
+  - deleted pre-2026-04-11 checkpoint folders under `pufferlib_4/checkpoints/fight_caves`
+  - deleted pre-2026-04-11 local JSON run logs under `pufferlib_4/logs/fight_caves`
+  - deleted pre-2026-04-11 local W&B cache entries under `pufferlib_4/wandb/wandb`
+- Refreshed [runescape-rl/DESIGN.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/DESIGN.md) to match the current repo layout, live `v25.5a` config, current eval path, and slimmer top-level structure.
+- Added [AGENT_README](/home/joe/projects/runescape-rl/codex3/AGENT_README) at the repo root as the short handoff/reference doc for future agents.
+
 - Completed and analyzed `v25.5a` (`wiee1ezs`) in [runescape-rl/docs/run_history.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/run_history.md):
   - same warm-start as `v25.5`:
     - `7qhjnxa2/0000001888485376.bin`
@@ -149,7 +168,7 @@
   - kept the 1-tick prayer drain fix
   - restored resolve-time generic danger-prayer reward behavior
   - repaired viewer parity after the refactor
-- Fixed replay ergonomics in [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py) and [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c):
+- Fixed replay ergonomics in [runescape-rl/demo-env/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/eval_viewer.py) and [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c):
   - checkpoint replay loading fixed
   - TPS / replay-speed controls fixed
 - Promoted `v20.2` as the prayer baseline and documented the `v20` family.
@@ -169,7 +188,7 @@
   - rewired `training-env` and `demo-env` to shared headers/sources
   - moved collision/build wiring to shared paths
   - deleted the duplicated `training-env/src` backend copy
-- Added replay controls and fixed melee safespot/pathing in [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c), [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py), and [runescape-rl/fc-core/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src); added [runescape-rl/demo-env/tests/test_headless.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/tests/test_headless.c).
+- Added replay controls and fixed melee safespot/pathing in [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c), [runescape-rl/demo-env/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/eval_viewer.py), and [runescape-rl/fc-core/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/fc-core/src); added [runescape-rl/demo-env/tests/test_headless.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/tests/test_headless.c).
 - Results:
   - `fc-core` split removed the main training/viewer/eval drift vector
   - snapshot-first approach made the refactor recoverable
@@ -194,7 +213,7 @@
   - Jad now commits magic vs ranged when the attack is actually queued
   - the remaining defensive signal is the same pending-hit path the real env already exposes
 - Cleaned and re-synced the viewer/eval stack after the observation pruning:
-  - [runescape-rl/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/eval_viewer.py) now reads contract sizes from headers instead of stale hardcoded values
+  - [runescape-rl/demo-env/eval_viewer.py](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/eval_viewer.py) now reads contract sizes from headers instead of stale hardcoded values
   - fixed the eval-viewer header parser so macro-based constants load correctly
   - restored the demo debug overlay in [runescape-rl/demo-env/src/fc_debug_overlay.h](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/fc_debug_overlay.h) / [runescape-rl/demo-env/src/viewer.c](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src/viewer.c) so the viewer still shows rich debugging information without putting those values back into the agent observation
 - Re-audited mirrored backend parity and re-synced the shared Fight Caves core between [runescape-rl/training-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/training-env/src) and [runescape-rl/demo-env/src](/home/joe/projects/runescape-rl/codex3/runescape-rl/demo-env/src), including the post-pruning combat/state/mask paths, so training, debug viewer, and eval viewer are back on the same core mechanics again.
@@ -218,7 +237,7 @@
   - refreshed stale facts in [runescape-rl/DESIGN.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/DESIGN.md) without changing its overall layout
 - Staged the first checkpoint-continuation sweep as `v18.2`:
   - updated [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini) and [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini)
-  - added [runescape-rl/sweep_v18_2.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_2.sh)
+  - added `sweep_v18_2.sh` at repo root at the time
   - documented the `v18.2` config and rationale in [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md)
 - Analyzed the failed `v18.2` sweep and documented the result in [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md):
   - confirmed the first sweep did not actually sweep because `sweep_only` collapsed to zero dimensions
@@ -226,7 +245,7 @@
 - Fixed the actual PufferLib sweep bug in [pufferlib_4/pufferlib/sweep.py](/home/joe/projects/runescape-rl/codex3/pufferlib_4/pufferlib/sweep.py):
   - corrected nested-key matching for `sweep_only`
   - added a fail-fast guard for zero-dimensional sweep spaces
-  - staged the corrected continuation sweep as `v18.3` in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), [runescape-rl/sweep_v18_3.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/sweep_v18_3.sh), and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md)
+  - staged the corrected continuation sweep as `v18.3` in [runescape-rl/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves.ini), [pufferlib_4/config/fight_caves.ini](/home/joe/projects/runescape-rl/codex3/pufferlib_4/config/fight_caves.ini), a now-removed top-level `sweep_v18_3.sh`, and [runescape-rl/docs/rl_config.md](/home/joe/projects/runescape-rl/codex3/runescape-rl/docs/rl_config.md)
 - Added a non-sweep continuation sanity path for the corrected continuation recipe:
   - [runescape-rl/config/fight_caves_v18_3_control.ini](/home/joe/projects/runescape-rl/codex3/runescape-rl/config/fight_caves_v18_3_control.ini)
   - [runescape-rl/train_v18_3_control.sh](/home/joe/projects/runescape-rl/codex3/runescape-rl/train_v18_3_control.sh)
@@ -365,4 +384,4 @@
 - Updated [handoff.md](/home/joe/projects/runescape-rl/codex3/handoff.md) so a fresh session sees `q3ald8bc` as completed, not active, and inherits the `v17.2` recommendation instead of the old `v17.1` placeholder state.
 - Corrected [handoff.md](/home/joe/projects/runescape-rl/codex3/handoff.md) repo-state notes so they no longer imply the current working tree is clean:
   - the last pushed commit is still `df07aa8da5e1b800986e84eb19ad248f0f83dff1`
-  - the latest `q3ald8bc` analysis lives in local doc updates to `changelog.md`, `runescape-rl/docs/rl_config.md`, and `handoff.md`
+  - the latest `q3ald8bc` analysis lives in local doc updates to `runescape-rl/changelog.md`, `runescape-rl/docs/rl_config.md`, and `handoff.md`

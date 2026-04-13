@@ -6543,13 +6543,10 @@ Success criteria:
   - low `no_prayer_hits`
 
 Operational notes:
-- the active launch helper is `sweep_v18_3.sh`
-- default local launch:
-  - `cd /home/joe/projects/runescape-rl/codex3/runescape-rl && bash sweep_v18_3.sh`
-- override for cloud or multi-GPU sweep fanout:
-  - `SWEEP_GPUS=<n> TRAIN_GPUS=<m> bash sweep_v18_3.sh`
-- override checkpoint if a better `v18.1` candidate is chosen:
-  - `LOAD_MODEL_PATH=/path/to/checkpoint.bin bash sweep_v18_3.sh`
+- the old `sweep_v18_3.sh` helper was a legacy top-level launcher and is no
+  longer kept in the repo root
+- this section is historical only; if `v18.3` ever needs to be recreated, use
+  `train.sh` / current sweep infrastructure instead of the removed helper
 
 Pre-run expectation:
 - if `v18.3` works, the win should show up as:
@@ -6977,14 +6974,10 @@ Success criteria:
 - avoid regressing into the `v17.1` flatline regime
 
 Operational notes:
-- the active launch helper is `sweep_v18_2.sh`
-- default local launch:
-  - `cd /home/joe/projects/runescape-rl/codex3/runescape-rl && bash sweep_v18_2.sh`
-- override for cloud or multi-GPU sweep fanout:
-  - `SWEEP_GPUS=<n> TRAIN_GPUS=<m> bash sweep_v18_2.sh`
-- override checkpoint if a better `v18.1` candidate is chosen after
-  fixed eval:
-  - `LOAD_MODEL_PATH=/path/to/checkpoint.bin bash sweep_v18_2.sh`
+- the old `sweep_v18_2.sh` helper was a legacy top-level launcher and is no
+  longer kept in the repo root
+- this section is historical only; if `v18.2` ever needs to be recreated, use
+  `train.sh` / current sweep infrastructure instead of the removed helper
 
 Results (attempted sweep, 12 completed trials before failure,
 wandb group `v18_2_sweep`):

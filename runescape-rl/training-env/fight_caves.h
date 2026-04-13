@@ -344,7 +344,7 @@ void c_step(FightCaves* env) {
 
 void c_render(FightCaves* env) {
     /* Rendering handled by external viewer via --policy-pipe mode.
-     * See eval_viewer.py for the eval pipeline. */
+     * See demo-env/eval_viewer.py for the eval pipeline. */
     (void)env;
 }
 

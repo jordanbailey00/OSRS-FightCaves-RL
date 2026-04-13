@@ -2,7 +2,7 @@
 FIGHT CAVES RL — DESIGN DOCUMENT
 ================================================================================
 
-Last updated: 2026-04-09. Update only on major architectural changes or
+Last updated: 2026-04-13. Update only on major architectural changes or
 significant new lessons learned.
 
 ================================================================================
@@ -23,7 +23,7 @@ TABLE OF CONTENTS
     2.2  What Worked
     2.3  What Didn't Work
     2.4  References Used
-    2.5  Training History (v1–v21)
+    2.5  Training History (v1–v25.5a)
     2.6  Technical Gotchas
 
   PART 3: REPRODUCTION GUIDE
@@ -46,6 +46,15 @@ provide the viewer and RL wrapper layers around it:
   1. fc-core/        (backend)   — deterministic game simulation
   2. demo-env/       (viewer)    — Raylib 3D viewer for human play + debug
   3. training-env/   (RL)        — PufferLib 4.0 headless wrapper + build glue
+
+The top-level `runescape-rl/` directory is intentionally slim now:
+
+  - `train.sh`         — active training launcher
+  - `analyze_run.sh`   — quick W&B run inspection helper
+  - `CMakeLists.txt`   — native build entry
+  - `DESIGN.md`        — architecture reference
+  - `changelog.md`     — chronological implementation log
+  - `config/fight_caves.ini` — single live Fight Caves config
 
 Data flow:
 
@@ -347,10 +356,12 @@ TICK CONTROL:
     0.25, 0.5, 1.67, 4, 10, 15
   Replay mode also supports keyboard 1x/2x/4x/10x policy playback presets.
   R = reset episode. F9 = godmode.
+  L = toggle camera follow lock on/off for high-TPS replay inspection.
 
 POLICY REPLAY MODE (`--policy-pipe`):
   Reads canonical action heads from stdin, prints per-episode summaries to
   stderr, and now uses the same TPS preset UI as the playable viewer.
+  The Python launcher now lives at `demo-env/eval_viewer.py`.
 
 ASSET LOADERS (header-only):
 
@@ -433,8 +444,9 @@ binding.c — PufferLib macros.
   OBS_SIZE = 142, OBS_TYPE = FLOAT
   NUM_ATNS = 5, ACT_SIZES = {17, 9, 5, 3, 2}, ACT_TYPE = DOUBLE
   my_init(): parses config/fight_caves.ini into FightCaves struct.
-  my_log(): exports score, episode_return, episode_length, wave_reached,
-    plus the expanded analytics used in wandb.
+  my_log(): exports episode_length, wave_reached, max_wave,
+    most_npcs_slayed, the prayer / blocking / resource analytics, and the
+    late-game frontier signals used in wandb.
 
 fight_caves.c (87 LOC) — Standalone test binary. Runs 100 episodes with
   random actions, prints wave_reached and SPS.
@@ -447,21 +459,39 @@ build.sh — PufferLib build integration.
   Includes shared headers from fc-core/include and compiles the shared core
   through fight_caves.h's direct source inclusion path.
 
-config/fight_caves.ini — Current `v21` staged config:
-  Same reward recipe as the `v20.2` baseline, with only the run budget changed
-    from 2.5B to 5.0B steps.
-  Reward weights: w_damage_dealt=0.5, w_attack_attempt=0.1,
-    w_damage_taken=-0.6 (quadratic), w_npc_kill=3.0, w_wave_clear=10.0,
-    w_jad_damage=2.0, w_player_death=-20.0, w_cave_complete=100.0,
-    w_tick_penalty=-0.005, w_correct_danger_prayer=0.25.
-  Shaping: shape_wrong_prayer_penalty=-1.25,
+config/fight_caves.ini — Current `v25.5a` live config:
+  Warm-start:
+    `7qhjnxa2/0000001888485376.bin`
+  Reward weights:
+    w_damage_dealt=0.7, w_attack_attempt=0.2, w_damage_taken=-0.6 (quadratic),
+    w_npc_kill=3.5, w_wave_clear=15.0, w_jad_damage=2.0, w_jad_kill=50.0,
+    w_player_death=-20.0, w_cave_complete=100.0, w_correct_jad_prayer=2.0,
+    w_correct_danger_prayer=0.25, w_invalid_action=-0.1,
+    w_tick_penalty=-0.005.
+  Shaping:
+    shape_food_full_waste_penalty=-6.5, shape_food_waste_scale=-1.2,
+    shape_pot_full_waste_penalty=-6.5, shape_pot_waste_scale=-1.2,
+    shape_wrong_prayer_penalty=-1.25,
     shape_npc_specific_prayer_bonus=1.5, shape_npc_melee_penalty=-0.3,
-    shape_kiting_reward=1.0, shape_unnecessary_prayer_penalty=-0.2,
-    capped stall penalty, configurable food/pot waste penalties.
-  Curriculum: all buckets disabled in the current baseline.
-  Training: 4096 agents, 5B steps, lr=0.0003, gamma=0.999, horizon=256,
+    shape_wasted_attack_penalty=-0.1,
+    shape_wave_stall_start=500, shape_wave_stall_base_penalty=-0.5,
+    shape_wave_stall_ramp_interval=50, shape_wave_stall_cap=-2.0,
+    shape_not_attacking_grace_ticks=2, shape_not_attacking_penalty=-0.01,
+    shape_kiting_reward=1.0, shape_kiting_min_dist=7,
+    shape_kiting_max_dist=10, shape_unnecessary_prayer_penalty=-0.2,
+    shape_jad_heal_penalty=-0.1,
+    shape_reach_wave_63_bonus=100.0, shape_jad_kill_bonus=500.0,
+    shape_reach_wave_60_bonus=0.0, shape_reach_wave_61_bonus=0.0,
+    shape_reach_wave_62_bonus=0.0, shape_resource_threat_window=2.
+  Training:
+    4096 agents, 5B steps, lr=0.0003, gamma=0.999, horizon=256,
     clip_coef=0.2, ent_coef=0.01.
-  Policy: hidden_size=256, num_layers=2.
+  Policy:
+    hidden_size=256, num_layers=2.
+  Code-only live behavior:
+    player ranged attacks require LOS, Yt-HurKot distracts on `0` hits,
+    positive prayer rewards are suppressed while attack-ready idle, and Jad
+    healer procs feed `shape_jad_heal_penalty`.
 
 PERFORMANCE:
   Training SPS: ~2.0M on the current stack.
@@ -508,11 +538,11 @@ BINARY FORMATS:
     Raw 64x64 uint8 array. 1=walkable, 0=blocked. Row-major [y][x],
     transposed to [x][y] at load time.
 
-DEMO-ENV ASSETS (demo-env/assets/, 45 MB total):
+DEMO-ENV ASSETS (demo-env/assets/, ~45 MB total):
   fightcaves.terrain, fightcaves.objects, fightcaves.atlas,
   fightcaves.collision, fc_npcs.models, fc_player.models,
   fc_projectiles.models, fc_all.anims, fc_player.anims,
-  sprites/ (prayer icons, tab icons), pray_*.png.
+  sprites/ (prayer icons, consumable icons, tab icons).
 
 BACKEND ASSETS (fc-core/assets/, 4 KB):
   fightcaves.collision only. No rendering assets needed.
@@ -551,6 +581,7 @@ PUFFERLIB BUILD (training-env/build.sh):
 BUILD COMMANDS:
   cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
   cd build && ./demo-env/fc_viewer          # viewer
+  python3 demo-env/eval_viewer.py --ckpt latest --deterministic
   cd training-env && ./build.sh --local     # standalone test binary
   FORCE_BACKEND_REBUILD=1 bash train.sh     # synced PufferLib training launch
 
@@ -559,6 +590,7 @@ DEPENDENCIES:
   Demo-env: Raylib 5.5 (prebuilt, included in repo)
   Training: PufferLib 4.0 headers (vecenv.h)
   Python: 3.12, torch, numpy, wandb, pufferlib
+  Local runtime env: `runescape-rl/.venv`
 
 --------------------------------------------------------------------------------
 1.7 Observation / Action / Reward Contracts
@@ -708,21 +740,19 @@ REWARD SHAPING WEIGHTS (configured in config/fight_caves.ini):
   PRAYER:
     w_correct_danger_prayer  Reward for correct prayer blocking a ranged/magic
                         hit using the backend locked-prayer snapshot.
-    w_wrong_danger_prayer    Penalty for an unblocked ranged/magic hit under
-                        wrong/no locked prayer. Often left at 0 in current runs.
-    w_correct_jad_prayer     Jad-specific prayer reward (disabled since v5).
-    w_wrong_jad_prayer       Jad-specific prayer penalty (disabled since v5).
+    w_correct_jad_prayer     Jad-specific prayer reward. Pays on resolve tick
+                        of a correctly blocked Jad hit, not on tell tick.
 
   OTHER:
     w_invalid_action    Small penalty when agent picks a masked action.
-    w_movement          Reward/penalty for walking/running. Usually 0.
-    w_idle              Reward/penalty for choosing idle movement. Usually 0.
     w_tick_penalty      Fires every tick. Small time pressure to progress.
 
   CONFIGURABLE SHAPING (in fight_caves.h, parsed from ini):
     food/pot waste      shape_food_* / shape_pot_* terms
     wrong prayer        shape_wrong_prayer_penalty (backend wrong-danger flag)
     NPC-specific block  shape_npc_specific_prayer_bonus (locked-prayer block)
+    Jad/healer          shape_jad_heal_penalty, shape_jad_kill_bonus
+    late-wave shaping   shape_reach_wave_60/61/62/63_bonus
     melee pressure      shape_npc_melee_penalty
     wasted attack       shape_wasted_attack_penalty
     wave stall          shape_wave_stall_*
@@ -1000,7 +1030,7 @@ RUNELITE (rev 237):
   model IDs for b237 format.
 
 --------------------------------------------------------------------------------
-2.5 Training History (v1–v21)
+2.5 Training History (v1–v25.5a)
 --------------------------------------------------------------------------------
 
 All configs and detailed results in docs/rl_config.md.
@@ -1073,15 +1103,11 @@ All configs and detailed results in docs/rl_config.md.
     weights still regressed badly. Proved the timing change was not the only
     source of failure — the large prayer rewards were harmful too.
 
-  v21 (staged): Exact `v20.2` recipe with a 5B budget instead of 2.5B.
-    This is intentionally a pure long-run test, with no other recipe changes.
-
 PROGRESSION: early 27-30 wave runs → reward bug crash → stall-detection era →
-  wave-29 recovery → prayer backend merge → `v20.2` late-wave frontier.
-CURRENT BLOCKER: keep the `v20.2` gains while extending training cleanly.
-  The next systems question is decoupling replay anneal horizons from
-  `total_timesteps` so longer runs behave like real extensions instead of
-  changing early learning dynamics.
+  wave-29 recovery → prayer backend merge → `v20.2` frontier →
+  `v22.1/v24` checkpointed recovery → corrected-mechanics `v25` line.
+CURRENT BLOCKER: turn the modern corrected-mechanics branch into a stable
+  wave-63 / Jad learner without relying on a stale `v21.2` checkpoint.
 
 --------------------------------------------------------------------------------
 2.6 Technical Gotchas

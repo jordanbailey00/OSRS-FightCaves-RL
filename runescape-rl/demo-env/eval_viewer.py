@@ -6,8 +6,8 @@ Uses PufferLib's CUDA backend for policy inference, pipes actions to the
 standalone viewer (fc_viewer --policy-pipe) via stdin/stdout.
 
 Usage:
-    python eval_viewer.py --ckpt <path_to_.bin>
-    python eval_viewer.py --ckpt latest
+    python demo-env/eval_viewer.py --ckpt <path_to_.bin>
+    python demo-env/eval_viewer.py --ckpt latest
 
 Controls (in viewer window):
     Space       — pause/resume

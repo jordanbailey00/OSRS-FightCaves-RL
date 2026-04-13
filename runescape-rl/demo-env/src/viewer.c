@@ -2246,7 +2246,7 @@ int main(int argc, char** argv) {
 
     /* Load prayer overhead icon textures */
     {
-        const char* pray_dirs[] = {"demo-env/assets/", "../demo-env/assets/", "assets/", NULL};
+        const char* pray_dirs[] = {"demo-env/assets/sprites/", "../demo-env/assets/sprites/", "assets/sprites/", NULL};
         int loaded = 0;
         for (int i = 0; pray_dirs[i]; i++) {
             char path[256];
@@ -2263,7 +2263,7 @@ int main(int argc, char** argv) {
             }
         }
         if (!loaded)
-            fprintf(stderr, "warning: prayer icons not found in demo-env/assets or assets\n");
+            fprintf(stderr, "warning: prayer icons not found in demo-env/assets/sprites or assets/sprites\n");
     }
 
     /* Load tab/inventory sprites (Phase 8h) */
