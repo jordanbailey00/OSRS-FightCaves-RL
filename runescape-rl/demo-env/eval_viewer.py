@@ -6,8 +6,8 @@ Uses PufferLib's CUDA backend for policy inference, pipes actions to the
 standalone viewer (fc_viewer --policy-pipe) via stdin/stdout.
 
 Usage:
-    python eval_viewer.py --ckpt <path_to_.bin>
-    python eval_viewer.py --ckpt latest
+    python demo-env/eval_viewer.py --ckpt <path_to_.bin>
+    python demo-env/eval_viewer.py --ckpt latest
 
 Controls (in viewer window):
     Space       — pause/resume
@@ -31,9 +31,20 @@ import sys
 import numpy as np
 
 
+def script_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def repo_root():
+    return os.path.dirname(script_dir())
+
+
+def workspace_root():
+    return os.path.dirname(repo_root())
+
+
 def ensure_local_pufferlib_on_path():
-    repo = os.path.dirname(os.path.abspath(__file__))
-    default_puffer_dir = os.path.join(os.path.dirname(repo), "pufferlib_4")
+    default_puffer_dir = os.path.join(workspace_root(), "pufferlib_4")
     puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer_dir)
     if os.path.isdir(puffer_dir) and puffer_dir not in sys.path:
         sys.path.insert(0, puffer_dir)
@@ -103,7 +114,7 @@ def parse_header_constants(path, names, base_values=None):
 
 
 def load_contract_dims():
-    repo = os.path.dirname(os.path.abspath(__file__))
+    repo = repo_root()
     shared_header = os.path.join(repo, "fc-core", "include", "fc_contracts.h")
     fight_caves_header = os.path.join(repo, "training-env", "fight_caves.h")
 
@@ -141,6 +152,7 @@ def load_contract_dims():
 
 def find_viewer():
     """Find the fc_viewer binary."""
+    repo = repo_root()
     candidates = [
         "build/demo-env/fc_viewer",
         "../build/demo-env/fc_viewer",
@@ -150,7 +162,6 @@ def find_viewer():
         if os.path.isfile(p):
             return p
     # Try from repo root
-    repo = os.path.dirname(os.path.abspath(__file__))
     for p in candidates:
         fp = os.path.join(repo, p)
         if os.path.isfile(fp):
@@ -160,8 +171,7 @@ def find_viewer():
 
 def find_latest_checkpoint(env_name="fight_caves"):
     """Find the most recent .bin checkpoint."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_puffer_dir = os.path.join(os.path.dirname(script_dir), "pufferlib_4")
+    default_puffer_dir = os.path.join(workspace_root(), "pufferlib_4")
     puffer_dir = os.environ.get("PUFFERLIB_DIR", default_puffer_dir)
     pattern = os.path.join(puffer_dir, "checkpoints", env_name, "**", "*.bin")
     candidates = glob.glob(pattern, recursive=True)
@@ -362,7 +372,7 @@ def main():
             print("[eval] Falling back to random actions", file=sys.stderr)
             args.random = True
 
-    # Launch viewer subprocess
+    # Launch viewer subprocess from repo root so sprite paths resolve
     print("[eval] Launching viewer...", file=sys.stderr)
     proc = subprocess.Popen(
         [viewer_path, "--policy-pipe", "--speed", str(args.speed)] +
@@ -373,6 +383,7 @@ def main():
         stderr=None,  # let viewer stderr pass through to terminal
         text=True,
         bufsize=1,
+        cwd=repo_root(),
     )
 
     # Hidden state for recurrent policy (MinGRU)

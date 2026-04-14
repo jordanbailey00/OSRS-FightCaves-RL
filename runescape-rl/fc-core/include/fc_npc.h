@@ -15,6 +15,7 @@ typedef struct {
     int att_bonus;
     int def_level;          /* NPC defence level (for player attack accuracy) */
     int def_bonus;          /* NPC defence bonus vs ranged (simplified) */
+    int magic_level;        /* used by Twisted bow scaling */
     int size;               /* tile footprint */
     int movement_speed;     /* 1=walk, 2=run */
     int prayer_drain;       /* prayer drain on hit (Tz-Kih specific) */

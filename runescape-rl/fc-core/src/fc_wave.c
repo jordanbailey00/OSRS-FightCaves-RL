@@ -1274,6 +1274,13 @@ int fc_wave_check_advance(FcState* state) {
 
     state->wave_just_cleared = 1;
 
+    /* Track wave duration */
+    int wave_ticks = state->tick - state->wave_start_tick;
+    if (wave_ticks > state->ep_max_wave_ticks) {
+        state->ep_max_wave_ticks = wave_ticks;
+        state->ep_max_wave_ticks_wave = state->current_wave;
+    }
+
     /* Check if all waves complete */
     if (state->current_wave >= FC_NUM_WAVES) {
         state->terminal = TERMINAL_CAVE_COMPLETE;
@@ -1283,6 +1290,7 @@ int fc_wave_check_advance(FcState* state) {
     /* Advance to next wave */
     state->current_wave++;
     state->jad_healers_spawned = 0;
+    state->wave_start_tick = state->tick;
     fc_wave_spawn(state, state->current_wave);
 
     return 1;

@@ -15,7 +15,10 @@
 #include "fc_types.h"
 #include "fc_contracts.h"
 #include "fc_api.h"
+#include "fc_combat.h"
 #include "fc_npc.h"
+#include "fc_pathfinding.h"
+#include "fc_reward.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +57,20 @@ static void init_manual_test_state(FcState* state) {
     state->player.defence_magic = FC_EQUIP_DEF_MAGIC;
     state->player.defence_ranged = FC_EQUIP_DEF_RANGED;
     state->player.attack_target_idx = -1;
+}
+
+static void clear_manual_tick_signals(FcState* state) {
+    state->correct_jad_prayer = 0;
+    state->wrong_jad_prayer = 0;
+    state->correct_danger_prayer = 0;
+    state->wrong_danger_prayer = 0;
+    state->attack_attempt_this_tick = 0;
+    state->jad_heal_procs_this_tick = 0;
+
+    state->player.hit_source_npc_type = 0;
+    state->player.hit_locked_prayer_this_tick = 0;
+    state->player.hit_blocked_this_tick = 0;
+    state->player.hit_landed_this_tick = 0;
 }
 
 /* ====================================================================== */
@@ -454,7 +471,6 @@ static void test_melee_safespot_gating(void) {
     blocked.npcs[1].current_hp = blocked.npcs[1].max_hp / 4;
 
     fc_npc_tick(&blocked, 0);
-    fc_cache_sorted_npcs(&blocked);
     fc_write_obs(&blocked, obs);
 
     TEST("Safespotted Yt-MejKot does not queue melee hits");
@@ -489,7 +505,6 @@ static void test_melee_safespot_gating(void) {
     open.npcs[1].current_hp = open.npcs[1].max_hp / 4;
 
     fc_npc_tick(&open, 0);
-    fc_cache_sorted_npcs(&open);
     fc_write_obs(&open, obs);
 
     TEST("Open-corner Yt-MejKot still queues a melee swing");
@@ -514,6 +529,329 @@ static void test_melee_safespot_gating(void) {
 }
 
 /* ====================================================================== */
+/* Test 7: Player ranged LOS gating                                        */
+/* ====================================================================== */
+
+static void test_player_attack_requires_los(void) {
+    printf("\n=== Player Ranged LOS Gating ===\n");
+
+    FcState state;
+    char err[128];
+    int actions[FC_NUM_ACTION_HEADS] = {0};
+
+    init_manual_test_state(&state);
+    state.walkable[11][10] = 0;  /* Italy-rock style blocker between player and Jad */
+
+    fc_npc_spawn(&state.npcs[0], NPC_TZTOK_JAD, 12, 10, 0);
+    state.player.attack_target_idx = 0;
+    state.player.approach_target = 1;
+    state.player.attack_timer = 0;
+    state.player.ammo_count = 50;
+
+    fc_step(&state, actions);
+
+    TEST("Player does not fire ranged attacks through blocked LOS");
+    if (state.npcs[0].num_pending_hits == 0) PASS();
+    else {
+        snprintf(err, sizeof(err), "queued %d pending hits", state.npcs[0].num_pending_hits);
+        FAIL(err);
+    }
+
+    TEST("Auto-approach replans to a tile that has LOS");
+    if (state.player.route_len > 0) {
+        int ri = state.player.route_len - 1;
+        int rx = state.player.route_x[ri];
+        int ry = state.player.route_y[ri];
+        int has_los = fc_has_los_to_npc(rx, ry,
+                                        state.npcs[0].x, state.npcs[0].y,
+                                        state.npcs[0].size, state.walkable);
+        int rdist = fc_distance_to_npc(rx, ry, &state.npcs[0]);
+        if (has_los && rdist <= state.player.weapon_range) PASS();
+        else {
+            snprintf(err, sizeof(err), "endpoint=(%d,%d) dist=%d los=%d", rx, ry, rdist, has_los);
+            FAIL(err);
+        }
+    } else {
+        FAIL("no route planned");
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
+/* Test 8: Jad healer penalty + aggro                                      */
+/* ====================================================================== */
+
+static void test_jad_healer_response(void) {
+    printf("\n=== Jad Healer Response ===\n");
+
+    char err[128];
+
+    FcState heal;
+    init_manual_test_state(&heal);
+    fc_npc_spawn(&heal.npcs[0], NPC_TZTOK_JAD, 20, 20, 0);
+    fc_npc_spawn(&heal.npcs[1], NPC_YT_HURKOT, 16, 20, 1);
+    heal.npcs[0].current_hp -= 100;
+    heal.npcs[1].heal_timer = 0;
+
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    fc_reward_runtime_reset(&runtime);
+    params.shape_jad_heal_penalty = -0.1f;
+
+    fc_npc_tick(&heal, 1);
+    FcRewardBreakdown b = fc_reward_compute_breakdown(&heal, &params, &runtime);
+
+    TEST("Yt-HurKot heal proc increments Jad-heal counter");
+    if (heal.jad_heal_procs_this_tick == 1) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_heal_procs_this_tick = %d", heal.jad_heal_procs_this_tick);
+        FAIL(err);
+    }
+
+    TEST("Jad-heal penalty fires once per successful heal proc");
+    if (fabsf(b.jad_heal_penalty + 0.1f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_heal_penalty = %.4f", b.jad_heal_penalty);
+        FAIL(err);
+    }
+
+    fc_destroy(&heal);
+
+    FcState distract;
+    init_manual_test_state(&distract);
+    fc_npc_spawn(&distract.npcs[0], NPC_YT_HURKOT, 12, 10, 0);
+    fc_queue_pending_hit(distract.npcs[0].pending_hits,
+                         &distract.npcs[0].num_pending_hits,
+                         FC_MAX_PENDING_HITS,
+                         0, 1, ATTACK_RANGED, -1, 0);
+    fc_resolve_npc_pending_hits(&distract, 0);
+
+    TEST("0-damage player hit still distracts Yt-HurKot");
+    if (distract.npcs[0].healer_distracted == 1) PASS();
+    else FAIL("healer_distracted did not flip");
+
+    fc_destroy(&distract);
+}
+
+/* ====================================================================== */
+/* Test 9: Ready-idle prayer reward gating                                */
+/* ====================================================================== */
+
+static void test_ready_idle_prayer_gate(void) {
+    printf("\n=== Ready-Idle Prayer Gate ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+
+    init_manual_test_state(&state);
+    fc_npc_spawn(&state.npcs[0], NPC_KET_ZEK, 12, 10, 0);
+    state.player.hit_landed_this_tick = 1;
+    state.player.hit_blocked_this_tick = 1;
+    state.player.hit_locked_prayer_this_tick = PRAYER_PROTECT_MAGIC;
+    state.player.hit_source_npc_type = NPC_KET_ZEK;
+    state.correct_danger_prayer = 1;
+
+    fc_reward_runtime_reset(&runtime);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Correct-prayer rewards apply before ready-idle state");
+    if (fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer - params.shape_npc_specific_prayer_bonus) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    runtime.ticks_since_attack = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Correct-prayer rewards are suppressed while ready-idle");
+    if (fabsf(b.correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    state.attack_attempt_this_tick = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Attack attempt immediately re-enables correct-prayer rewards");
+    if (fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        fabsf(b.npc_specific_prayer - params.shape_npc_specific_prayer_bonus) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "correct=%.4f npc_specific=%.4f",
+                 b.correct_danger_prayer, b.npc_specific_prayer);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
+/* Test 10: Jad prayer reward timing                                       */
+/* ====================================================================== */
+
+static void test_jad_prayer_reward_timing(void) {
+    printf("\n=== Jad Prayer Reward Timing ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+    FcPendingHit* queued;
+
+    init_manual_test_state(&state);
+    fc_npc_spawn(&state.npcs[0], NPC_TZTOK_JAD, 12, 10, 0);
+    state.player.prayer = PRAYER_PROTECT_MAGIC;
+    params.w_correct_jad_prayer = 2.0f;
+    fc_reward_runtime_reset(&runtime);
+
+    fc_queue_pending_hit(state.player.pending_hits,
+                         &state.player.num_pending_hits,
+                         FC_MAX_PENDING_HITS,
+                         97, 2, ATTACK_MAGIC, 0, 0);
+    queued = &state.player.pending_hits[0];
+    queued->prayer_snapshot = -1;
+    queued->prayer_lock_tick = state.tick + 1;
+
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Queued Jad attack gives no prayer reward before lock/resolve");
+    if (fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f",
+                 b.correct_jad_prayer, b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 1;
+    fc_resolve_player_pending_hits(&state);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Jad prayer lock tick still gives no reward before impact");
+    if (queued->prayer_snapshot == PRAYER_PROTECT_MAGIC &&
+        fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "snap=%d jad=%.4f danger=%.4f",
+                 queued->prayer_snapshot, b.correct_jad_prayer,
+                 b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 2;
+    fc_resolve_player_pending_hits(&state);
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Jad prayer reward lands on resolve tick after deferred lock");
+    if (fabsf(b.correct_jad_prayer - 2.0f) < 0.0001f &&
+        fabsf(b.correct_danger_prayer - params.w_correct_danger_prayer) < 0.0001f &&
+        state.player.hit_landed_this_tick == 1 &&
+        state.player.hit_locked_prayer_this_tick == PRAYER_PROTECT_MAGIC) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f landed=%d prayer=%d",
+                 b.correct_jad_prayer, b.correct_danger_prayer,
+                 state.player.hit_landed_this_tick,
+                 state.player.hit_locked_prayer_this_tick);
+        FAIL(err);
+    }
+
+    clear_manual_tick_signals(&state);
+    state.tick = 3;
+    state.correct_jad_prayer = 1;
+    state.correct_danger_prayer = 1;
+    state.player.hit_landed_this_tick = 1;
+    state.player.hit_blocked_this_tick = 1;
+    state.player.hit_locked_prayer_this_tick = PRAYER_PROTECT_MAGIC;
+    state.player.hit_source_npc_type = NPC_TZTOK_JAD;
+    runtime.ticks_since_attack = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+    TEST("Ready-idle gate suppresses Jad prayer reward just like other prayer rewards");
+    if (fabsf(b.correct_jad_prayer) < 0.0001f &&
+        fabsf(b.correct_danger_prayer) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad=%.4f danger=%.4f",
+                 b.correct_jad_prayer, b.correct_danger_prayer);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
+/* Test 11: Late-wave milestone and Jad kill bonuses                      */
+/* ====================================================================== */
+
+static void test_late_wave_and_jad_bonuses(void) {
+    printf("\n=== Late-Wave And Jad Bonuses ===\n");
+
+    char err[128];
+    FcState state;
+    FcRewardParams params = fc_reward_default_params();
+    FcRewardRuntime runtime;
+    FcRewardBreakdown b;
+    float obs[FC_OBS_SIZE];
+
+    init_manual_test_state(&state);
+    fc_reward_runtime_reset(&runtime);
+    params.shape_reach_wave_60_bonus = 60.0f;
+    params.shape_reach_wave_61_bonus = 90.0f;
+    params.shape_reach_wave_62_bonus = 120.0f;
+    params.shape_reach_wave_63_bonus = 200.0f;
+    params.shape_jad_kill_bonus = 500.0f;
+
+    state.current_wave = 60;
+    state.wave_just_cleared = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Reaching wave 60 pays configured late-wave bonus");
+    if (fabsf(b.late_wave_bonus - 60.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "late_wave_bonus = %.4f", b.late_wave_bonus);
+        FAIL(err);
+    }
+
+    state.current_wave = 63;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Reaching wave 63 pays the wave-63 milestone bonus");
+    if (fabsf(b.late_wave_bonus - 200.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "late_wave_bonus = %.4f", b.late_wave_bonus);
+        FAIL(err);
+    }
+
+    state.jad_killed = 1;
+    b = fc_reward_compute_breakdown(&state, &params, &runtime);
+
+    TEST("Jad death pays the configured extra Jad kill bonus");
+    if (fabsf(b.jad_kill_bonus - 500.0f) < 0.0001f) PASS();
+    else {
+        snprintf(err, sizeof(err), "jad_kill_bonus = %.4f", b.jad_kill_bonus);
+        FAIL(err);
+    }
+
+    fc_write_obs(&state, obs);
+    TEST("Wave number is already present in observation metadata");
+    if (obs[FC_OBS_META_START + FC_OBS_META_WAVE] > 0.0f) PASS();
+    else {
+        snprintf(err, sizeof(err), "wave_obs = %.4f",
+                 obs[FC_OBS_META_START + FC_OBS_META_WAVE]);
+        FAIL(err);
+    }
+
+    fc_destroy(&state);
+}
+
+/* ====================================================================== */
 /* Main                                                                    */
 /* ====================================================================== */
 
@@ -530,6 +868,11 @@ int main(void) {
     test_determinism();
     test_multi_episode();
     test_melee_safespot_gating();
+    test_player_attack_requires_los();
+    test_jad_healer_response();
+    test_ready_idle_prayer_gate();
+    test_jad_prayer_reward_timing();
+    test_late_wave_and_jad_bonuses();
 
     printf("\n============================================================\n");
     printf("RESULTS: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);

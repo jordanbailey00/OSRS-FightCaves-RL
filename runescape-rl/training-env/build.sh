@@ -118,10 +118,10 @@ if [ -z "$OBS_TENSOR_T" ]; then
 fi
 
 # Python paths
-PYTHON_INCLUDE=$(python3 -c "import sysconfig; print(sysconfig.get_path('include'))")
-PYBIND_INCLUDE=$(python3 -c "import pybind11; print(pybind11.get_include())")
-NUMPY_INCLUDE=$(python3 -c "import numpy; print(numpy.get_include())")
-EXT_SUFFIX=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+PYTHON_INCLUDE=$(python -c "import sysconfig; print(sysconfig.get_path('include'))")
+PYBIND_INCLUDE=$(python -c "import pybind11; print(pybind11.get_include())")
+NUMPY_INCLUDE=$(python -c "import numpy; print(numpy.get_include())")
+EXT_SUFFIX=$(python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 OUTPUT="pufferlib/_C${EXT_SUFFIX}"
 
 if [ "$MODE" = "cpu" ]; then
@@ -178,18 +178,21 @@ else
         [ -f "$dir/libcudnn.so" ] && CUDNN_LFLAG="-L$dir" && break
     done
     if [ -z "$CUDNN_IFLAG" ]; then
-        CUDNN_IFLAG=$(python3 -c "import nvidia.cudnn, os; print('-I' + os.path.join(nvidia.cudnn.__path__[0], 'include'))" 2>/dev/null || echo "")
+        CUDNN_IFLAG=$(python -c "import nvidia.cudnn, os; print('-I' + os.path.join(nvidia.cudnn.__path__[0], 'include'))" 2>/dev/null || echo "")
     fi
     if [ -z "$CUDNN_LFLAG" ]; then
-        CUDNN_LFLAG=$(python3 -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
+        CUDNN_LFLAG=$(python -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
     fi
 
     if [ -n "$NVCC_ARCH" ]; then
         ARCH=$NVCC_ARCH
     elif command -v nvidia-smi &>/dev/null; then
         GPU_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.')
-        ARCH=${GPU_CC:+sm_$GPU_CC}
-        ARCH=${ARCH:-native}
+        if printf '%s' "$GPU_CC" | grep -Eq '^[0-9]+$'; then
+            ARCH="sm_$GPU_CC"
+        else
+            ARCH="native"
+        fi
     else
         ARCH=native
     fi
@@ -217,22 +220,30 @@ else
         $PRECISION $RENDER_NVCC_FLAGS -O2 --threads 0 \
         src/bindings.cu -o build/bindings.o
 
-    # Find cuDNN from PyTorch's bundled copy if not system-installed
-    VENV_CUDNN=$(python3 -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
+    # Find cuDNN from PyTorch's bundled copy if not system-installed.
+    # Some wheels only ship versioned sonames (for example libcudnn.so.9)
+    # without the linker-facing libcudnn.so symlink.
+    VENV_CUDNN=$(python -c "import nvidia.cudnn, os; print('-L' + os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || echo "")
     if [ -z "$CUDNN_LFLAG" ] && [ -n "$VENV_CUDNN" ]; then
         CUDNN_LFLAG="$VENV_CUDNN"
     fi
 
-    # Build rpath flag so the .so finds CuDNN at runtime
-    CUDNN_RPATH=""
+    CUDNN_LINK_INPUT="-lcudnn"
     if [ -n "$CUDNN_LFLAG" ]; then
-        CUDNN_RPATH="-Wl,-rpath,${CUDNN_LFLAG#-L}"
+        CUDNN_LIB_DIR="${CUDNN_LFLAG#-L}"
+        if [ ! -e "$CUDNN_LIB_DIR/libcudnn.so" ]; then
+            VERSIONED_CUDNN=$(find "$CUDNN_LIB_DIR" -maxdepth 1 -name 'libcudnn.so.*' | sort | head -n 1)
+            if [ -n "$VERSIONED_CUDNN" ]; then
+                CUDNN_LINK_INPUT="$VERSIONED_CUDNN"
+                echo "Using versioned cuDNN link target: $VERSIONED_CUDNN"
+            fi
+        fi
     fi
 
     ${CXX:-g++} -shared -fPIC -fopenmp \
         build/bindings.o "$STATIC_LIB" "$RAYLIB_A" \
-        -L"$CUDA_HOME/lib64" $CUDNN_LFLAG $CUDNN_RPATH \
-        -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand -lcudnn \
+        -L"$CUDA_HOME/lib64" $CUDNN_LFLAG \
+        -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand $CUDNN_LINK_INPUT \
         -lgomp -O2 $RENDER_LIBS \
         -Bsymbolic-functions \
         -o "$OUTPUT"

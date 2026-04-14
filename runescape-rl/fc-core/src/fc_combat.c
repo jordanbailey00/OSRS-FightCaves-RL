@@ -1,5 +1,6 @@
 #include "fc_api.h"
 #include "fc_npc.h"
+#include <math.h>
 
 /*
  * fc_combat.c — OSRS combat math and pending hit resolution.
@@ -60,21 +61,66 @@ int fc_player_def_roll(const FcPlayer* p, int attack_style) {
 }
 
 /* ======================================================================== */
-/* Player attack roll (ranged crossbow)                                      */
+/* Player ranged attack / max-hit                                            */
 /* ======================================================================== */
 
-int fc_player_ranged_attack_roll(const FcPlayer* p) {
-    int eff_ranged = p->ranged_level + 8;  /* accurate style */
-    return eff_ranged * (p->ranged_attack_bonus + 64);
+static int fc_player_effective_ranged_level(const FcPlayer* p) {
+    /* Rapid is the active DPS style for both RCB and TBow in this sim. */
+    return p->ranged_level + 8;
 }
 
-int fc_player_ranged_max_hit(const FcPlayer* p) {
-    /* OSRS: 5 + (effectiveLevel * strengthBonus) / 64
-     * effectiveLevel = ranged_level + 8 (accurate style)
-     * strengthBonus = ranged_strength_bonus from equipment
-     * With Rng 70, adamant bolts (str 100): 5 + (78 * 100) / 64 = 5 + 121 = 126 tenths = 12.6 */
-    int eff_str = p->ranged_level + 8;
-    return 5 + (eff_str * p->ranged_strength_bonus) / 64;
+static int fc_tbow_target_magic_level(const FcNpc* target) {
+    const FcNpcStats* stats = fc_npc_get_stats(target->npc_type);
+    int magic_level = stats->magic_level;
+
+    if (magic_level < 0) magic_level = 0;
+    if (magic_level > 250) magic_level = 250;  /* non-CoX cap */
+    return magic_level;
+}
+
+static int fc_tbow_accuracy_multiplier_pct(const FcNpc* target) {
+    float magic = (float)fc_tbow_target_magic_level(target);
+    float x = 0.3f * magic;
+    float pct = 140.0f + ((3.0f * magic) - 10.0f) / 100.0f -
+        ((x - 100.0f) * (x - 100.0f)) / 100.0f;
+
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 140.0f) pct = 140.0f;
+    return (int)floorf(pct);
+}
+
+static int fc_tbow_damage_multiplier_pct(const FcNpc* target) {
+    float magic = (float)fc_tbow_target_magic_level(target);
+    float x = 0.3f * magic;
+    float pct = 250.0f + ((3.0f * magic) - 14.0f) / 100.0f -
+        ((x - 140.0f) * (x - 140.0f)) / 100.0f;
+
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 250.0f) pct = 250.0f;
+    return (int)floorf(pct);
+}
+
+int fc_player_ranged_attack_roll(const FcPlayer* p, const FcNpc* target) {
+    int eff_ranged = fc_player_effective_ranged_level(p);
+    int attack_roll = eff_ranged * (p->ranged_attack_bonus + 64);
+
+    if (p->weapon_kind == FC_WEAPON_TWISTED_BOW && target) {
+        attack_roll = (attack_roll * fc_tbow_accuracy_multiplier_pct(target)) / 100;
+    }
+
+    return attack_roll;
+}
+
+int fc_player_ranged_max_hit(const FcPlayer* p, const FcNpc* target) {
+    int eff_str = fc_player_effective_ranged_level(p);
+    int base_hp = (int)floorf(
+        0.5f + ((float)eff_str * (float)(p->ranged_strength_bonus + 64)) / 640.0f);
+
+    if (p->weapon_kind == FC_WEAPON_TWISTED_BOW && target) {
+        base_hp = (base_hp * fc_tbow_damage_multiplier_pct(target)) / 100;
+    }
+
+    return base_hp * 10;
 }
 
 /* ======================================================================== */
@@ -129,9 +175,9 @@ int fc_melee_hit_delay(void) {
     return 1;
 }
 
-/* Player ranged (rune crossbow + adamant bolts) */
+/* Player ranged projectile timing */
 int fc_ranged_hit_delay(int distance) {
-    /* Standard crossbow projectile: delay + distance-based travel */
+    /* Keep the existing lightweight projectile timing for player ranged attacks. */
     int travel = 5 * distance;  /* default multiplier for player ranged */
     return travel / 30 + 1;
 }
@@ -264,14 +310,15 @@ void fc_resolve_player_pending_hits(FcState* state) {
                 else state->wrong_jad_prayer = 1;
             }
 
-            /* Track prayer correctness for ALL ranged/magic hits */
-            if (h->attack_style == ATTACK_RANGED || h->attack_style == ATTACK_MAGIC) {
+            /* Track generic prayer correctness for ranged/magic hits.
+             * Jad also has its own separate Jad-specific reward channel. */
+            if (h->attack_style == ATTACK_RANGED ||
+                h->attack_style == ATTACK_MAGIC) {
                 if (blocked) state->correct_danger_prayer = 1;
                 else state->wrong_danger_prayer = 1;
             }
 
             /* Episode-level hit analytics */
-            state->ep_hits_total++;
             if (locked_prayer != PRAYER_NONE) {
                 if (blocked) {
                     state->ep_correct_blocks++;
@@ -315,8 +362,8 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
                 state->jad_damage_this_tick += h->damage;
             }
 
-            /* Yt-HurKot: player attack distracts healer */
-            if (npc->npc_type == NPC_YT_HURKOT && h->damage > 0) {
+            /* Yt-HurKot: any landed player attack distracts healer, including 0s. */
+            if (npc->npc_type == NPC_YT_HURKOT) {
                 npc->healer_distracted = 1;
             }
 
@@ -331,6 +378,29 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
 
                 if (npc->npc_type == NPC_TZTOK_JAD) {
                     state->jad_killed = 1;
+                    state->ep_jad_killed = 1;
+
+                    /* Jad death = cave complete (matches real OSRS).
+                     * Despawn any surviving healers immediately. */
+                    for (int k = 0; k < FC_MAX_NPCS; k++) {
+                        FcNpc *other = &state->npcs[k];
+                        if (other->active && !other->is_dead &&
+                            other->npc_type == NPC_YT_HURKOT) {
+                            other->is_dead = 1;
+                            other->died_this_tick = 1;
+                            other->death_timer = 0;
+                            state->npcs_remaining--;
+                        }
+                    }
+                    state->wave_just_cleared = 1;
+                    state->terminal = TERMINAL_CAVE_COMPLETE;
+
+                    /* Record wave 63 duration */
+                    int wave_ticks = state->tick - state->wave_start_tick;
+                    if (wave_ticks > state->ep_max_wave_ticks) {
+                        state->ep_max_wave_ticks = wave_ticks;
+                        state->ep_max_wave_ticks_wave = state->current_wave;
+                    }
                 }
 
                 /* Tz-Kek parent: split into 2 small Tz-Kek.

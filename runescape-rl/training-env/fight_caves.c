@@ -17,24 +17,44 @@ int main(void) {
     env.rewards = (float*)calloc(1, sizeof(float));
     env.terminals = (float*)calloc(1, sizeof(float));
 
-    /* Default reward weights */
-    env.w_damage_dealt = 0.5f;
-    env.w_attack_attempt = 0.0f;
-    env.w_damage_taken = -0.5f;
-    env.w_npc_kill = 3.0f;
-    env.w_wave_clear = 10.0f;
-    env.w_jad_damage = 2.0f;
-    env.w_jad_kill = 50.0f;
-    env.w_player_death = -20.0f;
-    env.w_cave_complete = 100.0f;
-    env.w_food_used = -0.05f;
-    env.w_prayer_pot_used = -0.05f;
-    env.w_correct_jad_prayer = 5.0f;
-    env.w_wrong_jad_prayer = -10.0f;
-    env.w_invalid_action = -0.1f;
-    env.w_movement = 0.0f;
-    env.w_idle = -0.01f;
-    env.w_tick_penalty = -0.005f;
+    {
+        FcRewardParams defaults = fc_reward_default_params();
+        env.w_damage_dealt = defaults.w_damage_dealt;
+        env.w_attack_attempt = defaults.w_attack_attempt;
+        env.w_damage_taken = defaults.w_damage_taken;
+        env.w_npc_kill = defaults.w_npc_kill;
+        env.w_wave_clear = defaults.w_wave_clear;
+        env.w_jad_damage = defaults.w_jad_damage;
+        env.w_jad_kill = defaults.w_jad_kill;
+        env.w_player_death = defaults.w_player_death;
+        env.w_correct_jad_prayer = defaults.w_correct_jad_prayer;
+        env.w_correct_danger_prayer = defaults.w_correct_danger_prayer;
+        env.w_invalid_action = defaults.w_invalid_action;
+        env.w_tick_penalty = defaults.w_tick_penalty;
+
+        env.shape_food_full_waste_penalty = defaults.shape_food_full_waste_penalty;
+        env.shape_food_waste_scale = defaults.shape_food_waste_scale;
+        env.shape_food_no_threat_penalty = defaults.shape_food_no_threat_penalty;
+        env.shape_pot_full_waste_penalty = defaults.shape_pot_full_waste_penalty;
+        env.shape_pot_waste_scale = defaults.shape_pot_waste_scale;
+        env.shape_pot_no_threat_penalty = defaults.shape_pot_no_threat_penalty;
+        env.shape_wrong_prayer_penalty = defaults.shape_wrong_prayer_penalty;
+        env.shape_npc_specific_prayer_bonus = defaults.shape_npc_specific_prayer_bonus;
+        env.shape_npc_melee_penalty = defaults.shape_npc_melee_penalty;
+        env.shape_wasted_attack_penalty = defaults.shape_wasted_attack_penalty;
+        env.shape_wave_stall_base_penalty = defaults.shape_wave_stall_base_penalty;
+        env.shape_wave_stall_cap = defaults.shape_wave_stall_cap;
+        env.shape_not_attacking_penalty = defaults.shape_not_attacking_penalty;
+        env.shape_kiting_reward = defaults.shape_kiting_reward;
+        env.shape_unnecessary_prayer_penalty = defaults.shape_unnecessary_prayer_penalty;
+        env.shape_safespot_attack_reward = defaults.shape_safespot_attack_reward;
+        env.shape_resource_threat_window = defaults.shape_resource_threat_window;
+        env.shape_kiting_min_dist = defaults.shape_kiting_min_dist;
+        env.shape_kiting_max_dist = defaults.shape_kiting_max_dist;
+        env.shape_wave_stall_start = defaults.shape_wave_stall_start;
+        env.shape_wave_stall_ramp_interval = defaults.shape_wave_stall_ramp_interval;
+        env.shape_not_attacking_grace_ticks = defaults.shape_not_attacking_grace_ticks;
+    }
 
     fc_init(&env.state);
 
@@ -59,10 +79,10 @@ int main(void) {
             env.actions[3] = (rand() % 8 == 0) ? (float)(rand() % 3) : 0.0f;
             env.actions[4] = (rand() % 8 == 0) ? (float)(rand() % 2) : 0.0f;
             c_step(&env);
+            total_reward += env.rewards[0];
             ep_ticks++;
         }
         total_ticks += ep_ticks;
-        total_reward += env.ep_return;
         if (env.state.current_wave > max_wave) max_wave = env.state.current_wave;
     }
 
@@ -76,8 +96,8 @@ int main(void) {
     printf("  Avg reward:  %.2f\n", total_reward / episodes);
     printf("  Max wave:    %d\n", max_wave);
     printf("  Time:        %.2fs\n", elapsed);
-    printf("  Log: score=%.1f ep_return=%.1f wave=%.1f n=%.0f\n",
-           env.log.score, env.log.episode_return, env.log.wave_reached, env.log.n);
+    printf("  Log: ep_len=%.1f wave=%.1f n=%.0f\n",
+           env.log.episode_length, env.log.wave_reached, env.log.n);
 
     c_close(&env);
     free(env.observations);

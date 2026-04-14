@@ -179,6 +179,9 @@ typedef struct {
     int ranged_level;
     int prayer_level;
     int magic_level;
+    int weapon_kind;
+    int weapon_speed;
+    int weapon_range;
 
     /* Equipment bonuses (exact values from Void 634 cache item definitions) */
     int ranged_attack_bonus;
@@ -368,16 +371,15 @@ typedef struct {
     int prayer_potion_used_this_tick;
     int pre_eat_hp;                 /* HP before eating (for reward threshold check) */
     int pre_drink_prayer;           /* prayer before drinking (for reward threshold check) */
+    int jad_heal_procs_this_tick;   /* number of Yt-HurKot heal procs that restored Jad HP */
 
     /* Episode-level analytics (cumulative, zeroed on fc_reset via memset) */
-    int ep_ticks_praying;       /* ticks with any prayer active */
     int ep_ticks_pray_melee;    /* ticks with protect melee active */
     int ep_ticks_pray_range;    /* ticks with protect range active */
     int ep_ticks_pray_magic;    /* ticks with protect magic active */
     int ep_correct_blocks;      /* hits correctly blocked by matching prayer */
     int ep_wrong_prayer_hits;   /* hits where prayer active but wrong type */
     int ep_no_prayer_hits;      /* hits where no prayer was active */
-    int ep_hits_total;          /* total hits resolved against player */
     int ep_damage_blocked;      /* total damage prevented by correct prayer */
     int ep_prayer_switches;     /* number of prayer changes */
     int ep_pots_used;           /* prayer pot doses consumed */
@@ -391,15 +393,12 @@ typedef struct {
     int ep_ketzek_melee_ticks;  /* ticks with any Ket-Zek at melee distance */
     int ep_attack_ready_ticks;  /* ticks where attack cooldown was ready */
     int ep_attack_attempt_ticks;/* ready ticks where a real attack fired */
-    int ep_reached_wave_30;     /* 1 if episode reached wave 30 */
-    int ep_cleared_wave_30;     /* 1 if episode cleared wave 30 */
-    int ep_reached_wave_31;     /* 1 if episode reached wave 31 */
-
-    /* Cached sorted NPC indices — computed once per tick, reused by
-     * fc_write_obs, fc_write_mask, and fc_action_attempt_is_invalid. */
-    int sorted_npc_indices[FC_MAX_NPCS];
-    int sorted_npc_count;
-    int visible_npc_count;
+    int safespot_attack_this_tick; /* 1 if player attacked with no NPC adjacent */
+    int ep_reached_wave_63;     /* 1 if episode reached Jad wave */
+    int ep_jad_killed;          /* 1 if Jad died at any point this episode */
+    int wave_start_tick;        /* tick when current wave was spawned */
+    int ep_max_wave_ticks;      /* longest single wave duration in ticks */
+    int ep_max_wave_ticks_wave; /* which wave number that was */
 } FcState;
 
 #endif /* FC_TYPES_H */

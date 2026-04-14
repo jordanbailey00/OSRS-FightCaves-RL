@@ -52,9 +52,12 @@ fi
 
 # Linux/mac
 PLATFORM="$(uname -s)"
+CC="${CC:-$(command -v ccache >/dev/null && echo 'ccache clang' || echo 'clang')}"
+CXX="${CXX:-g++}"
+CC_BASENAME="$(printf '%s\n' "$CC" | awk '{print $NF}')"
+
 if [ "$PLATFORM" = "Linux" ]; then
     RAYLIB_NAME='raylib-5.5_linux_amd64'
-    OMP_LIB=-lomp5
     SANITIZE_FLAGS=(-fsanitize=address,undefined,bounds,pointer-overflow,leak -fno-omit-frame-pointer)
     STANDALONE_LDFLAGS=(-lGL)
     SHARED_LDFLAGS=(-Bsymbolic-functions)
@@ -66,15 +69,30 @@ else
     SHARED_LDFLAGS=(-framework Cocoa -framework OpenGL -framework IOKit -undefined dynamic_lookup)
 fi
 
-CLANG_WARN=(
-    -Wall
-    -ferror-limit=3
-    -Werror=incompatible-pointer-types
-    -Werror=return-type
-    -Wno-error=incompatible-pointer-types-discards-qualifiers
-    -Wno-incompatible-pointer-types-discards-qualifiers
-    -Wno-error=array-parameter
-)
+if [ "$PLATFORM" = "Linux" ]; then
+    case "$CC_BASENAME" in
+        gcc|cc|g++) OMP_LIB=-lgomp ;;
+        *) OMP_LIB=-lomp5 ;;
+    esac
+fi
+
+if [[ "$CC_BASENAME" == clang* ]]; then
+    COMPILER_WARN=(
+        -Wall
+        -ferror-limit=3
+        -Werror=incompatible-pointer-types
+        -Werror=return-type
+        -Wno-error=incompatible-pointer-types-discards-qualifiers
+        -Wno-incompatible-pointer-types-discards-qualifiers
+        -Wno-error=array-parameter
+    )
+else
+    COMPILER_WARN=(
+        -Wall
+        -Werror=incompatible-pointer-types
+        -Werror=return-type
+    )
+fi
 
 download() {
     local name=$1 url=$2
@@ -126,11 +144,11 @@ OUTPUT_NAME=${OUTPUT_NAME:-$ENV}
 
 # Standalone environment build
 if [ -n "$DEBUG" ] || [ "$MODE" = "local" ]; then
-    CLANG_OPT=(-g -O0 "${CLANG_WARN[@]}" "${SANITIZE_FLAGS[@]}")
+    CLANG_OPT=(-g -O0 "${COMPILER_WARN[@]}" "${SANITIZE_FLAGS[@]}")
     NVCC_OPT="-O0 -g"
     LINK_OPT="-g"
 else
-    CLANG_OPT=(-O2 -DNDEBUG "${CLANG_WARN[@]}")
+    CLANG_OPT=(-O2 -DNDEBUG "${COMPILER_WARN[@]}")
     NVCC_OPT="-O2 --threads 0"
     LINK_OPT="-O2"
 fi
@@ -168,17 +186,42 @@ elif [ "$MODE" = "web" ]; then
     exit 0
 fi
 
+# Find CUDA toolkit / nvcc
+NVCC_BIN=""
+if [ -n "${CUDA_HOME:-}" ] && [ -x "$CUDA_HOME/bin/nvcc" ]; then
+    NVCC_BIN="$CUDA_HOME/bin/nvcc"
+elif [ -n "${CUDA_PATH:-}" ] && [ -x "$CUDA_PATH/bin/nvcc" ]; then
+    NVCC_BIN="$CUDA_PATH/bin/nvcc"
+elif command -v nvcc >/dev/null 2>&1; then
+    NVCC_BIN="$(command -v nvcc)"
+elif [ -x /usr/local/cuda/bin/nvcc ]; then
+    NVCC_BIN="/usr/local/cuda/bin/nvcc"
+else
+    for candidate in /usr/local/cuda-*/bin/nvcc; do
+        if [ -x "$candidate" ]; then
+            NVCC_BIN="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$NVCC_BIN" ]; then
+    echo "Error: nvcc not found. Set CUDA_HOME or add nvcc to PATH."
+    exit 1
+fi
+
+CUDA_HOME="$(dirname "$(dirname "$NVCC_BIN")")"
+
 # Find cuDNN path
-CUDA_HOME=${CUDA_HOME:-${CUDA_PATH:-$(dirname "$(dirname "$(which nvcc)")")}}
 CUDNN_IFLAG=""
 CUDNN_LFLAG=""
-for dir in /usr/local/cuda/include /usr/include; do
+for dir in "$CUDA_HOME/include" /usr/local/cuda/include /usr/include; do
     if [ -f "$dir/cudnn.h" ]; then
         CUDNN_IFLAG="-I$dir"
         break
     fi
 done
-for dir in /usr/local/cuda/lib64 /usr/lib/x86_64-linux-gnu; do
+for dir in "$CUDA_HOME/lib64" /usr/local/cuda/lib64 /usr/lib/x86_64-linux-gnu; do
     if [ -f "$dir/libcudnn.so" ]; then
         CUDNN_LFLAG="-L$dir"
         break
@@ -194,8 +237,11 @@ fi
 export CCACHE_DIR="${CCACHE_DIR:-$HOME/.ccache}"
 export CCACHE_BASEDIR="$(pwd)"
 export CCACHE_COMPILERCHECK=content
-NVCC="ccache $CUDA_HOME/bin/nvcc"
-CC="${CC:-$(command -v ccache >/dev/null && echo 'ccache clang' || echo 'clang')}"
+if command -v ccache >/dev/null; then
+    NVCC="ccache $NVCC_BIN"
+else
+    NVCC="$NVCC_BIN"
+fi
 if [ -n "$NVCC_ARCH" ]; then
     ARCH=$NVCC_ARCH
 elif command -v nvidia-smi &>/dev/null; then

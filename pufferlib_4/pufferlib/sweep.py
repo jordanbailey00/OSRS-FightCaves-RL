@@ -138,7 +138,16 @@ class Logit(Space):
         log_spaced = zero_one*(math.log(1-self.max, self.base) - math.log(1-self.min, self.base)) + math.log(1-self.min, self.base)
         return 1 - self.base**log_spaced
 
-def _params_from_puffer_sweep(sweep_config, only_include=None):
+def _matches_sweep_only(full_name, leaf_name, only_include):
+    return any(
+        target == full_name
+        or target == leaf_name
+        or full_name.endswith(f'/{target}')
+        for target in only_include
+    )
+
+
+def _params_from_puffer_sweep(sweep_config, only_include=None, prefix=''):
     param_spaces = {}
 
     if 'sweep_only' in sweep_config:
@@ -149,12 +158,15 @@ def _params_from_puffer_sweep(sweep_config, only_include=None):
                     'sweep_only', 'max_suggestion_cost', 'early_stop_quantile', 'gpus', 'max_runs'):
             continue
 
+        full_name = f'{prefix}/{name}' if prefix else name
         assert isinstance(param, dict), f'Param {name} is not a dict'
         if any(isinstance(param[k], dict) for k in param):
-            param_spaces[name] = _params_from_puffer_sweep(param, only_include)
+            nested_spaces = _params_from_puffer_sweep(param, only_include, prefix=full_name)
+            if nested_spaces:
+                param_spaces[name] = nested_spaces
             continue
  
-        if only_include and not any(k in name for k in only_include):
+        if only_include and not _matches_sweep_only(full_name, name, only_include):
             continue
 
         assert 'distribution' in param
@@ -186,6 +198,10 @@ class Hyperparameters:
         self.spaces = _params_from_puffer_sweep(config)
         self.flat_spaces = dict(unroll_nested_dict(self.spaces))
         self.num = len(self.flat_spaces)
+        if self.num == 0:
+            raise ValueError(
+                'Sweep search space is empty. Check sweep_only and the configured sweep parameters.'
+            )
 
         self.metric = config['metric']
         goal = config['goal']

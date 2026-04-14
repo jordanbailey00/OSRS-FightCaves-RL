@@ -42,6 +42,7 @@ static void clear_per_tick_flags(FcState* state) {
     state->correct_danger_prayer = 0;
     state->wrong_danger_prayer = 0;
     state->attack_attempt_this_tick = 0;
+    state->safespot_attack_this_tick = 0;
     state->invalid_action_this_tick = 0;
     state->movement_this_tick = 0;
     state->idle_this_tick = 0;
@@ -49,6 +50,7 @@ static void clear_per_tick_flags(FcState* state) {
     state->prayer_potion_used_this_tick = 0;
     state->pre_eat_hp = 0;
     state->pre_drink_prayer = 0;
+    state->jad_heal_procs_this_tick = 0;
 
     FcPlayer* p = &state->player;
     p->damage_taken_this_tick = 0;
@@ -264,17 +266,20 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
             p->approach_target = 0;
         } else {
             int dist = fc_distance_to_npc(p->x, p->y, target);
-            int weapon_range = 7;  /* rune crossbow */
+            int weapon_range = p->weapon_range;
+            int has_los = fc_has_los_to_npc(
+                p->x, p->y, target->x, target->y, target->size, state->walkable);
 
-            if (dist > weapon_range && p->approach_target && p->route_idx >= p->route_len) {
+            if ((dist > weapon_range || !has_los) &&
+                p->approach_target && p->route_idx >= p->route_len) {
                 /* Walk toward the NPC center. The greedy pathfinder will head
                  * straight toward the target. The route consumer in the movement
-                 * section will stop once we're in range (checked next tick). */
+                 * section will stop once we're in range with LOS (checked next tick). */
                 int npc_cx = target->x + target->size / 2;
                 int npc_cy = target->y + target->size / 2;
                 p->route_len = fc_pathfind_bfs(p->x, p->y, npc_cx, npc_cy,
                                                 state->walkable, p->route_x, p->route_y, FC_MAX_ROUTE);
-                /* Trim the route to stop at weapon range */
+                /* Trim the route to the first tile that can actually fire. */
                 for (int ri = 0; ri < p->route_len; ri++) {
                     int rx = p->route_x[ri], ry = p->route_y[ri];
                     /* Chebyshev distance to nearest NPC footprint tile */
@@ -283,7 +288,9 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                     int rdx = (rx > nx) ? rx - nx : nx - rx;
                     int rdy = (ry > ny) ? ry - ny : ny - ry;
                     int rdist = (rdx > rdy) ? rdx : rdy;
-                    if (rdist <= weapon_range) {
+                    if (rdist <= weapon_range &&
+                        fc_has_los_to_npc(rx, ry, target->x, target->y,
+                                          target->size, state->walkable)) {
                         p->route_len = ri + 1;  /* stop here */
                         break;
                     }
@@ -302,15 +309,15 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                 }
             }
 
-            if (dist <= weapon_range && p->attack_timer <= 0) {
+            if (dist <= weapon_range && has_los && p->attack_timer <= 0) {
                 /* In range — fire attack */
-                int att_roll = fc_player_ranged_attack_roll(p);
+                int att_roll = fc_player_ranged_attack_roll(p, target);
                 const FcNpcStats* tstats = fc_npc_get_stats(target->npc_type);
                 int def_roll = fc_npc_def_roll(tstats->def_level, tstats->def_bonus);
                 float chance = fc_hit_chance(att_roll, def_roll);
 
                 int hit = (fc_rng_float(state) < chance) ? 1 : 0;
-                int max_hit = fc_player_ranged_max_hit(p);
+                int max_hit = fc_player_ranged_max_hit(p, target);
                 int damage = hit ? fc_rng_int(state, max_hit + 1) : 0;
 
                 int delay = fc_ranged_hit_delay(dist);
@@ -319,9 +326,20 @@ static void process_player_actions(FcState* state, const int actions[FC_NUM_ACTI
                                      damage, delay, ATTACK_RANGED, -1, 0);
 
                 state->attack_attempt_this_tick = 1;
-                p->attack_timer = 5;
+                p->attack_timer = p->weapon_speed;
                 p->ammo_count--;
                 p->hit_landed_this_tick = 1;  /* flag for viewer hitsplat */
+
+                /* Safespot: attacked with no NPC adjacent (dist <= 1) */
+                int any_adjacent = 0;
+                for (int j = 0; j < FC_MAX_NPCS; j++) {
+                    FcNpc *n2 = &state->npcs[j];
+                    if (n2->active && !n2->is_dead) {
+                        int d = fc_distance_to_npc(p->x, p->y, n2);
+                        if (d <= 1) { any_adjacent = 1; break; }
+                    }
+                }
+                if (!any_adjacent) state->safespot_attack_this_tick = 1;
             }
         }
     }
@@ -502,8 +520,6 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
     check_terminal(state);
 
     /* 8. Episode analytics */
-    if (state->player.prayer != PRAYER_NONE)
-        state->ep_ticks_praying++;
     if (state->player.prayer == PRAYER_PROTECT_MELEE)
         state->ep_ticks_pray_melee++;
     if (state->player.prayer == PRAYER_PROTECT_RANGE)
@@ -512,16 +528,9 @@ void fc_tick(FcState* state, const int actions[FC_NUM_ACTION_HEADS]) {
         state->ep_ticks_pray_magic++;
     if (state->player.prayer_changed_this_tick)
         state->ep_prayer_switches++;
-    if (state->current_wave >= 30)
-        state->ep_reached_wave_30 = 1;
-    if (state->current_wave >= 31) {
-        state->ep_cleared_wave_30 = 1;
-        state->ep_reached_wave_31 = 1;
-    }
+    if (state->current_wave >= 63)
+        state->ep_reached_wave_63 = 1;
 
-    /* 9. Cache sorted NPC indices for next tick's obs/mask/validation */
-    fc_cache_sorted_npcs(state);
-
-    /* 10. Increment tick */
+    /* 9. Increment tick */
     state->tick++;
 }

@@ -66,10 +66,7 @@ fi
 
 if [ -n "$BACKEND_REBUILD_REASON" ]; then
     echo "[train.sh] Rebuilding fight_caves backend: $BACKEND_REBUILD_REASON"
-    bash "$TRAINING_BUILD_SH" || {
-        echo "[train.sh] CUDA build failed, falling back to CPU backend..."
-        bash "$TRAINING_BUILD_SH" --cpu
-    }
+    bash "$TRAINING_BUILD_SH"
 fi
 
 WANDB_FLAG="--wandb"

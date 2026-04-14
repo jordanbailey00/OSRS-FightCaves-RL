@@ -15,11 +15,3 @@ runescape-rl/reference/legacy-rsps/**/build/
 *.jar
 *.zip
 pufferlib/box2d-web/
-
-# PufferLib 4.0 vendored copy — runtime state (not tracked)
-pufferlib_4/checkpoints/
-pufferlib_4/wandb/
-pufferlib_4/logs/
-pufferlib_4/build/
-pufferlib_4/fight_caves
-pufferlib_4/pufferlib/_C*.so

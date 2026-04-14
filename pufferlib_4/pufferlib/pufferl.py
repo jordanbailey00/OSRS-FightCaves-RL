@@ -67,10 +67,12 @@ def fmt_perf(name, color, delta_ref, elapsed, b2, c2):
     percent = 0 if delta_ref == 0 else int(100*elapsed/delta_ref - 1e-5)
     return f'{color}{name}', duration(elapsed, b2, c2), f'{b2}{percent:2d}{c2}%'
 
+_DASHBOARD_CONSOLE = rich.console.Console()
+
 def print_dashboard(args, model_size, flat_logs, clear=False, idx=[0],
         c1='[cyan]', c2='[white]', b1='[bright_cyan]', b2='[bright_white]'):
     g = lambda k, d=0: flat_logs.get(k, d)
-    console = rich.console.Console()
+    console = _DASHBOARD_CONSOLE
     dashboard = Table(box=rich.box.ROUNDED, expand=True,
         show_header=False, border_style='bright_cyan')
     table = Table(box=None, expand=True, show_header=False)
@@ -149,13 +151,19 @@ def print_dashboard(args, model_size, flat_logs, clear=False, idx=[0],
             if i == 30:
                 break
 
-    if clear:
-        console.clear()
-
     with console.capture() as capture:
         console.print(dashboard)
+    rendered = capture.get()
 
-    print('\033[0;0H' + capture.get())
+    interactive_tty = sys.stdout.isatty() and os.environ.get('TERM', 'dumb') != 'dumb'
+    if interactive_tty:
+        prefix = '\033[2J\033[H' if clear else '\033[H\033[J'
+        sys.stdout.write(prefix)
+        sys.stdout.write(rendered)
+        sys.stdout.flush()
+    else:
+        sys.stdout.write(rendered)
+        sys.stdout.flush()
 
 def validate_config(args):
     minibatch_size = args['train']['minibatch_size']
@@ -175,9 +183,28 @@ def _resolve_backend(args):
         return PuffeRL
     return _C
 
+def _resolve_load_path(args):
+    load_path = args.get('load_model_path')
+    if load_path == 'latest':
+        checkpoint_dir = args['checkpoint_dir']
+        pattern = os.path.join(checkpoint_dir, args['env_name'], '**', '*.bin')
+        candidates = glob.glob(pattern, recursive=True)
+        if not candidates:
+            raise FileNotFoundError(f'No .bin checkpoints found in {checkpoint_dir}/{args["env_name"]}/')
+        load_path = max(candidates, key=os.path.getctime)
+    return load_path
+
+def _maybe_load_train_weights(backend, pufferl, args):
+    load_path = _resolve_load_path(args)
+    if load_path is None:
+        return
+    backend.load_weights(pufferl, load_path)
+    print(f'Loaded weights from {load_path}')
+
 def _train_worker(args):
     backend = _resolve_backend(args)
     pufferl = backend.create_pufferl(args)
+    _maybe_load_train_weights(backend, pufferl, args)
     args.pop('nccl_id', None)
     while pufferl.global_step < args['train']['total_timesteps']:
         backend.rollouts(pufferl)
@@ -216,6 +243,8 @@ def _train(env_name, args, sweep_obj=None, result_queue=None, verbose=False):
         if result_queue is not None:
             result_queue.put((args['gpu_id'], [], [], []))
         return
+
+    _maybe_load_train_weights(backend, pufferl, args)
 
     args.pop('nccl_id', None)
     model_size = pufferl.num_params()
@@ -310,7 +339,7 @@ def _train(env_name, args, sweep_obj=None, result_queue=None, verbose=False):
         wandb.run.finish()
 
     if result_queue is not None:
-        result_queue.put((args['gpu_id'], metrics['env/score'], metrics['uptime'], metrics['agent_steps']))
+        result_queue.put((args['gpu_id'], metrics[target_key], metrics['uptime'], metrics['agent_steps']))
 
 def train(env_name, args=None, gpus=None, **kwargs):
     args = args or load_config(env_name)
@@ -408,14 +437,7 @@ def eval(env_name, args=None, load_path=None):
     pufferl = backend.create_pufferl(args)
 
     # Resolve load path
-    load_path = load_path or args.get('load_model_path')
-    if load_path == 'latest':
-        checkpoint_dir = args['checkpoint_dir']
-        pattern = os.path.join(checkpoint_dir, args['env_name'], '**', '*.bin')
-        candidates = glob.glob(pattern, recursive=True)
-        if not candidates:
-            raise FileNotFoundError(f'No .bin checkpoints found in {checkpoint_dir}/{args["env_name"]}/')
-        load_path = max(candidates, key=os.path.getctime)
+    load_path = load_path or _resolve_load_path(args)
 
     if load_path is not None:
         backend.load_weights(pufferl, load_path)
