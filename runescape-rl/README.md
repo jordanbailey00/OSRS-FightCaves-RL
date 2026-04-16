@@ -12,9 +12,7 @@ Training a reinforcement learning agent to complete the Old School RuneScape Fig
 - Learned safespotting, prayer switching, kiting, and resource management
 - Produced Jad kills (~0.4% peak rate) — actively optimizing via reward sweeps
 
-[<img width=600 src="https://img.youtube.com/vi/ft-aXfF5DNY/maxresdefault.jpg">](https://youtu.be/ft-aXfF5DNY)
-
-> **[Watch the agent play](https://youtu.be/ft-aXfF5DNY)** — v25.9 trained policy in the Raylib viewer
+![Agent Demo](runescape-rl/assets/demo.gif)
 
 ---
 
