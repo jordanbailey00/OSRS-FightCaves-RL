@@ -12,7 +12,7 @@ Training a reinforcement learning agent to complete the Old School RuneScape Fig
 - Learned safespotting, prayer switching, kiting, and resource management
 - Produced Jad kills (~0.4% peak rate) — actively optimizing via reward sweeps
 
-<!-- TODO: Screenshot of agent playing in the Raylib viewer (wave 50+, prayer icons visible, debug overlay on) -->
+> **[Watch the agent play (video)](https://github.com/jordanbailey00/OSRS-FightCaves-RL/releases/download/v25.9/simplescreenrecorder.mkv)** — v25.9 trained policy in the Raylib viewer
 
 ---
 
@@ -30,8 +30,8 @@ Training a reinforcement learning agent to complete the Old School RuneScape Fig
 ### Clone & Setup
 
 ```bash
-git clone https://github.com/jordanbailey00/runescape-rl.git
-cd runescape-rl/runescape-rl
+git clone https://github.com/jordanbailey00/OSRS-FightCaves-RL.git
+cd OSRS-FightCaves-RL/runescape-rl
 
 # Create virtual environment
 python3 -m venv .venv
