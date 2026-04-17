@@ -15,3 +15,7 @@ runescape-rl/reference/legacy-rsps/**/build/
 *.jar
 *.zip
 pufferlib/box2d-web/
+
+# Documentation — keep only root README out of live repo
+*.md
+!/README.md
