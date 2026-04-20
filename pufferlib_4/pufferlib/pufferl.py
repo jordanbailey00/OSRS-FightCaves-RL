@@ -213,18 +213,45 @@ def _train_worker(args):
     backend.close(pufferl)
 
 def _train(env_name, args, sweep_obj=None, result_queue=None, verbose=False):
-    '''Single-GPU training worker. Process target for both DDP ranks and sweep trials.'''
+    '''Single-GPU training worker. Process target for both DDP ranks and sweep trials.
+
+    Wraps _train_impl so any unhandled exception still signals the sweep parent
+    via result_queue (otherwise a worker crash hangs sweep() on queue.get()).'''
+    gpu_id = args.get('gpu_id', -1)
+    try:
+        return _train_impl(env_name, args, sweep_obj=sweep_obj,
+            result_queue=result_queue, verbose=verbose)
+    except Exception as e:
+        import traceback
+        print(f'[_train] FATAL in worker gpu_id={gpu_id}: {type(e).__name__}: {e}', flush=True)
+        traceback.print_exc()
+        if result_queue is not None:
+            try:
+                result_queue.put((gpu_id, None, None, None))
+            except Exception as put_err:
+                print(f'[_train] Failed to signal parent: {put_err}', flush=True)
+        raise
+
+def _train_impl(env_name, args, sweep_obj=None, result_queue=None, verbose=False):
     backend = _resolve_backend(args)
     rank = args['rank']
     run_id = str(int(1000*time.time()))
     if args['wandb']:
         import wandb
         run_id = wandb.util.generate_id()
-        wandb.init(id=run_id, config=args,
-            project=args['wandb_project'], group=args['wandb_group'],
-            tags=[args['tag']] if args['tag'] is not None else [],
-            settings=wandb.Settings(console="off"),
-        )
+        for attempt in range(3):
+            try:
+                wandb.init(id=run_id, config=args,
+                    project=args['wandb_project'], group=args['wandb_group'],
+                    tags=[args['tag']] if args['tag'] is not None else [],
+                    settings=wandb.Settings(console="off", init_timeout=300),
+                )
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise
+                print(f'[_train] wandb.init attempt {attempt+1}/3 failed: {e}. Retrying in 10s...', flush=True)
+                time.sleep(10)
 
     target_key = f'env/{args["sweep"]["metric"]}'
     total_timesteps = args['train']['total_timesteps']
@@ -365,6 +392,46 @@ def train(env_name, args=None, gpus=None, **kwargs):
             ctx.Process(target=_train, args=(env_name, worker_args),
                 kwargs=kwargs).start()
 
+def _replay_prior_observations(sweep_obj, args, sweep_config):
+    '''Replay prior sweep observations from local JSON logs so Protein's GP state
+    survives a sweep restart. Matches runs by wandb_group and returns the count
+    of successful prior runs (each run contributes `downsample` observations).'''
+    group = args.get('wandb_group') or ''
+    if not group:
+        return 0
+    log_dir = os.path.join(args['log_dir'], args['env_name'])
+    if not os.path.isdir(log_dir):
+        return 0
+    metric = sweep_config['metric']
+    target_key = metric if metric.startswith('env/') else f'env/{metric}'
+    log_files = sorted(glob.glob(os.path.join(log_dir, '*.json')), key=os.path.getmtime)
+    count = 0
+    for path in log_files:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if data.get('wandb_group') != group:
+            continue
+        metrics = data.get('metrics') or {}
+        scores = metrics.get(target_key)
+        costs = metrics.get('uptime')
+        timesteps = metrics.get('agent_steps')
+        if not scores or not costs or not timesteps:
+            continue
+        if not (isinstance(scores, list) and isinstance(costs, list) and isinstance(timesteps, list)):
+            continue
+        for s, c, t in zip(scores, costs, timesteps):
+            if s is None or c is None or t is None:
+                continue
+            data['train']['total_timesteps'] = t
+            sweep_obj.observe(data, float(s), float(c), is_failure=False)
+        count += 1
+    if count:
+        print(f'[sweep] Replayed {count} prior runs from {log_dir} (group={group})', flush=True)
+    return count
+
 def sweep(env_name, args=None, pareto=False):
     '''Train entry point. Handles single-GPU, multi-GPU DDP, and sweeps.'''
     args = args or load_config(env_name)
@@ -385,12 +452,15 @@ def sweep(env_name, args=None, pareto=False):
     num_experiments = args['sweep']['max_runs']
     ts_default = args['train']['total_timesteps']
     ts_config = sweep_config.get('train', {}).get('total_timesteps', {'min': ts_default, 'max': ts_default})
-    
+
     all_timesteps = np.geomspace(ts_config['min'], ts_config['max'], sweep_gpus)
     result_queue = mp.get_context('spawn').Queue()
 
     active = {}
-    completed = 0
+    completed = _replay_prior_observations(sweep_obj, args, sweep_config)
+    if completed >= num_experiments:
+        print(f'[sweep] Target reached via prior logs ({completed}/{num_experiments}). Exiting.')
+        return
     while completed < num_experiments:
         if len(active) >= sweep_gpus//exp_gpus: # Collect completed runs
             gpu_id, scores, costs, timesteps = result_queue.get()
@@ -458,7 +528,7 @@ def load_config(env_name):
     parser.add_argument('--render-mode', type=str, default='auto',
         choices=['auto', 'human', 'ansi', 'rgb_array', 'raylib', 'None'])
     parser.add_argument('--wandb', action='store_true', help='Use wandb for logging')
-    parser.add_argument('--wandb-project', type=str, default='puffer4')
+    parser.add_argument('--wandb-project', type=str, default='fight caves rl')
     parser.add_argument('--wandb-group', type=str, default='debug')
     parser.add_argument('--tag', type=str, default=None, help='Tag for experiment')
     parser.add_argument('--slowly', action='store_true', help='Use PyTorch training backend')

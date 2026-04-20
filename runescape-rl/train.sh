@@ -44,6 +44,7 @@ export WANDB_DIR="$PUFFER_DIR/wandb"
 export WANDB_CACHE_DIR="$PUFFER_DIR/wandb/.cache"
 export WANDB_CONFIG_DIR="$PUFFER_DIR/wandb/.config"
 export WANDB_DATA_DIR="$PUFFER_DIR/wandb/.data"
+export WANDB_PROJECT="${WANDB_PROJECT:-fight caves rl}"
 CUDNN_LIB="$(python -c "import nvidia.cudnn, os; print(os.path.join(nvidia.cudnn.__path__[0], 'lib'))" 2>/dev/null || true)"
 if [ -n "$CUDNN_LIB" ]; then
     export LD_LIBRARY_PATH="$CUDNN_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -69,6 +70,13 @@ if [ -n "$BACKEND_REBUILD_REASON" ]; then
     bash "$TRAINING_BUILD_SH"
 fi
 
+MODE="${1:-train}"
+if [ "$MODE" = "sweep" ] || [ "$MODE" = "paretosweep" ]; then
+    shift
+elif [ "$MODE" != "train" ] && [ "$MODE" != "eval" ]; then
+    MODE="train"
+fi
+
 WANDB_FLAG="--wandb"
 EXTRA_ARGS=()
 for arg in "$@"; do
@@ -78,10 +86,13 @@ for arg in "$@"; do
         EXTRA_ARGS+=("$arg")
     fi
 done
-
-CMD=(python -m pufferlib.pufferl train fight_caves)
+CMD=(python -m pufferlib.pufferl "$MODE" fight_caves)
 if [ -n "$WANDB_FLAG" ]; then
     CMD+=("$WANDB_FLAG")
+fi
+CMD+=(--wandb-project "$WANDB_PROJECT")
+if [ -n "${WANDB_TAG:-}" ]; then
+    CMD+=(--tag "$WANDB_TAG")
 fi
 if [ -n "${LOAD_MODEL_PATH:-}" ]; then
     echo "[train.sh] Using warm-start checkpoint: $LOAD_MODEL_PATH"
