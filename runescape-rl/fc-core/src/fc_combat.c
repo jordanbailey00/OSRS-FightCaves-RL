@@ -304,16 +304,17 @@ void fc_resolve_player_pending_hits(FcState* state) {
                 if (p->current_prayer < 0) p->current_prayer = 0;
             }
 
-            /* Track Jad prayer correctness */
+            /* Track prayer correctness. Jad hits and non-Jad styled hits are
+             * mutually exclusive — only one of correct_jad_prayer or
+             * correct_danger_prayer fires per hit. Non-Jad path covers all
+             * styled attacks including melee (ranged/magic NPCs can melee
+             * when adjacent). */
             if (state->npcs[h->source_npc_idx].npc_type == NPC_TZTOK_JAD) {
                 if (blocked) state->correct_jad_prayer = 1;
                 else state->wrong_jad_prayer = 1;
-            }
-
-            /* Track generic prayer correctness for ranged/magic hits.
-             * Jad also has its own separate Jad-specific reward channel. */
-            if (h->attack_style == ATTACK_RANGED ||
-                h->attack_style == ATTACK_MAGIC) {
+            } else if (h->attack_style == ATTACK_RANGED ||
+                       h->attack_style == ATTACK_MAGIC ||
+                       h->attack_style == ATTACK_MELEE) {
                 if (blocked) state->correct_danger_prayer = 1;
                 else state->wrong_danger_prayer = 1;
             }
@@ -356,6 +357,7 @@ void fc_resolve_npc_pending_hits(FcState* state, int npc_idx) {
 
             npc->damage_taken_this_tick += h->damage;
             state->damage_dealt_this_tick += h->damage;
+            state->hits_landed_this_tick++;
 
             /* Track Jad-specific damage */
             if (npc->npc_type == NPC_TZTOK_JAD) {

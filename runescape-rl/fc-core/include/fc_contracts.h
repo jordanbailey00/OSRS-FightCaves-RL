@@ -71,22 +71,32 @@
  * equal, which is critical for replay consistency and debug reproducibility.
  */
 #define FC_OBS_NPC_START        FC_OBS_PLAYER_SIZE  /* 17 */
-#define FC_OBS_NPC_STRIDE       10
+#define FC_OBS_NPC_STRIDE       12
 #define FC_OBS_NPC_SLOTS        8   /* FC_VISIBLE_NPCS */
 
-/* Per-NPC feature offsets within stride */
+/* Per-NPC feature offsets within stride.
+ *
+ * Telegraph bits (TELE_MELEE/RANGED/MAGIC) are one-hot: the style this NPC
+ * would use RIGHT NOW based on distance (no LOS check). Stays on even when
+ * LOS=0 so the agent can prepare prayer for when LOS resumes. Yt-HurKot
+ * never telegraphs (healer — don't want the policy praying for it). Jad
+ * telegraphs only after it commits a pending_hit (style is stochastic).
+ * All zero when NPC slot is empty/dead.
+ */
 #define FC_NPC_VALID            0   /* 1 if slot occupied, 0 if empty */
 #define FC_NPC_X                1   /* x / ARENA_WIDTH */
 #define FC_NPC_Y                2   /* y / ARENA_HEIGHT */
 #define FC_NPC_HP               3   /* current_hp / max_hp */
 #define FC_NPC_DISTANCE         4   /* chebyshev distance / ARENA_WIDTH */
-#define FC_NPC_EFFECTIVE_STYLE  5   /* style this NPC would use now at current distance/LOS */
-#define FC_NPC_ATK_TIMER        6   /* attack_timer / attack_speed */
-#define FC_NPC_LOS              7   /* 1 if player has line of sight, 0 if blocked */
-#define FC_NPC_PENDING_STYLE    8   /* incoming attack style (0=none, 0.33/0.67/1.0) */
-#define FC_NPC_PENDING_TICKS    9   /* ticks until incoming attack resolves (normalized) */
+#define FC_NPC_TELE_MELEE       5   /* one-hot: NPC would melee at current distance */
+#define FC_NPC_TELE_RANGED      6   /* one-hot: NPC would range at current distance */
+#define FC_NPC_TELE_MAGIC       7   /* one-hot: NPC would magic at current distance */
+#define FC_NPC_ATK_TIMER        8   /* attack_timer / attack_speed */
+#define FC_NPC_LOS              9   /* 1 if player has line of sight, 0 if blocked */
+#define FC_NPC_PENDING_STYLE    10  /* incoming attack style (0=none, 0.33/0.67/1.0) */
+#define FC_NPC_PENDING_TICKS    11  /* ticks until incoming attack resolves (normalized) */
 
-#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 80 */
+#define FC_OBS_NPC_TOTAL        (FC_OBS_NPC_STRIDE * FC_OBS_NPC_SLOTS)  /* 96 */
 
 /* --- Wave/meta features (9 floats) --- */
 #define FC_OBS_META_START       (FC_OBS_NPC_START + FC_OBS_NPC_TOTAL)  /* 97 */
@@ -102,7 +112,7 @@
 #define FC_OBS_META_SIZE        9
 
 /* --- Policy observation total --- */
-#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 106 */
+#define FC_POLICY_OBS_SIZE      (FC_OBS_PLAYER_SIZE + FC_OBS_NPC_TOTAL + FC_OBS_META_SIZE)  /* 122 */
 
 /* --- Reward features (19 floats) --- */
 /*
@@ -111,7 +121,7 @@
  * The policy DOES NOT consume these by default.
  * Python applies configurable shaping weights to produce the scalar reward.
  */
-#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 106 */
+#define FC_REWARD_START         FC_POLICY_OBS_SIZE  /* 122 */
 #define FC_RWD_DAMAGE_DEALT     0   /* NPC HP reduced this tick (normalized) */
 #define FC_RWD_DAMAGE_TAKEN     1   /* player HP reduced this tick */
 #define FC_RWD_NPC_KILL         2   /* NPC death count this tick */

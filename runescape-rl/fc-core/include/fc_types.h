@@ -354,6 +354,7 @@ typedef struct {
 
     /* Per-tick aggregated event flags (for reward features) */
     int damage_dealt_this_tick;
+    int hits_landed_this_tick;   /* count of player pending-hits that resolved on NPCs this tick */
     int damage_taken_this_tick;
     int npcs_killed_this_tick;
     int wave_just_cleared;

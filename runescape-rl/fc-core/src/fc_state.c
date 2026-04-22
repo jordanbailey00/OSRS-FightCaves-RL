@@ -304,34 +304,42 @@ static float normalize_prayer_drain_counter(const FcPlayer* p) {
     return normalized;
 }
 
-static int npc_effective_style_now(const FcState* state, const FcNpc* npc, float has_los) {
-    const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
-    int dist = npc_distance(&state->player, npc);
-    int can_melee = fc_npc_can_melee_player(state->player.x, state->player.y,
-                                            npc->x, npc->y, npc->size,
-                                            state->walkable);
+/* Distance-only attack-style telegraph: what style would this NPC throw if it
+ * attacked right now from its current position? Does NOT check LOS; the LOS
+ * bit is a separate obs feature so the agent can distinguish "melee threat,
+ * safespotted" (style=MELEE, LOS=0) from "melee threat, can hit me" (style=MELEE,
+ * LOS=1). Returns ATTACK_NONE for empty slots, dead NPCs, Yt-HurKot (healer,
+ * don't want policy praying for it), and Jad before it has committed a
+ * pending_hit (style is stochastic until commit). */
+static int npc_telegraph_style(const FcState* state, const FcNpc* npc) {
+    if (!npc->active || npc->is_dead) return ATTACK_NONE;
+    if (npc->npc_type == NPC_YT_HURKOT) return ATTACK_NONE;
 
-    /* Jad no longer exposes a wind-up or pre-fire style hint.
-     * The policy has to react to the queued pending hit instead. */
     if (npc->npc_type == NPC_TZTOK_JAD) {
-        return (can_melee && stats->melee_max_hit > 0) ? ATTACK_MELEE : ATTACK_NONE;
-    }
-
-    /* Dual-mode NPCs switch to melee at distance 1. Expose the style that
-     * would be used right now, not the static primary style from the stat table. */
-    if (can_melee && (stats->melee_max_hit > 0 || npc->attack_style == ATTACK_MELEE)) {
-        return ATTACK_MELEE;
-    }
-
-    if (npc->attack_style == ATTACK_MELEE) {
+        /* Jad alternates magic/ranged randomly at commit; read the committed
+         * style from the queued pending_hit. No prediction before commit. */
+        const FcPlayer* p = &state->player;
+        for (int i = 0; i < p->num_pending_hits; i++) {
+            const FcPendingHit* ph = &p->pending_hits[i];
+            if (ph->active && ph->source_npc_idx >= 0 &&
+                state->npcs[ph->source_npc_idx].npc_type == NPC_TZTOK_JAD) {
+                return ph->attack_style;
+            }
+        }
         return ATTACK_NONE;
     }
 
-    if (dist <= npc->attack_range && has_los > 0.0f) {
-        return npc->attack_style;
+    const FcNpcStats* stats = fc_npc_get_stats(npc->npc_type);
+    int can_melee = fc_npc_can_melee_player(state->player.x, state->player.y,
+                                            npc->x, npc->y, npc->size,
+                                            state->walkable);
+    /* Dual-mode NPCs (Tok-Xil, Ket-Zek): melee when adjacent, primary otherwise.
+     * Pure melee NPCs (Yt-MejKot, Tz-Kih, Tz-Kek): telegraph MELEE even when far
+     * — they'll close the gap and that's what they'll hit with. */
+    if (can_melee && (stats->melee_max_hit > 0 || npc->attack_style == ATTACK_MELEE)) {
+        return ATTACK_MELEE;
     }
-
-    return ATTACK_NONE;
+    return npc->attack_style;
 }
 
 void fc_write_obs(const FcState* state, float* out) {
@@ -398,7 +406,10 @@ void fc_write_obs(const FcState* state, float* out) {
         npc_out[FC_NPC_DISTANCE]      = (float)npc_distance(p, n) / (float)FC_ARENA_WIDTH;
         float has_los = (float)fc_has_los_to_npc(
             p->x, p->y, n->x, n->y, n->size, state->walkable);
-        npc_out[FC_NPC_EFFECTIVE_STYLE] = (float)npc_effective_style_now(state, n, has_los) / 3.0f;
+        int tele = npc_telegraph_style(state, n);
+        npc_out[FC_NPC_TELE_MELEE]    = (tele == ATTACK_MELEE)  ? 1.0f : 0.0f;
+        npc_out[FC_NPC_TELE_RANGED]   = (tele == ATTACK_RANGED) ? 1.0f : 0.0f;
+        npc_out[FC_NPC_TELE_MAGIC]    = (tele == ATTACK_MAGIC)  ? 1.0f : 0.0f;
         npc_out[FC_NPC_ATK_TIMER]     = (n->attack_speed > 0) ? (float)n->attack_timer / (float)n->attack_speed : 0.0f;
         npc_out[FC_NPC_LOS]           = has_los;
 

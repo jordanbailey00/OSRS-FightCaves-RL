@@ -32,6 +32,7 @@
 
 static void clear_per_tick_flags(FcState* state) {
     state->damage_dealt_this_tick = 0;
+    state->hits_landed_this_tick = 0;
     state->damage_taken_this_tick = 0;
     state->npcs_killed_this_tick = 0;
     state->wave_just_cleared = 0;

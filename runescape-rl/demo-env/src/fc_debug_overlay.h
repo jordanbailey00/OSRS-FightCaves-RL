@@ -506,11 +506,17 @@ static void dbg_draw_obs(const FcState* state, int dbg_flags) {
         for (int s = 0; s < FC_OBS_NPC_SLOTS; s++) {
             int base = FC_OBS_NPC_START + s * FC_OBS_NPC_STRIDE;
             if (obs[base + FC_NPC_VALID] < 0.5f) continue;
-            snprintf(buf, sizeof(buf), " [%d] hp:%.2f dist:%.2f style:%.1f pend:%.1f@%.1f",
+            /* Telegraph letter: M=melee, R=ranged, A=magic, -=none */
+            char tele = '-';
+            if (obs[base + FC_NPC_TELE_MELEE]  > 0.5f) tele = 'M';
+            else if (obs[base + FC_NPC_TELE_RANGED] > 0.5f) tele = 'R';
+            else if (obs[base + FC_NPC_TELE_MAGIC]  > 0.5f) tele = 'A';
+            snprintf(buf, sizeof(buf), " [%d] hp:%.2f dist:%.2f tele:%c los:%.0f pend:%.1f@%.1f",
                      s,
                      obs[base + FC_NPC_HP],
                      obs[base + FC_NPC_DISTANCE],
-                     obs[base + FC_NPC_EFFECTIVE_STYLE],
+                     tele,
+                     obs[base + FC_NPC_LOS],
                      obs[base + FC_NPC_PENDING_STYLE],
                      obs[base + FC_NPC_PENDING_TICKS]);
             DrawText(buf, rx + 4, y, 8, DBG_COL_LABEL); y += lh - 1;
@@ -743,11 +749,16 @@ static int dbg_draw_panel_tabs(const FcState* state,
         for (int s = 0; s < FC_OBS_NPC_SLOTS; s++) {
             int base = FC_OBS_NPC_START + s * FC_OBS_NPC_STRIDE;
             if (obs[base + FC_NPC_VALID] < 0.5f) continue;
-            snprintf(buf, sizeof(buf), "[%d] hp:%.2f d:%.2f st:%.2f pd:%.2f",
+            char tele = '-';
+            if (obs[base + FC_NPC_TELE_MELEE]  > 0.5f) tele = 'M';
+            else if (obs[base + FC_NPC_TELE_RANGED] > 0.5f) tele = 'R';
+            else if (obs[base + FC_NPC_TELE_MAGIC]  > 0.5f) tele = 'A';
+            snprintf(buf, sizeof(buf), "[%d] hp:%.2f d:%.2f tele:%c los:%.0f pd:%.2f",
                      s,
                      obs[base + FC_NPC_HP],
                      obs[base + FC_NPC_DISTANCE],
-                     obs[base + FC_NPC_EFFECTIVE_STYLE],
+                     tele,
+                     obs[base + FC_NPC_LOS],
                      obs[base + FC_NPC_PENDING_STYLE]);
             DrawText(buf, x, by, 7, DBG_COL_LABEL); by += lh - 2;
         }
@@ -805,15 +816,10 @@ static int dbg_draw_panel_tabs(const FcState* state,
                  cfg_name,
                  reward_config_loaded ? "" : " (defaults)");
         DrawText(buf, x, by, 8, DBG_COL_LABEL); by += sh;
-        snprintf(buf, sizeof(buf), "total:%+.4f wave_t:%d noatk_t:%d",
+        snprintf(buf, sizeof(buf), "total:%+.4f noatk_t:%d",
                  b->total,
-                 reward_runtime->ticks_in_wave,
                  reward_runtime->ticks_since_attack);
         DrawText(buf, x, by, 8, dbg_reward_color(b->total)); by += sh;
-        snprintf(buf, sizeof(buf), "grace:%d stall:%d",
-                 reward_params->shape_not_attacking_grace_ticks,
-                 reward_params->shape_wave_stall_start);
-        DrawText(buf, x, by, 8, DBG_COL_LABEL); by += sh;
         snprintf(buf, sizeof(buf), "threat any:%d imm:%d melee:%d",
                  b->threat_ctx.any_threat,
                  b->threat_ctx.imminent_threat,
@@ -826,11 +832,9 @@ static int dbg_draw_panel_tabs(const FcState* state,
                 float value;
             } terms[] = {
                 {"dmg_dealt", b->damage_dealt},
-                {"atk_try", b->attack_attempt},
                 {"dmg_taken", b->damage_taken},
                 {"npc_kill", b->npc_kill},
                 {"wave_clear", b->wave_clear},
-                {"jad_dmg", b->jad_damage},
                 {"jad_kill", b->jad_kill},
                 {"death", b->player_death},
                 {"food_waste", b->food_waste},
@@ -838,16 +842,11 @@ static int dbg_draw_panel_tabs(const FcState* state,
                 {"jad_ok", b->correct_jad_prayer},
                 {"danger_ok", b->correct_danger_prayer},
                 {"danger_bad_s", b->wrong_danger_prayer_shape},
-                {"npc_pray", b->npc_specific_prayer},
+                {"pray_waste", b->unnecessary_prayer},
                 {"melee_pen", b->melee_pressure},
                 {"wasted_atk", b->wasted_attack},
-                {"wave_stall", b->wave_stall},
-                {"not_atk", b->not_attacking},
                 {"kite", b->kiting},
-                {"pray_waste", b->unnecessary_prayer},
-                {"jad_heal", b->jad_heal_penalty},
-                {"late_wave", b->late_wave_bonus},
-                {"jad_bonus", b->jad_kill_bonus},
+                {"safespot", b->safespot_attack},
                 {"invalid", b->invalid_action},
                 {"tick_pen", b->tick_penalty},
             };

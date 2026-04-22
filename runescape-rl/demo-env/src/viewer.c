@@ -286,11 +286,9 @@ static void reward_params_apply_key(FcRewardParams* params,
                                     const char* key,
                                     const char* value) {
     if (strcmp(key, "w_damage_dealt") == 0) params->w_damage_dealt = strtof(value, NULL);
-    else if (strcmp(key, "w_attack_attempt") == 0) params->w_attack_attempt = strtof(value, NULL);
     else if (strcmp(key, "w_damage_taken") == 0) params->w_damage_taken = strtof(value, NULL);
     else if (strcmp(key, "w_npc_kill") == 0) params->w_npc_kill = strtof(value, NULL);
     else if (strcmp(key, "w_wave_clear") == 0) params->w_wave_clear = strtof(value, NULL);
-    else if (strcmp(key, "w_jad_damage") == 0) params->w_jad_damage = strtof(value, NULL);
     else if (strcmp(key, "w_jad_kill") == 0) params->w_jad_kill = strtof(value, NULL);
     else if (strcmp(key, "w_player_death") == 0) params->w_player_death = strtof(value, NULL);
     else if (strcmp(key, "w_correct_jad_prayer") == 0) params->w_correct_jad_prayer = strtof(value, NULL);
@@ -299,31 +297,17 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "w_tick_penalty") == 0) params->w_tick_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_food_full_waste_penalty") == 0) params->shape_food_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_food_waste_scale") == 0) params->shape_food_waste_scale = strtof(value, NULL);
-    else if (strcmp(key, "shape_food_no_threat_penalty") == 0) params->shape_food_no_threat_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_full_waste_penalty") == 0) params->shape_pot_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_waste_scale") == 0) params->shape_pot_waste_scale = strtof(value, NULL);
-    else if (strcmp(key, "shape_pot_no_threat_penalty") == 0) params->shape_pot_no_threat_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_npc_specific_prayer_bonus") == 0) params->shape_npc_specific_prayer_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_wasted_attack_penalty") == 0) params->shape_wasted_attack_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_wave_stall_base_penalty") == 0) params->shape_wave_stall_base_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_wave_stall_cap") == 0) params->shape_wave_stall_cap = strtof(value, NULL);
-    else if (strcmp(key, "shape_not_attacking_penalty") == 0) params->shape_not_attacking_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_kiting_reward") == 0) params->shape_kiting_reward = strtof(value, NULL);
+    else if (strcmp(key, "shape_safespot_attack_reward") == 0) params->shape_safespot_attack_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_unnecessary_prayer_penalty") == 0) params->shape_unnecessary_prayer_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_jad_heal_penalty") == 0) params->shape_jad_heal_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_reach_wave_60_bonus") == 0) params->shape_reach_wave_60_bonus = strtof(value, NULL);
-    else if (strcmp(key, "shape_reach_wave_61_bonus") == 0) params->shape_reach_wave_61_bonus = strtof(value, NULL);
-    else if (strcmp(key, "shape_reach_wave_62_bonus") == 0) params->shape_reach_wave_62_bonus = strtof(value, NULL);
-    else if (strcmp(key, "shape_reach_wave_63_bonus") == 0) params->shape_reach_wave_63_bonus = strtof(value, NULL);
-    else if (strcmp(key, "shape_jad_kill_bonus") == 0) params->shape_jad_kill_bonus = strtof(value, NULL);
     else if (strcmp(key, "shape_resource_threat_window") == 0) params->shape_resource_threat_window = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_min_dist") == 0) params->shape_kiting_min_dist = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_max_dist") == 0) params->shape_kiting_max_dist = (int)strtol(value, NULL, 10);
-    else if (strcmp(key, "shape_wave_stall_start") == 0) params->shape_wave_stall_start = (int)strtol(value, NULL, 10);
-    else if (strcmp(key, "shape_wave_stall_ramp_interval") == 0) params->shape_wave_stall_ramp_interval = (int)strtol(value, NULL, 10);
-    else if (strcmp(key, "shape_not_attacking_grace_ticks") == 0) params->shape_not_attacking_grace_ticks = (int)strtol(value, NULL, 10);
 }
 
 static void load_reward_params(ViewerState* v) {
