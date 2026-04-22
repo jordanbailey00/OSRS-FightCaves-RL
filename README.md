@@ -7,10 +7,10 @@ Training a reinforcement learning agent to complete the Old School RuneScape Fig
 - Train a PPO agent from scratch to clear all 63 waves and defeat Jad
 - Achieve this without human demonstrations or hardcoded strategies
 
-**Current results:**
-- Agent consistently reaches wave 58-60+ from cold start
+**Current results (v28.4 — best config to date):**
+- Agent consistently reaches wave 60-62+ from cold start
 - Learned safespotting, prayer switching, kiting, and resource management
-- Produced Jad kills (~0.4% peak rate) — actively optimizing via reward sweeps
+- **Jad kill rate: 20-50% (peak 38.6% at 3.26B steps)** — actively optimizing via reward sweeps
 
 ![Agent Demo](runescape-rl/assets/demo.gif)
 
