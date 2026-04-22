@@ -31,14 +31,19 @@ typedef struct {
     float shape_kiting_reward;
     float shape_safespot_attack_reward;
     float shape_unnecessary_prayer_penalty;
+    float shape_wave_stall_base_penalty;
+    float shape_wave_stall_cap;
 
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
     int shape_kiting_max_dist;
+    int shape_wave_stall_start;
+    int shape_wave_stall_ramp_interval;
 } FcRewardParams;
 
 typedef struct {
     int ticks_since_attack;
+    int ticks_in_wave;
 } FcRewardRuntime;
 
 typedef struct {
@@ -70,6 +75,7 @@ typedef struct {
     float wasted_attack;
     float kiting;
     float safespot_attack;
+    float wave_stall;
 
     float invalid_action;
     float tick_penalty;
@@ -98,6 +104,7 @@ typedef enum {
     FC_CH_WASTED_ATTACK,
     FC_CH_KITING,
     FC_CH_SAFESPOT_ATTACK,
+    FC_CH_WAVE_STALL,
     FC_CH_INVALID_ACTION,
     FC_CH_TICK_PENALTY,
     FC_CH_COUNT
@@ -108,7 +115,7 @@ static const char* const FC_CH_NAMES[FC_CH_COUNT] = {
     "player_death", "food_waste", "pot_waste",
     "correct_jad_prayer", "correct_danger_prayer", "wrong_danger_prayer",
     "unnecessary_prayer", "melee_pressure", "wasted_attack",
-    "kiting", "safespot_attack", "invalid_action", "tick_penalty"
+    "kiting", "safespot_attack", "wave_stall", "invalid_action", "tick_penalty"
 };
 
 /* Populate a contiguous array view of the breakdown channels for iteration.
@@ -130,6 +137,7 @@ static inline void fc_reward_breakdown_channels(const FcRewardBreakdown* b, floa
     out[FC_CH_WASTED_ATTACK]            = b->wasted_attack;
     out[FC_CH_KITING]                   = b->kiting;
     out[FC_CH_SAFESPOT_ATTACK]          = b->safespot_attack;
+    out[FC_CH_WAVE_STALL]               = b->wave_stall;
     out[FC_CH_INVALID_ACTION]           = b->invalid_action;
     out[FC_CH_TICK_PENALTY]             = b->tick_penalty;
 }
@@ -159,16 +167,21 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.shape_kiting_reward = 1.0f;
     params.shape_safespot_attack_reward = 0.0f;
     params.shape_unnecessary_prayer_penalty = -0.2f;
+    params.shape_wave_stall_base_penalty = 0.0f;
+    params.shape_wave_stall_cap = 0.0f;
 
     params.shape_resource_threat_window = 2;
     params.shape_kiting_min_dist = 5;
     params.shape_kiting_max_dist = 7;
+    params.shape_wave_stall_start = 1000;
+    params.shape_wave_stall_ramp_interval = 150;
 
     return params;
 }
 
 static inline void fc_reward_runtime_reset(FcRewardRuntime* runtime) {
     runtime->ticks_since_attack = 0;
+    runtime->ticks_in_wave = 0;
 }
 
 static inline FcRewardThreatContext fc_reward_collect_threat_context(
@@ -328,6 +341,26 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.safespot_attack = params->shape_safespot_attack_reward;
     }
 
+    /* Wave-stall penalty — timer-based, fires every tick past the threshold
+     * while the wave still has NPCs. Ramps linearly and clamps at cap.
+     * Runtime timer resets when a wave_clear fires this tick. */
+    if (state->npcs_remaining > 0) {
+        runtime->ticks_in_wave++;
+        if (params->shape_wave_stall_base_penalty != 0.0f &&
+            runtime->ticks_in_wave > params->shape_wave_stall_start) {
+            int over = runtime->ticks_in_wave - params->shape_wave_stall_start;
+            int ramps = (params->shape_wave_stall_ramp_interval > 0)
+                ? over / params->shape_wave_stall_ramp_interval : 0;
+            float p = params->shape_wave_stall_base_penalty * (1.0f + (float)ramps);
+            float cap = params->shape_wave_stall_cap;
+            if (cap != 0.0f && p < cap) p = cap;
+            out.wave_stall = p;
+        }
+    }
+    if (out.raw[FC_RWD_WAVE_CLEAR] > 0.0f) {
+        runtime->ticks_in_wave = 0;
+    }
+
     out.total =
         out.damage_dealt +
         out.damage_taken +
@@ -345,6 +378,7 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
         out.wasted_attack +
         out.kiting +
         out.safespot_attack +
+        out.wave_stall +
         out.invalid_action +
         out.tick_penalty;
 

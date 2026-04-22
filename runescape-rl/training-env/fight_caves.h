@@ -139,10 +139,15 @@ typedef struct FightCaves {
     float shape_kiting_reward;
     float shape_safespot_attack_reward;
     float shape_unnecessary_prayer_penalty;
+    float shape_wave_stall_base_penalty;
+    float shape_wave_stall_cap;
     int shape_resource_threat_window;
     int shape_kiting_min_dist;
     int shape_kiting_max_dist;
+    int shape_wave_stall_start;
+    int shape_wave_stall_ramp_interval;
     int ticks_since_attack;      /* ticks since agent last dealt damage */
+    int ticks_in_wave;           /* ticks since current wave started (reset on wave_clear) */
 
     int ep_length;
 
@@ -199,10 +204,14 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.shape_kiting_reward = env->shape_kiting_reward;
     params.shape_safespot_attack_reward = env->shape_safespot_attack_reward;
     params.shape_unnecessary_prayer_penalty = env->shape_unnecessary_prayer_penalty;
+    params.shape_wave_stall_base_penalty = env->shape_wave_stall_base_penalty;
+    params.shape_wave_stall_cap = env->shape_wave_stall_cap;
 
     params.shape_resource_threat_window = env->shape_resource_threat_window;
     params.shape_kiting_min_dist = env->shape_kiting_min_dist;
     params.shape_kiting_max_dist = env->shape_kiting_max_dist;
+    params.shape_wave_stall_start = env->shape_wave_stall_start;
+    params.shape_wave_stall_ramp_interval = env->shape_wave_stall_ramp_interval;
 
     return params;
 }
@@ -213,11 +222,12 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
 
 static float fc_puffer_compute_reward(FightCaves* env) {
     FcRewardParams params = fc_reward_params_from_env(env);
-    FcRewardRuntime runtime = { env->ticks_since_attack };
+    FcRewardRuntime runtime = { env->ticks_since_attack, env->ticks_in_wave };
     FcRewardBreakdown breakdown =
         fc_reward_compute_breakdown(&env->state, &params, &runtime);
 
     env->ticks_since_attack = runtime.ticks_since_attack;
+    env->ticks_in_wave = runtime.ticks_in_wave;
 
     if (breakdown.threat_ctx.tokxil_melee) env->state.ep_tokxil_melee_ticks++;
     if (breakdown.threat_ctx.ketzek_melee) env->state.ep_ketzek_melee_ticks++;
@@ -244,6 +254,7 @@ void c_reset(FightCaves* env) {
 
     env->ep_length = 0;
     env->ticks_since_attack = 0;
+    env->ticks_in_wave = 0;
     for (int i = 0; i < FC_CH_COUNT; i++) {
         env->ep_rwd_sum[i] = 0.0f;
         env->ep_rwd_fires[i] = 0;

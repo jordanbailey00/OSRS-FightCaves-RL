@@ -40,9 +40,13 @@ int main(void) {
         env.shape_kiting_reward = defaults.shape_kiting_reward;
         env.shape_safespot_attack_reward = defaults.shape_safespot_attack_reward;
         env.shape_unnecessary_prayer_penalty = defaults.shape_unnecessary_prayer_penalty;
+        env.shape_wave_stall_base_penalty = defaults.shape_wave_stall_base_penalty;
+        env.shape_wave_stall_cap = defaults.shape_wave_stall_cap;
         env.shape_resource_threat_window = defaults.shape_resource_threat_window;
         env.shape_kiting_min_dist = defaults.shape_kiting_min_dist;
         env.shape_kiting_max_dist = defaults.shape_kiting_max_dist;
+        env.shape_wave_stall_start = defaults.shape_wave_stall_start;
+        env.shape_wave_stall_ramp_interval = defaults.shape_wave_stall_ramp_interval;
     }
 
     fc_init(&env.state);

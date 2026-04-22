@@ -66,12 +66,20 @@ void my_init(Env* env, Dict* kwargs) {
     env->shape_safespot_attack_reward = item ? (float)item->value : defaults.shape_safespot_attack_reward;
     item = dict_get_unsafe(kwargs, "shape_unnecessary_prayer_penalty");
     env->shape_unnecessary_prayer_penalty = item ? (float)item->value : defaults.shape_unnecessary_prayer_penalty;
+    item = dict_get_unsafe(kwargs, "shape_wave_stall_base_penalty");
+    env->shape_wave_stall_base_penalty = item ? (float)item->value : defaults.shape_wave_stall_base_penalty;
+    item = dict_get_unsafe(kwargs, "shape_wave_stall_cap");
+    env->shape_wave_stall_cap = item ? (float)item->value : defaults.shape_wave_stall_cap;
     item = dict_get_unsafe(kwargs, "shape_resource_threat_window");
     env->shape_resource_threat_window = item ? (int)item->value : defaults.shape_resource_threat_window;
     item = dict_get_unsafe(kwargs, "shape_kiting_min_dist");
     env->shape_kiting_min_dist = item ? (int)item->value : defaults.shape_kiting_min_dist;
     item = dict_get_unsafe(kwargs, "shape_kiting_max_dist");
     env->shape_kiting_max_dist = item ? (int)item->value : defaults.shape_kiting_max_dist;
+    item = dict_get_unsafe(kwargs, "shape_wave_stall_start");
+    env->shape_wave_stall_start = item ? (int)item->value : defaults.shape_wave_stall_start;
+    item = dict_get_unsafe(kwargs, "shape_wave_stall_ramp_interval");
+    env->shape_wave_stall_ramp_interval = item ? (int)item->value : defaults.shape_wave_stall_ramp_interval;
 
     /* Initialize game state */
     env->seed_counter = 0;

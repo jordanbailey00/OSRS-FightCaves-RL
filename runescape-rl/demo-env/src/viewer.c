@@ -305,9 +305,13 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "shape_kiting_reward") == 0) params->shape_kiting_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_safespot_attack_reward") == 0) params->shape_safespot_attack_reward = strtof(value, NULL);
     else if (strcmp(key, "shape_unnecessary_prayer_penalty") == 0) params->shape_unnecessary_prayer_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wave_stall_base_penalty") == 0) params->shape_wave_stall_base_penalty = strtof(value, NULL);
+    else if (strcmp(key, "shape_wave_stall_cap") == 0) params->shape_wave_stall_cap = strtof(value, NULL);
     else if (strcmp(key, "shape_resource_threat_window") == 0) params->shape_resource_threat_window = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_min_dist") == 0) params->shape_kiting_min_dist = (int)strtol(value, NULL, 10);
     else if (strcmp(key, "shape_kiting_max_dist") == 0) params->shape_kiting_max_dist = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_wave_stall_start") == 0) params->shape_wave_stall_start = (int)strtol(value, NULL, 10);
+    else if (strcmp(key, "shape_wave_stall_ramp_interval") == 0) params->shape_wave_stall_ramp_interval = (int)strtol(value, NULL, 10);
 }
 
 static void load_reward_params(ViewerState* v) {
