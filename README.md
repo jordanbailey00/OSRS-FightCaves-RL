@@ -7,10 +7,11 @@ Training a reinforcement learning agent to complete the Old School RuneScape Fig
 - Train a PPO agent from scratch to clear all 63 waves and defeat Jad
 - Achieve this without human demonstrations or hardcoded strategies
 
-**Current results (v28.4 — best config to date):**
-- Agent consistently reaches wave 60-62+ from cold start
+**Current results (v28.8 / v29.1 / v30.0):**
+- Agent reaches wave 63 (Jad) on **97.3% of episodes** from cold start
 - Learned safespotting, prayer switching, kiting, and resource management
-- **Jad kill rate: 20-50% (peak 38.6% at 3.26B steps)** — actively optimizing via reward sweeps
+- **Jad kill rate: 59.7% peak (v28.8), 30.2% final (v29.1 SOTA)** — full Jad-kill capability
+- Cold-start training: ~26 min for 3B steps on RTX 5070 Ti (~1.9M SPS)
 
 ![Agent Demo](runescape-rl/assets/demo.gif)
 
@@ -63,7 +64,7 @@ Controls:
 
 ### Train
 
-Run a full training session (cold start, ~40 min for 5B steps on RTX 5070 Ti):
+Run a full training session (cold start, ~26 min for 3B steps on RTX 5070 Ti):
 
 ```bash
 FORCE_BACKEND_REBUILD=1 bash train.sh
@@ -73,9 +74,11 @@ FORCE_BACKEND_REBUILD=1 bash train.sh
 
 Key flags:
 ```bash
-bash train.sh --no-wandb                    # disable W&B logging
-bash train.sh sweep                          # run hyperparameter sweep
-LOAD_MODEL_PATH=/path/to/checkpoint.bin bash train.sh  # warm-start
+bash train.sh --no-wandb                                # disable W&B logging
+bash train.sh sweep                                      # run Protein hparam sweep
+WANDB_TAG=v30.0 bash train.sh                            # tag the run in W&B
+CONFIG_PATH=/path/to/custom.ini bash train.sh            # override config
+LOAD_MODEL_PATH=/path/to/checkpoint.bin bash train.sh    # warm-start
 ```
 
 ### Evaluate a Checkpoint
@@ -132,63 +135,65 @@ runescape-rl/
 
 ## RL Config
 
-Current live config (v25.9):
+Current live config (v30.0 — v28.8 baseline with dead full-waste keys removed):
 
 | Category | Key params |
 |----------|-----------|
-| **Combat rewards** | `w_damage_dealt=0.7`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_kill=150.0` |
-| **Survival penalties** | `w_damage_taken=-0.6` (squared, 70x amplified), `w_player_death=-20.0` |
-| **Prayer shaping** | `w_correct_danger_prayer=0.25`, `w_correct_jad_prayer=2.0`, `shape_wrong_prayer_penalty=-1.25` |
-| **Positioning** | `shape_npc_melee_penalty=-1.0`, `shape_safespot_attack_reward=1.5`, `shape_kiting_reward=1.0` (band 2-10) |
-| **Resource management** | `shape_food_full_waste_penalty=-6.5`, `shape_pot_full_waste_penalty=-6.5` |
-| **PPO** | `lr=3e-4`, `gamma=0.999`, `ent_coef=0.01`, `horizon=256`, `minibatch=4096` |
+| **Combat rewards** | `w_damage_dealt=0.9`, `w_npc_kill=3.5`, `w_wave_clear=15.0`, `w_jad_kill=2000.0` |
+| **Survival penalties** | `w_damage_taken=-1.9` (squared, 70x amplified), `w_player_death=-11.0` |
+| **Prayer shaping** | `w_correct_danger_prayer=0.25`, `w_correct_jad_prayer=1.5`, `shape_wrong_prayer_penalty=-0.3`, `shape_unnecessary_prayer_penalty=-0.2` |
+| **Positioning** | `shape_npc_melee_penalty=-0.8`, `shape_safespot_attack_reward=1.5`, `shape_kiting_reward=2.2` (band 2-10) |
+| **Resource management** | `shape_food_waste_scale=-1.2`, `shape_pot_waste_scale=-1.2` (proportional waste only) |
+| **Wave-stall pressure** | `shape_wave_stall_start=1400`, `shape_wave_stall_base_penalty=-0.5`, `shape_wave_stall_cap=-2.0` |
+| **Procedural penalties** | `w_invalid_action=-0.1`, `w_tick_penalty=-0.005`, `shape_wasted_attack_penalty=-0.1` |
+| **PPO** | `lr=3e-4`, `gamma=0.999`, `gae_lambda=0.95`, `ent_coef=0.01`, `horizon=256`, `minibatch=4096`, `total_timesteps=3B` |
+| **Policy** | MinGRU, 2 layers, 256 hidden (~439K params) |
 | **Vector** | `4096 agents`, `2 buffers` |
 
-Full config reference: [`docs/rl_config.md`](docs/rl_config.md)
+Full config: [`runescape-rl/config/fight_caves.ini`](runescape-rl/config/fight_caves.ini).
 
 ---
 
 ## Results
 
-<!-- TODO: W&B chart showing wave_reached progression over training steps for v25.9 -->
+### Deployment SOTA: v29.1 (`ml71cg6v` / autumn-bush-330)
 
-### Best Cold Start: v25.9 (`8td831nt`)
+v29.1 disables prioritized experience replay (`prio_alpha=0`) on top of the v28.8 reward config. Best deployment artifact at the 1.62B checkpoint.
 
-| Metric | Value |
-|--------|-------|
-| wave_reached (final avg) | 58.67 |
-| max_wave | 63 |
-| reached_wave_63 | 2.3% |
-| jad_kill_rate (peak) | 0.42% |
-| prayer_uptime_magic | 52.1% |
-| attack_when_ready_rate | 93.4% |
-| training time | 43 min (5B steps) |
-| throughput | 1.84M SPS |
-
-<!-- TODO: Screenshot of eval viewer showing agent at wave 60+ with debug overlay -->
+| Metric | v28.8 (prior SOTA) | **v29.1 (current SOTA)** | Δ |
+|--------|---|---|---|
+| peak `jad_kill_rate` | 0.591 | **0.598** | +1.2% |
+| peak step | 1.80B | **1.56B** | -240M (-13% compute) |
+| best 250M window | 0.316 | **0.336** | +6.3% |
+| final `jad_kill_rate` | 0.223 | **0.281** | +26% |
+| final `reached_wave_63` | 0.973 | 0.930 | -4.4% |
+| final conditional Jad kill | 22.9% | **30.2%** | +32% |
+| training time | 26 min (3B steps) | 26 min (3B steps) | — |
+| throughput | 1.92M SPS | 1.92M SPS | — |
 
 ### Key Milestones
 
 - **v21.2** — First cold start to reach wave 60 (range-7 weapon, no LOS)
 - **v22.1** — First Jad kills (1.5%, warm-started), introduced TBow combat model
-- **v25.4** — Best warm-start run (44.5% wave-63 access, 0.13% Jad kills)
-- **v25.9** — First cold start under TBow+LOS to reach wave 60+ and kill Jad
+- **v25.9** — First cold start under TBow+LOS to reach wave 60+
+- **v28.4** — 20-50% Jad kill rate at 3.5B budget
+- **v28.8** — 59.1% peak Jad kill rate, 22.3% final (prior deployment SOTA, 3B budget)
+- **v29.1** — `prio_alpha=0` ablation: 33% compute reduction at same-or-better deployment quality (current SOTA)
+- **v30.0** — v28.8 baseline with dead `*_full_waste_penalty` keys removed; verified byte-identical to v28.8
 
-<!-- TODO: W&B comparison chart of v25.8 (failed cold start, wave 30) vs v25.9 (successful, wave 58) -->
+### Active: 3-Sweep Pruning Plan
 
-### Active: Reward Sweep
+The agent now reliably kills Jad. Current focus is pruning the reward config and tuning hparams via three sequential sweeps:
 
-Running a 200-run Protein sweep over 10 reward parameters to find optimal config for Jad conversion. See [`docs/run_history.md`](docs/run_history.md) for full experiment history.
-
-<!-- TODO: Screenshot of W&B sweep dashboard showing parameter importance -->
+1. **Sweep 1 (complete)** — leave-one-out reward ablation (10 runs). Identified 2 dead-code keys (full-waste penalties) for removal and `w_npc_kill` as over-penalizing (peak +0.21 when zeroed).
+2. **Sweep 2 (planned)** — non-reward hparam sweep (Protein/paretosweep over LR, ent_coef, clip, gamma, prio_alpha, etc.).
+3. **Sweep 3 (planned)** — reward magnitude sweep on surviving keys.
 
 ---
 
 ## Project Status
 
-Active research. The agent reaches wave 60+ consistently but Jad kills remain rare (<1%). Current focus is reward optimization via sweeps and improving prayer switching behavior.
-
-Full experiment history with configs, results, and analysis: [`docs/run_history.md`](docs/run_history.md)
+Active research. The agent reaches Jad on 97% of episodes and kills it at 59.7% peak rate. Current focus is reward and hparam pruning via sequential sweeps to find a tighter, deployment-ready config.
 
 ---
 

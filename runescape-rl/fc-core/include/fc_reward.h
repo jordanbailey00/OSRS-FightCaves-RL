@@ -21,9 +21,7 @@ typedef struct {
     float w_invalid_action;
     float w_tick_penalty;
 
-    float shape_food_full_waste_penalty;
     float shape_food_waste_scale;
-    float shape_pot_full_waste_penalty;
     float shape_pot_waste_scale;
     float shape_wrong_prayer_penalty;
     float shape_npc_melee_penalty;
@@ -157,9 +155,7 @@ static inline FcRewardParams fc_reward_default_params(void) {
     params.w_invalid_action = -0.1f;
     params.w_tick_penalty = -0.005f;
 
-    params.shape_food_full_waste_penalty = -6.5f;
     params.shape_food_waste_scale = -1.2f;
-    params.shape_pot_full_waste_penalty = -6.5f;
     params.shape_pot_waste_scale = -1.2f;
     params.shape_wrong_prayer_penalty = -1.25f;
     params.shape_npc_melee_penalty = -0.3f;
@@ -258,34 +254,26 @@ static inline FcRewardBreakdown fc_reward_compute_breakdown(
     out.jad_kill = out.raw[FC_RWD_JAD_KILL] * params->w_jad_kill;
     out.player_death = out.raw[FC_RWD_PLAYER_DEATH] * params->w_player_death;
 
+    /* Eat/drink actions are gated by the action mask + handler guards
+     * (see fc_state.c:eat_action_valid, fc_tick.c eat handler) such that
+     * pre_eat_hp < max_hp and pre_drink_prayer < max_prayer are always
+     * true here. So only the proportional-waste branch is reachable. */
     if (out.raw[FC_RWD_FOOD_USED] > 0.0f) {
-        int pre_hp = state->pre_eat_hp;
-        int max_hp = p->max_hp;
-        if (pre_hp >= max_hp) {
-            out.food_waste += params->shape_food_full_waste_penalty;
-        } else {
-            int shark_heal = 200;
-            int could_heal = max_hp - pre_hp;
-            int wasted = shark_heal - could_heal;
-            if (wasted < 0) wasted = 0;
-            out.food_waste += params->shape_food_waste_scale *
-                ((float)wasted / (float)shark_heal);
-        }
+        int shark_heal = 200;
+        int could_heal = p->max_hp - state->pre_eat_hp;
+        int wasted = shark_heal - could_heal;
+        if (wasted < 0) wasted = 0;
+        out.food_waste += params->shape_food_waste_scale *
+            ((float)wasted / (float)shark_heal);
     }
 
     if (out.raw[FC_RWD_PRAYER_POT_USED] > 0.0f) {
-        int pre_prayer = state->pre_drink_prayer;
-        int max_prayer = p->max_prayer;
-        if (pre_prayer >= max_prayer) {
-            out.pot_waste += params->shape_pot_full_waste_penalty;
-        } else {
-            int pot_restore = 170;
-            int could_restore = max_prayer - pre_prayer;
-            int wasted = pot_restore - could_restore;
-            if (wasted < 0) wasted = 0;
-            out.pot_waste += params->shape_pot_waste_scale *
-                ((float)wasted / (float)pot_restore);
-        }
+        int pot_restore = 170;
+        int could_restore = p->max_prayer - state->pre_drink_prayer;
+        int wasted = pot_restore - could_restore;
+        if (wasted < 0) wasted = 0;
+        out.pot_waste += params->shape_pot_waste_scale *
+            ((float)wasted / (float)pot_restore);
     }
 
     /* Prayer correctness: Jad and non-Jad are mutually exclusive — the

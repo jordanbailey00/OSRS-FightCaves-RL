@@ -295,9 +295,7 @@ static void reward_params_apply_key(FcRewardParams* params,
     else if (strcmp(key, "w_correct_danger_prayer") == 0) params->w_correct_danger_prayer = strtof(value, NULL);
     else if (strcmp(key, "w_invalid_action") == 0) params->w_invalid_action = strtof(value, NULL);
     else if (strcmp(key, "w_tick_penalty") == 0) params->w_tick_penalty = strtof(value, NULL);
-    else if (strcmp(key, "shape_food_full_waste_penalty") == 0) params->shape_food_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_food_waste_scale") == 0) params->shape_food_waste_scale = strtof(value, NULL);
-    else if (strcmp(key, "shape_pot_full_waste_penalty") == 0) params->shape_pot_full_waste_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_pot_waste_scale") == 0) params->shape_pot_waste_scale = strtof(value, NULL);
     else if (strcmp(key, "shape_wrong_prayer_penalty") == 0) params->shape_wrong_prayer_penalty = strtof(value, NULL);
     else if (strcmp(key, "shape_npc_melee_penalty") == 0) params->shape_npc_melee_penalty = strtof(value, NULL);

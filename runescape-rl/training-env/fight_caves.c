@@ -30,9 +30,7 @@ int main(void) {
         env.w_invalid_action = defaults.w_invalid_action;
         env.w_tick_penalty = defaults.w_tick_penalty;
 
-        env.shape_food_full_waste_penalty = defaults.shape_food_full_waste_penalty;
         env.shape_food_waste_scale = defaults.shape_food_waste_scale;
-        env.shape_pot_full_waste_penalty = defaults.shape_pot_full_waste_penalty;
         env.shape_pot_waste_scale = defaults.shape_pot_waste_scale;
         env.shape_wrong_prayer_penalty = defaults.shape_wrong_prayer_penalty;
         env.shape_npc_melee_penalty = defaults.shape_npc_melee_penalty;

@@ -129,9 +129,7 @@ typedef struct FightCaves {
     float w_tick_penalty;
 
     /* Configurable shaping terms (kept separate from reward-feature weights) */
-    float shape_food_full_waste_penalty;
     float shape_food_waste_scale;
-    float shape_pot_full_waste_penalty;
     float shape_pot_waste_scale;
     float shape_wrong_prayer_penalty;
     float shape_npc_melee_penalty;
@@ -194,9 +192,7 @@ static FcRewardParams fc_reward_params_from_env(const FightCaves* env) {
     params.w_invalid_action = env->w_invalid_action;
     params.w_tick_penalty = env->w_tick_penalty;
 
-    params.shape_food_full_waste_penalty = env->shape_food_full_waste_penalty;
     params.shape_food_waste_scale = env->shape_food_waste_scale;
-    params.shape_pot_full_waste_penalty = env->shape_pot_full_waste_penalty;
     params.shape_pot_waste_scale = env->shape_pot_waste_scale;
     params.shape_wrong_prayer_penalty = env->shape_wrong_prayer_penalty;
     params.shape_npc_melee_penalty = env->shape_npc_melee_penalty;

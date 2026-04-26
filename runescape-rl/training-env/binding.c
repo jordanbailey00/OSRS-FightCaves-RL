@@ -46,12 +46,8 @@ void my_init(Env* env, Dict* kwargs) {
     env->w_tick_penalty = item ? (float)item->value : defaults.w_tick_penalty;
 
     /* Configurable shaping terms */
-    item = dict_get_unsafe(kwargs, "shape_food_full_waste_penalty");
-    env->shape_food_full_waste_penalty = item ? (float)item->value : defaults.shape_food_full_waste_penalty;
     item = dict_get_unsafe(kwargs, "shape_food_waste_scale");
     env->shape_food_waste_scale = item ? (float)item->value : defaults.shape_food_waste_scale;
-    item = dict_get_unsafe(kwargs, "shape_pot_full_waste_penalty");
-    env->shape_pot_full_waste_penalty = item ? (float)item->value : defaults.shape_pot_full_waste_penalty;
     item = dict_get_unsafe(kwargs, "shape_pot_waste_scale");
     env->shape_pot_waste_scale = item ? (float)item->value : defaults.shape_pot_waste_scale;
     item = dict_get_unsafe(kwargs, "shape_wrong_prayer_penalty");
